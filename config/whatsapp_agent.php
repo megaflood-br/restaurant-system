@@ -1,0 +1,22 @@
+<?php
+
+return [
+    'enabled' => false,
+    'use_builtin_bot' => true,
+    'forward_to_n8n' => true,
+    'restaurant_name' => '',
+    'welcome_message' => "Olá! Seja muito bem-vindo(a) ao {restaurant_name}! 🍽️ Que bom ter você por aqui hoje.\n\nPara você dar aquela conferida nos nossos pratos fresquinhos, segue o cardápio de hoje:",
+    'menu_followup_message' => 'O que vai mandar de bom por aí hoje? É só me mandar os pratos que você quer, ou me perguntar qualquer dúvida!',
+    'extras_message' => "Beleza! Vai precisar de talher descartável? E tem alguma observação nos pratos (como tirar salada, sem cebola, etc.)?",
+    'address_message' => 'Pra gente calcular a entrega certinha até você, me manda o seu endereço completo aqui, por favor? (Ou se preferir retirar no balcão, é só me avisar!)',
+    'payment_message' => "Fechado! Deixa eu te passar o resumo de como ficou:\n\n{summary}\n\nComo você prefere fazer o pagamento? Aceitamos Pix, cartão (na entrega/retirada) ou dinheiro.",
+    'pix_message' => "Perfeito! Segue a nossa chave Pix:\n{pix_key}\n\nAssim que fizer o pagamento, é só mandar o comprovante aqui para a gente já disparar o pedido para a cozinha, combinado?",
+    'confirmed_message' => "Comprovante recebido e pedido confirmado com sucesso! 🚀 Já mandei o seu pedido direto pra cozinha.\n\nNúmero: *{order_number}*\nTotal: R$ {total}\nTempo estimado: ~{estimated_minutes} minutos.\n\nQualquer coisa, estou por aqui!",
+    'pix_key' => '',
+    'estimated_minutes' => 45,
+    'menu_image' => null,
+    'order_added_message' => 'Anotado! {items} Quer incluir alguma bebida ou sobremesa para acompanhar?',
+    'delivery_quote_message' => 'Certinho! O endereço fica a {distance_km} km daqui, então a taxa de entrega sai por R$ {delivery_fee}.',
+    'cancel_message' => 'Pedido cancelado. Envie *oi* quando quiser fazer um novo pedido.',
+    'status_not_found_message' => 'Nenhum pedido encontrado. Envie *oi* para fazer seu primeiro pedido.',
+];

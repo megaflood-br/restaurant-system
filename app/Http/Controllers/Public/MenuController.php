@@ -1,0 +1,102 @@
+<?php
+
+namespace App\Http\Controllers\Public;
+
+use App\Http\Controllers\Controller;
+use App\Models\Category;
+use App\Services\CartService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class MenuController extends Controller
+{
+    public function index(Request $request, CartService $cart): View
+    {
+        if ($request->filled('comanda')) {
+            $cart->setContext((int) $request->query('comanda'), $request->query('tipo', 'dine_in'));
+        }
+
+        $categories = Category::query()
+            ->where('is_active', true)
+            ->with(['products' => fn ($query) => $query->where('is_available', true)->with('recipe')->orderBy('name')])
+            ->orderBy('name')
+            ->get()
+            ->filter(fn ($category) => $category->products->isNotEmpty());
+
+        return view('public.menu', [
+            'categories' => $categories,
+            'cartCount' => $cart->count(),
+            'cartTotal' => $cart->total(),
+            'comandaNumber' => $cart->all()['comanda_number'],
+            'orderType' => $cart->all()['type'],
+        ]);
+    }
+
+    public function cart(CartService $cart): View|RedirectResponse
+    {
+        if ($cart->isEmpty()) {
+            return redirect()->route('public.menu')->with('info', 'Seu carrinho está vazio.');
+        }
+
+        return view('public.cart', [
+            'items' => $cart->items(),
+            'total' => $cart->total(),
+        ]);
+    }
+
+    public function add(Request $request, CartService $cart): RedirectResponse|JsonResponse
+    {
+        $validated = $request->validate([
+            'product_id' => ['required', 'exists:products,id'],
+            'quantity' => ['required', 'integer', 'min:1', 'max:99'],
+            'notes' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $cart->add(
+            (int) $validated['product_id'],
+            (int) $validated['quantity'],
+            $validated['notes'] ?? null,
+        );
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => 'Item adicionado ao carrinho.',
+                'cart_count' => $cart->count(),
+                'cart_total' => $cart->total(),
+            ]);
+        }
+
+        return back()->with('success', 'Item adicionado ao carrinho.');
+    }
+
+    public function update(Request $request, CartService $cart): RedirectResponse
+    {
+        $validated = $request->validate([
+            'product_id' => ['required', 'integer'],
+            'quantity' => ['required', 'integer', 'min:0', 'max:99'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $cart->update(
+            (int) $validated['product_id'],
+            (int) $validated['quantity'],
+            $validated['notes'] ?? null,
+        );
+
+        return back();
+    }
+
+    public function remove(Request $request, CartService $cart): RedirectResponse
+    {
+        $validated = $request->validate([
+            'product_id' => ['required', 'integer'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $cart->remove((int) $validated['product_id'], $validated['notes'] ?? null);
+
+        return back()->with('success', 'Item removido.');
+    }
+}

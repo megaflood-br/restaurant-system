@@ -1,0 +1,73 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\StockCategory;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class StockCategoryController extends Controller
+{
+    public function index(): View
+    {
+        $categories = StockCategory::withCount('ingredients')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->paginate(15);
+
+        return view('stock-categories.index', compact('categories'));
+    }
+
+    public function create(): View
+    {
+        return view('stock-categories.create');
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
+            'is_active' => ['boolean'],
+        ]);
+
+        StockCategory::create([
+            'name' => $validated['name'],
+            'sort_order' => $validated['sort_order'] ?? 0,
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return redirect()->route('stock-categories.index')->with('success', 'Categoria de estoque criada.');
+    }
+
+    public function edit(StockCategory $stockCategory): View
+    {
+        return view('stock-categories.edit', ['category' => $stockCategory]);
+    }
+
+    public function update(Request $request, StockCategory $stockCategory): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
+            'is_active' => ['boolean'],
+        ]);
+
+        $stockCategory->update([
+            'name' => $validated['name'],
+            'sort_order' => $validated['sort_order'] ?? 0,
+            'is_active' => $request->boolean('is_active'),
+        ]);
+
+        return redirect()->route('stock-categories.index')->with('success', 'Categoria de estoque atualizada.');
+    }
+
+    public function destroy(StockCategory $stockCategory): RedirectResponse
+    {
+        $stockCategory->ingredients()->update(['stock_category_id' => null]);
+        $stockCategory->delete();
+
+        return redirect()->route('stock-categories.index')->with('success', 'Categoria de estoque excluída.');
+    }
+}
