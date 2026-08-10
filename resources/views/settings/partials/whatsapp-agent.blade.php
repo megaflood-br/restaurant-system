@@ -159,7 +159,8 @@
         'bot_resumed_message' => 'Bot reativado (cliente digitou bot)',
         'side_message' => '2b. Acompanhamento (fritas/legumes)',
         'extras_message' => '3. Talher / observações',
-        'address_message' => '4. Endereço ou retirada',
+        'address_confirm_message' => '4a. Confirmar endereço já cadastrado',
+        'address_message' => '4. Endereço novo ou retirada',
         'schedule_message' => '4b. Horário (agora ou agendar)',
         'payment_message' => '5. Forma de pagamento',
         'pix_message' => '5b. Instruções Pix',
@@ -171,6 +172,9 @@
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old($field, $whatsappAgent[$field]) }}</textarea>
             @if ($field === 'side_message')
                 <p class="mt-1 text-xs text-gray-500">Placeholder: <code class="bg-gray-100 px-1 rounded">{options}</code>. Deixe as opções abaixo vazias para pular esta etapa.</p>
+            @endif
+            @if ($field === 'address_confirm_message')
+                <p class="mt-1 text-xs text-gray-500">Usado quando o cliente já tem endereço. Placeholder: <code class="bg-gray-100 px-1 rounded">{address}</code>.</p>
             @endif
         </div>
     @endforeach
