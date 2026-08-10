@@ -41,7 +41,7 @@ currently has many pre-existing Pint style findings — a non-clean `--test` res
 is unrelated to your changes unless you introduced new ones.
 
 ### Tests
-`php artisan test` (PHPUnit). There are ~10 pre-existing failures in the default Laravel Breeze
-auth/profile tests (`tests/Feature/Auth/*`, `tests/Feature/ProfileTest.php`, `ExampleTest`)
-because this app customized routing (e.g. redirects to `/garcom`, registration route removed).
-Treat those as the known baseline; focus on tests relevant to your change.
+`php artisan test` (PHPUnit). Feature auth/profile tests assume the real role model:
+`User::factory()` defaults to **admin**; use `->waiter()` for garçom flows. Public
+registration is disabled (`/register` → 404). Root `/` redirects to `/cardapio`.
+See PR #2 (`cursor/fix-feature-tests-94b2`) for the aligned suite.
