@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Customer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -97,9 +96,13 @@ class OpenAiWhatsAppAgentService
             'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h"), use set_schedule assim que possível.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
             'Nunca invente pratos ou preços — consulte get_menu.',
+            'Quando o cliente pedir cardápio/menu (ex.: "cardápio", "cardápio de hoje", "manda o menu"), chame OBRIGATORIAMENTE send_menu_image.',
+            'NÃO liste o cardápio completo em texto (nomes e preços). A resposta ao pedido de cardápio é a imagem do dia.',
+            'get_menu serve apenas para montar/confirmar itens do pedido, nunca para exibir o cardápio ao cliente.',
+            'Na primeira saudação, também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
             'Seja breve, clara e amigável em português do Brasil.',
             'Estado atual da sessão: '.json_encode($session, JSON_UNESCAPED_UNICODE),
-            'Cardápio resumido: '.json_encode($menu, JSON_UNESCAPED_UNICODE),
+            'Cardápio resumido (uso interno): '.json_encode($menu, JSON_UNESCAPED_UNICODE),
         ]);
 
         $messages = [
@@ -140,17 +143,17 @@ class OpenAiWhatsAppAgentService
             ['type' => 'function', 'function' => [
                 'name' => 'get_menu',
                 'description' => 'Lista produtos disponíveis com variações P/M/G e preços.',
-                'parameters' => ['type' => 'object', 'properties' => new \stdClass()],
+                'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'get_opening_hours',
                 'description' => 'Retorna horário de funcionamento.',
-                'parameters' => ['type' => 'object', 'properties' => new \stdClass()],
+                'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'send_menu_image',
-                'description' => 'Envia imagem do cardápio do dia.',
-                'parameters' => ['type' => 'object', 'properties' => new \stdClass()],
+                'description' => 'Envia a imagem do cardápio do dia no WhatsApp. Use sempre que o cliente pedir cardápio/menu; não responda listando pratos em texto.',
+                'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'add_to_cart',
@@ -177,12 +180,12 @@ class OpenAiWhatsAppAgentService
             ['type' => 'function', 'function' => [
                 'name' => 'view_cart',
                 'description' => 'Mostra itens e total parcial do carrinho.',
-                'parameters' => ['type' => 'object', 'properties' => new \stdClass()],
+                'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'finalize_items',
                 'description' => 'Cliente terminou de pedir pratos; avança para observações/talher.',
-                'parameters' => ['type' => 'object', 'properties' => new \stdClass()],
+                'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'set_extras',
@@ -231,7 +234,7 @@ class OpenAiWhatsAppAgentService
             ['type' => 'function', 'function' => [
                 'name' => 'cancel_order',
                 'description' => 'Cancela pedido em andamento.',
-                'parameters' => ['type' => 'object', 'properties' => new \stdClass()],
+                'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
         ];
     }
