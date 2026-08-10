@@ -381,6 +381,11 @@
                                 Na Evolution, marque apenas o evento <strong>MESSAGES_UPSERT</strong>.
                                 Eventos como <code>contacts.update</code> são ignorados pelo sistema — se todos estiverem ativos, o log fica poluído (não é erro).
                             </p>
+                            <p class="text-xs text-amber-700 mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                                Se <strong>Webhook by Events</strong> estiver ativo na Evolution, o sistema aceita automaticamente URLs como
+                                <code class="break-all">{{ $integration['evolution_webhook_url'] }}/messages-upsert</code>.
+                                Também funciona com essa opção desligada usando só a URL base acima.
+                            </p>
                             <p class="text-xs text-gray-400">Evolution API (envio opcional): configure EVOLUTION_* no .env se usar POST /whatsapp/messages pelo sistema.</p>
                         </div>
 

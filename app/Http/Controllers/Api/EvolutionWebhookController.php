@@ -18,16 +18,17 @@ class EvolutionWebhookController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $event = strtolower(str_replace('_', '.', (string) $request->input('event', '')));
+        $event = $this->resolveEvent($request);
         $payload = $request->all();
 
         if ($event !== 'messages.upsert') {
-            return response()->json(['message' => 'Event ignored']);
+            return response()->json(['message' => 'Event ignored', 'event' => $event]);
         }
 
         Log::info('Evolution webhook: message received', [
             'event' => $event,
             'instance' => $request->input('instance'),
+            'path' => $request->path(),
         ]);
 
         foreach ($this->extractMessages($payload) as $message) {
@@ -100,5 +101,16 @@ class EvolutionWebhookController extends Controller
     {
         return data_get($message, 'message.imageMessage') !== null
             || data_get($message, 'message.documentMessage') !== null;
+    }
+
+    private function resolveEvent(Request $request): string
+    {
+        $routeEvent = $request->route('event');
+
+        if (is_string($routeEvent) && $routeEvent !== '') {
+            return strtolower(str_replace(['_', '-'], '.', $routeEvent));
+        }
+
+        return strtolower(str_replace('_', '.', (string) $request->input('event', '')));
     }
 }

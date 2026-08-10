@@ -9,7 +9,8 @@ use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\WhatsAppApiController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/webhooks/evolution', EvolutionWebhookController::class)
+Route::post('/webhooks/evolution/{event?}', EvolutionWebhookController::class)
+    ->where('event', '[\w\-\.]+')
     ->name('webhooks.evolution');
 
 Route::prefix('v1')->middleware('integration.api')->name('api.v1.')->group(function () {

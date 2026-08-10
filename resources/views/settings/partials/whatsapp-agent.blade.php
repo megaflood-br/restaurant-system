@@ -22,6 +22,19 @@
         </label>
     </div>
 
+    <div class="rounded-lg border border-indigo-100 bg-indigo-50/60 p-4 text-sm text-indigo-900 space-y-2">
+        <p class="font-medium">Evolution API (.env)</p>
+        <p class="text-xs text-indigo-800">
+            Para o bot responder, confirme no servidor: <code>EVOLUTION_ENABLED=true</code>,
+            <code>EVOLUTION_API_URL</code>, <code>EVOLUTION_API_KEY</code> e <code>EVOLUTION_API_INSTANCE</code>.
+        </p>
+        <p class="text-xs text-indigo-800">
+            Webhook na Evolution: <code class="break-all">{{ url('/api/webhooks/evolution') }}</code>
+            — evento <strong>MESSAGES_UPSERT</strong>. Com <em>Webhook by Events</em> ligado, também funciona
+            <code class="break-all">{{ url('/api/webhooks/evolution/messages-upsert') }}</code>.
+        </p>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
             <label for="wa_restaurant_name" class="block text-sm font-medium text-gray-700">Nome no WhatsApp</label>
