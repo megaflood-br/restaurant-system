@@ -84,6 +84,9 @@ class AppSettings
             'whatsapp_agent.delivery_quote_message' => Setting::get('whatsapp_agent', 'delivery_quote_message', config('whatsapp_agent.delivery_quote_message')),
             'whatsapp_agent.cancel_message' => Setting::get('whatsapp_agent', 'cancel_message', config('whatsapp_agent.cancel_message')),
             'whatsapp_agent.status_not_found_message' => Setting::get('whatsapp_agent', 'status_not_found_message', config('whatsapp_agent.status_not_found_message')),
+            'whatsapp_agent.human_handoff_message' => Setting::get('whatsapp_agent', 'human_handoff_message', config('whatsapp_agent.human_handoff_message')),
+            'whatsapp_agent.bot_resumed_message' => Setting::get('whatsapp_agent', 'bot_resumed_message', config('whatsapp_agent.bot_resumed_message')),
+            'whatsapp_agent.human_pause_minutes' => (int) Setting::get('whatsapp_agent', 'human_pause_minutes', config('whatsapp_agent.human_pause_minutes', 60)),
         ]);
     }
 
@@ -186,6 +189,9 @@ class AppSettings
                 'delivery_quote_message' => config('whatsapp_agent.delivery_quote_message', ''),
                 'cancel_message' => config('whatsapp_agent.cancel_message', ''),
                 'status_not_found_message' => config('whatsapp_agent.status_not_found_message', ''),
+                'human_handoff_message' => config('whatsapp_agent.human_handoff_message', ''),
+                'bot_resumed_message' => config('whatsapp_agent.bot_resumed_message', ''),
+                'human_pause_minutes' => config('whatsapp_agent.human_pause_minutes', 60),
             ],
         ];
     }
@@ -299,6 +305,9 @@ class AppSettings
             'delivery_quote_message' => config('whatsapp_agent.delivery_quote_message'),
             'cancel_message' => config('whatsapp_agent.cancel_message'),
             'status_not_found_message' => config('whatsapp_agent.status_not_found_message'),
+            'human_handoff_message' => config('whatsapp_agent.human_handoff_message'),
+            'bot_resumed_message' => config('whatsapp_agent.bot_resumed_message'),
+            'human_pause_minutes' => config('whatsapp_agent.human_pause_minutes'),
         ];
     }
 

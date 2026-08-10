@@ -291,6 +291,9 @@ class SettingsController extends Controller
             'confirmed_message' => ['nullable', 'string', 'max:2000'],
             'pix_key' => ['nullable', 'string', 'max:255'],
             'estimated_minutes' => ['required', 'integer', 'min:5', 'max:240'],
+            'human_pause_minutes' => ['required', 'integer', 'min:5', 'max:1440'],
+            'human_handoff_message' => ['nullable', 'string', 'max:2000'],
+            'bot_resumed_message' => ['nullable', 'string', 'max:2000'],
         ];
 
         foreach (WeeklyMenuImages::DAYS as $day) {
@@ -327,6 +330,9 @@ class SettingsController extends Controller
             'confirmed_message' => $validated['confirmed_message'] ?? '',
             'pix_key' => $validated['pix_key'] ?? '',
             'estimated_minutes' => $validated['estimated_minutes'],
+            'human_pause_minutes' => $validated['human_pause_minutes'],
+            'human_handoff_message' => $validated['human_handoff_message'] ?? '',
+            'bot_resumed_message' => $validated['bot_resumed_message'] ?? '',
             'menu_images' => json_encode($menuImages),
             'menu_image' => null,
         ]);

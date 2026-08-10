@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\WhatsAppService;
+use App\Support\WhatsAppBotPause;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -33,6 +34,8 @@ class EvolutionWebhookController extends Controller
 
         foreach ($this->extractMessages($payload) as $message) {
             if (data_get($message, 'key.fromMe') === true) {
+                $this->handleHumanOutbound($message);
+
                 continue;
             }
 
@@ -112,5 +115,29 @@ class EvolutionWebhookController extends Controller
         }
 
         return strtolower(str_replace('_', '.', (string) $request->input('event', '')));
+    }
+
+    private function handleHumanOutbound(array $message): void
+    {
+        $remoteJid = data_get($message, 'key.remoteJidAlt')
+            ?? data_get($message, 'key.remoteJid');
+
+        if (! $remoteJid || str_contains($remoteJid, '@g.us') || str_contains($remoteJid, '@broadcast')) {
+            return;
+        }
+
+        $phone = explode('@', $remoteJid)[0];
+        $messageId = data_get($message, 'key.id');
+
+        if (WhatsAppBotPause::wasSentByBot($phone, is_string($messageId) ? $messageId : null)) {
+            return;
+        }
+
+        WhatsAppBotPause::pause($phone, 'human_whatsapp');
+
+        Log::info('WhatsApp bot paused for human takeover', [
+            'phone' => $phone,
+            'message_id' => $messageId,
+        ]);
     }
 }

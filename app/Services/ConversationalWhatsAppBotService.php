@@ -11,6 +11,7 @@ use App\Support\PhoneNumber;
 use App\Support\ProductSellable;
 use App\Support\ProductVariants;
 use App\Support\WeeklyMenuImages;
+use App\Support\WhatsAppBotPause;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,25 @@ class ConversationalWhatsAppBotService
 
         $customer = $this->resolveCustomer($phone, $pushName);
         $command = mb_strtolower(trim($text));
+
+        if ($this->wantsBotResume($command)) {
+            WhatsAppBotPause::resume($phone);
+            $this->clearSession($phone);
+            WhatsAppBotPause::forgetAiHistory($phone);
+            $this->replyText($phone, $this->message('bot_resumed_message'), $customer, sentByBot: true);
+
+            return;
+        }
+
+        if ($this->wantsHumanAgent($command)) {
+            $this->handoffToHuman($phone, $customer);
+
+            return;
+        }
+
+        if (WhatsAppBotPause::isPaused($phone)) {
+            return;
+        }
 
         if ($this->matchesIntent($command, ['cardapio', 'cardápio', 'menu'])) {
             $this->sendMenuImage($phone, $customer);
@@ -223,7 +243,7 @@ class ConversationalWhatsAppBotService
         $quote = $this->deliveryFeeService->quoteForAddress(trim($text));
 
         if ($quote === null) {
-            $this->replyText($phone, 'Não consegui calcular a entrega para esse endereço. Verifique se está completo (rua, número, bairro, cidade) ou digite *retirada* para buscar no balcão.', $customer);
+            $this->replyText($phone, $this->deliveryFailureMessage(trim($text)), $customer);
 
             return;
         }
@@ -402,7 +422,7 @@ class ConversationalWhatsAppBotService
 
         if ($url) {
             try {
-                $this->whatsAppService->sendImageToPhone($phone, $url, null, $customer, null, null, logInteraction: false);
+                $this->whatsAppService->sendImageToPhone($phone, $url, null, $customer, null, null, logInteraction: false, sentByBot: true);
             } catch (\Throwable $exception) {
                 Log::warning('Failed to send WhatsApp menu image', ['error' => $exception->getMessage()]);
             }
@@ -728,6 +748,22 @@ class ConversationalWhatsAppBotService
         return $time;
     }
 
+    private function deliveryFailureMessage(string $address, ?string $reason = null, ?float $distanceKm = null): string
+    {
+        if ($reason === null) {
+            $diagnosis = $this->deliveryFeeService->diagnoseAddress($address);
+            $reason = $diagnosis['reason'];
+            $distanceKm = $diagnosis['distance_km'];
+        }
+
+        return match ($reason) {
+            'missing_origin' => 'Ainda não configurei a localização do restaurante para calcular entrega. Por favor, digite *retirada* para buscar no balcão ou fale conosco.',
+            'geocode_failed' => 'Não localizei esse endereço. Envie rua, número, bairro e cidade (ex.: *Rua Machado de Assis, 465, Vila Mariana, São Paulo*) ou digite *retirada*.',
+            'out_of_range' => 'Esse endereço fica a cerca de *'.number_format((float) $distanceKm, 1, ',', '.').' km* do restaurante, fora das faixas de entrega cadastradas. Digite *retirada* ou informe outro endereço.',
+            default => 'Não consegui calcular a entrega para esse endereço. Verifique se está completo (rua, número, bairro, cidade) ou digite *retirada* para buscar no balcão.',
+        };
+    }
+
     private function buildSummary(array $session): string
     {
         $cart = $session['cart'] ?? [];
@@ -895,10 +931,10 @@ class ConversationalWhatsAppBotService
         ]);
     }
 
-    private function replyText(string $phone, string $message, ?Customer $customer = null, ?Order $order = null): void
+    private function replyText(string $phone, string $message, ?Customer $customer = null, ?Order $order = null, bool $sentByBot = true): void
     {
         try {
-            $this->whatsAppService->sendToPhone($phone, $message, $customer, $order, null, logInteraction: false);
+            $this->whatsAppService->sendToPhone($phone, $message, $customer, $order, null, logInteraction: false, sentByBot: $sentByBot);
         } catch (\Throwable $exception) {
             Log::error('Conversational WhatsApp bot reply failed', [
                 'phone' => $phone,
@@ -1150,10 +1186,16 @@ class ConversationalWhatsAppBotService
             ];
         }
 
-        $quote = $this->deliveryFeeService->quoteForAddress(trim($address));
+        $diagnosis = $this->deliveryFeeService->diagnoseAddress(trim($address));
+        $quote = $diagnosis['quote'];
 
         if ($quote === null) {
-            return ['ok' => false, 'error' => 'Endereço inválido ou fora da área de entrega.'];
+            return [
+                'ok' => false,
+                'error' => $this->deliveryFailureMessage(trim($address), $diagnosis['reason'] ?? null, $diagnosis['distance_km'] ?? null),
+                'reason' => $diagnosis['reason'] ?? null,
+                'distance_km' => $diagnosis['distance_km'] ?? null,
+            ];
         }
 
         $this->setSession($phone, array_merge($session, [
@@ -1214,9 +1256,56 @@ class ConversationalWhatsAppBotService
     public function toolCancelOrder(string $phone, ?string $pushName): array
     {
         $this->clearSession($phone);
-        Cache::forget('whatsapp_ai_history:'.($this->normalizedPhoneKey($phone)));
+        WhatsAppBotPause::forgetAiHistory($phone);
 
         return ['ok' => true, 'message' => $this->message('cancel_message')];
+    }
+
+    private function handoffToHuman(string $phone, ?Customer $customer): void
+    {
+        if (WhatsAppBotPause::isPaused($phone)) {
+            return;
+        }
+
+        WhatsAppBotPause::pause($phone, 'customer_request');
+        WhatsAppBotPause::forgetAiHistory($phone);
+        $this->replyText($phone, $this->message('human_handoff_message'), $customer, sentByBot: true);
+    }
+
+    private function wantsHumanAgent(string $command): bool
+    {
+        if ($this->matchesIntent($command, [
+            'atendente',
+            'humano',
+            'operador',
+            'falar com atendente',
+            'quero atendente',
+            'quero um atendente',
+            'atendimento humano',
+        ])) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/\b(atendente|humano|operador|pessoa\s+real)\b/u',
+            $command
+        ) || (bool) preg_match(
+            '/\bfalar\s+com\s+(algu[eé]m|uma\s+pessoa|voc[eê]s|atendente|humano)\b/u',
+            $command
+        );
+    }
+
+    private function wantsBotResume(string $command): bool
+    {
+        return $this->matchesIntent($command, [
+            'bot',
+            'robô',
+            'robo',
+            'voltar bot',
+            'automático',
+            'automatico',
+            'continuar com bot',
+        ]);
     }
 
     /** @param  array<int, array<string, mixed>>  $cart */

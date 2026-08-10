@@ -46,6 +46,10 @@
         <p class="text-xs text-indigo-800">
             Com OpenAI ativa, desmarque <strong>Encaminhar para n8n</strong> abaixo para evitar dois bots respondendo ao mesmo tempo.
         </p>
+        <p class="text-xs text-indigo-800">
+            <strong>Atendimento humano:</strong> o bot pausa quando você responde pelo WhatsApp ou quando o cliente pede *atendente*/*humano*.
+            Para reativar o bot, o cliente digita *bot*.
+        </p>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -59,6 +63,13 @@
             <input type="number" name="estimated_minutes" id="estimated_minutes" min="5" max="240"
                 value="{{ old('estimated_minutes', $whatsappAgent['estimated_minutes']) }}" required
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        </div>
+        <div>
+            <label for="human_pause_minutes" class="block text-sm font-medium text-gray-700">Pausar bot após humano (minutos)</label>
+            <input type="number" name="human_pause_minutes" id="human_pause_minutes" min="5" max="1440"
+                value="{{ old('human_pause_minutes', $whatsappAgent['human_pause_minutes']) }}" required
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <p class="mt-1 text-xs text-gray-500">Quando você ou o cliente pedir atendente, o bot fica em silêncio por esse tempo.</p>
         </div>
     </div>
 
@@ -114,6 +125,8 @@
     @foreach ([
         'welcome_message' => '1. Boas-vindas',
         'menu_followup_message' => '1b. Após enviar cardápio',
+        'human_handoff_message' => 'Atendente humano (cliente pediu)',
+        'bot_resumed_message' => 'Bot reativado (cliente digitou bot)',
         'extras_message' => '3. Talher / observações',
         'address_message' => '4. Endereço ou retirada',
         'payment_message' => '5. Forma de pagamento',

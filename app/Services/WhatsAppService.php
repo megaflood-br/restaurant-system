@@ -7,6 +7,7 @@ use App\Models\CustomerInteraction;
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
 use App\Support\PhoneNumber;
+use App\Support\WhatsAppBotPause;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -24,6 +25,7 @@ class WhatsAppService
         ?Order $order = null,
         ?int $userId = null,
         bool $logInteraction = true,
+        bool $sentByBot = false,
     ): WhatsAppMessage {
         $normalizedPhone = PhoneNumber::normalize($phone);
 
@@ -44,13 +46,17 @@ class WhatsAppService
         try {
             $response = $this->evolutionApi->sendText($normalizedPhone, $message);
 
+            $messageId = data_get($response, 'key.id')
+                ?? data_get($response, 'messageId')
+                ?? data_get($response, 'id');
+
             $record->update([
                 'status' => 'sent',
-                'evolution_message_id' => data_get($response, 'key.id')
-                    ?? data_get($response, 'messageId')
-                    ?? data_get($response, 'id'),
+                'evolution_message_id' => $messageId,
                 'metadata' => $response,
             ]);
+
+            $this->registerOutboundTracking($normalizedPhone, is_string($messageId) ? $messageId : null, $sentByBot);
 
             if ($customer && $logInteraction) {
                 $customer->interactions()->create([
@@ -124,6 +130,7 @@ class WhatsAppService
         ?Order $order = null,
         ?int $userId = null,
         bool $logInteraction = true,
+        bool $sentByBot = false,
     ): WhatsAppMessage {
         $normalizedPhone = PhoneNumber::normalize($phone);
 
@@ -144,13 +151,17 @@ class WhatsAppService
         try {
             $response = $this->evolutionApi->sendMedia($normalizedPhone, $imageUrl, 'image', $caption);
 
+            $messageId = data_get($response, 'key.id')
+                ?? data_get($response, 'messageId')
+                ?? data_get($response, 'id');
+
             $record->update([
                 'status' => 'sent',
-                'evolution_message_id' => data_get($response, 'key.id')
-                    ?? data_get($response, 'messageId')
-                    ?? data_get($response, 'id'),
+                'evolution_message_id' => $messageId,
                 'metadata' => $response,
             ]);
+
+            $this->registerOutboundTracking($normalizedPhone, is_string($messageId) ? $messageId : null, $sentByBot);
 
             if ($customer && $logInteraction) {
                 $customer->interactions()->create([
@@ -207,5 +218,16 @@ class WhatsAppService
         }
 
         return $record;
+    }
+
+    private function registerOutboundTracking(string $phone, ?string $messageId, bool $sentByBot): void
+    {
+        if ($sentByBot) {
+            WhatsAppBotPause::markBotOutbound($phone, $messageId);
+
+            return;
+        }
+
+        WhatsAppBotPause::pause($phone, 'human_outbound');
     }
 }

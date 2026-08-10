@@ -29,4 +29,7 @@ return [
     'delivery_quote_message' => 'Certinho! O endereço fica a {distance_km} km daqui, então a taxa de entrega sai por R$ {delivery_fee}.',
     'cancel_message' => 'Pedido cancelado. Envie *oi* quando quiser fazer um novo pedido.',
     'status_not_found_message' => 'Nenhum pedido encontrado. Envie *oi* para fazer seu primeiro pedido.',
+    'human_handoff_message' => 'Certo! Vou chamar um atendente humano para continuar com você. Aguarde um momentinho. 🙋',
+    'bot_resumed_message' => 'Voltei! Pode continuar seu pedido comigo. Digite *oi* ou *cardápio*.',
+    'human_pause_minutes' => 60,
 ];
