@@ -377,6 +377,10 @@
                             </ul>
                             <p class="text-gray-500">Documentação JSON: <code class="text-indigo-700">{{ $integration['api_base_url'] }}</code> (com token)</p>
                             <p class="text-gray-500">Webhook Evolution → sistema: <code class="text-indigo-700 break-all">{{ $integration['evolution_webhook_url'] }}</code></p>
+                            <p class="text-xs text-gray-500 mt-2">
+                                Na Evolution, marque apenas o evento <strong>MESSAGES_UPSERT</strong>.
+                                Eventos como <code>contacts.update</code> são ignorados pelo sistema — se todos estiverem ativos, o log fica poluído (não é erro).
+                            </p>
                             <p class="text-xs text-gray-400">Evolution API (envio opcional): configure EVOLUTION_* no .env se usar POST /whatsapp/messages pelo sistema.</p>
                         </div>
 

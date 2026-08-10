@@ -29,12 +29,14 @@
         'price' => (float) $p->displayPrice(),
         'price_label' => $p->priceLabel(),
         'has_variants' => $p->hasVariants(),
-        'variants' => $p->variants->map(fn ($v) => [
-            'id' => $v->id,
-            'label' => $v->label,
-            'price' => (float) $v->price,
-            'price_label' => number_format($v->price, 2, ',', '.'),
-        ])->values()->all(),
+        'variants' => $p->hasVariants()
+            ? $p->variants->map(fn ($v) => [
+                'id' => $v->id,
+                'label' => $v->label,
+                'price' => (float) $v->price,
+                'price_label' => number_format($v->price, 2, ',', '.'),
+            ])->values()->all()
+            : [],
         'image_url' => $p->image_url,
         'category_id' => $cat->id,
     ]))->values();

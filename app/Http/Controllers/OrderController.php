@@ -21,8 +21,12 @@ class OrderController extends Controller
             ->latest()
             ->paginate(10);
 
-        $products = Product::with('category')
-            ->with(['variants' => fn ($q) => $q->where('is_available', true)->orderBy('sort_order')])
+        $with = ['category', 'recipe'];
+        if (\App\Support\ProductVariants::enabled()) {
+            $with['variants'] = fn ($q) => $q->where('is_available', true)->orderBy('sort_order');
+        }
+
+        $products = Product::with($with)
             ->where('is_available', true)
             ->orderBy('name')
             ->get();
@@ -40,8 +44,12 @@ class OrderController extends Controller
 
     public function create(Request $request): View
     {
-        $products = Product::with('category')
-            ->with(['variants' => fn ($q) => $q->where('is_available', true)->orderBy('sort_order')])
+        $with = ['category', 'recipe'];
+        if (\App\Support\ProductVariants::enabled()) {
+            $with['variants'] = fn ($q) => $q->where('is_available', true)->orderBy('sort_order');
+        }
+
+        $products = Product::with($with)
             ->where('is_available', true)
             ->orderBy('name')
             ->get();
@@ -72,7 +80,7 @@ class OrderController extends Controller
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
-            'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'items.*.variant_id' => \App\Support\ProductVariants::variantIdRules(),
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.notes' => ['nullable', 'string'],
         ]);
@@ -97,7 +105,7 @@ class OrderController extends Controller
             $total = 0;
 
             foreach ($validated['items'] as $item) {
-                $product = Product::with('variants')->findOrFail($item['product_id']);
+                $product = \App\Support\ProductVariants::loadProduct((int) $item['product_id']);
                 $line = ProductSellable::orderItemAttributes(
                     $product,
                     (int) $item['quantity'],

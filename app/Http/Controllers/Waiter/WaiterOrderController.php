@@ -69,7 +69,7 @@ class WaiterOrderController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'exists:products,id'],
-            'variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'variant_id' => \App\Support\ProductVariants::variantIdRules(),
             'quantity' => ['required', 'integer', 'min:1', 'max:99'],
             'notes' => ['nullable', 'string', 'max:255'],
             'comanda_number' => ['nullable', 'integer', 'min:1', 'max:999'],
@@ -79,7 +79,7 @@ class WaiterOrderController extends Controller
             $cart->setComandaNumber((int) $validated['comanda_number']);
         }
 
-        $product = Product::with('variants')->findOrFail($validated['product_id']);
+        $product = \App\Support\ProductVariants::loadProduct((int) $validated['product_id']);
         \App\Support\ProductSellable::resolve($product, $validated['variant_id'] ?? null);
 
         $cart->add(

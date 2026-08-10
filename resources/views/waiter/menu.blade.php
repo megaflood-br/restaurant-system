@@ -51,12 +51,14 @@
                     <div class="space-y-3">
                         @foreach ($category->products as $product)
                             @php
-                                $variantPayload = $product->variants->map(fn ($variant) => [
-                                    'id' => $variant->id,
-                                    'label' => $variant->label,
-                                    'price' => (float) $variant->price,
-                                    'price_label' => number_format($variant->price, 2, ',', '.'),
-                                ])->values();
+                                $variantPayload = $product->hasVariants()
+                                    ? $product->variants->map(fn ($variant) => [
+                                        'id' => $variant->id,
+                                        'label' => $variant->label,
+                                        'price' => (float) $variant->price,
+                                        'price_label' => number_format($variant->price, 2, ',', '.'),
+                                    ])->values()
+                                    : collect();
                             @endphp
                             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex"
                                 x-data="{
@@ -65,7 +67,7 @@
                                     open: false,
                                     hasVariants: @js($product->hasVariants()),
                                     variants: @js($variantPayload),
-                                    selectedVariantId: @js($product->variants->first()?->id),
+                                    selectedVariantId: @js($product->hasVariants() ? $product->variants->first()?->id : null),
                                     selectedPriceLabel() {
                                         if (!this.hasVariants) return @js(number_format($product->price, 2, ',', '.'));
                                         const variant = this.variants.find(v => v.id === this.selectedVariantId);

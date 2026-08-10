@@ -43,7 +43,12 @@ class CartService
             return collect();
         }
 
-        $products = Product::with(['category', 'recipe', 'variants.recipe'])
+        $with = ['category', 'recipe'];
+        if (\App\Support\ProductVariants::enabled()) {
+            $with[] = 'variants.recipe';
+        }
+
+        $products = Product::with($with)
             ->whereIn('id', $productIds)
             ->where('is_available', true)
             ->get()

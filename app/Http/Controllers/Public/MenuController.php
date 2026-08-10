@@ -21,7 +21,7 @@ class MenuController extends Controller
 
         $categories = Category::query()
             ->where('is_active', true)
-            ->with(['products' => fn ($query) => $query->where('is_available', true)->with(['recipe', 'variants' => fn ($q) => $q->where('is_available', true)->orderBy('sort_order')])->orderBy('name')])
+            ->with(['products' => fn ($query) => $query->where('is_available', true)->withMenuRelations()->orderBy('name')])
             ->orderBy('name')
             ->get()
             ->filter(fn ($category) => $category->products->isNotEmpty());
@@ -51,12 +51,12 @@ class MenuController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'exists:products,id'],
-            'variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'variant_id' => \App\Support\ProductVariants::variantIdRules(),
             'quantity' => ['required', 'integer', 'min:1', 'max:99'],
             'notes' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $product = Product::with('variants')->findOrFail($validated['product_id']);
+        $product = \App\Support\ProductVariants::loadProduct((int) $validated['product_id']);
         \App\Support\ProductSellable::resolve($product, $validated['variant_id'] ?? null);
 
         $cart->add(

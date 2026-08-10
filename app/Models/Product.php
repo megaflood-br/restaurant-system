@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
@@ -59,11 +60,28 @@ class Product extends Model
 
     public function hasVariants(): bool
     {
+        if (! Schema::hasTable('product_variants')) {
+            return false;
+        }
+
         if ($this->relationLoaded('variants')) {
             return $this->variants->isNotEmpty();
         }
 
         return $this->variants()->exists();
+    }
+
+    public function scopeWithMenuRelations($query)
+    {
+        $query->with('recipe');
+
+        if (Schema::hasTable('product_variants')) {
+            $query->with(['variants' => fn ($variantQuery) => $variantQuery
+                ->where('is_available', true)
+                ->orderBy('sort_order')]);
+        }
+
+        return $query;
     }
 
     public function availableVariants()

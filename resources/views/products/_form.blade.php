@@ -7,7 +7,7 @@
         @else
             <p class="mt-2 text-amber-800">Esta ficha ainda não tem foto cadastrada.</p>
         @endif
-    @elseif (!empty($product) && $product->variants->isNotEmpty())
+    @elseif (!empty($product) && $product->hasVariants())
         <p class="mt-1">Produtos com variações usam a ficha de cada tamanho abaixo.</p>
     @elseif (!empty($product))
         <a href="{{ route('recipes.index') }}" class="text-indigo-600 hover:underline font-medium">Vincule uma ficha técnica</a> para definir a foto.
@@ -43,7 +43,7 @@
 
 @php
     $initialVariants = old('variants');
-    if ($initialVariants === null && !empty($product) && $product->variants->isNotEmpty()) {
+    if ($initialVariants === null && !empty($product) && $product->hasVariants()) {
         $initialVariants = $product->variants->map(fn ($variant) => [
             'id' => $variant->id,
             'label' => $variant->label,
@@ -53,7 +53,7 @@
         ])->values()->all();
     }
     $initialVariants = $initialVariants ?? [];
-    $hasVariantsInitial = old('has_variants', !empty($product) && $product->variants->isNotEmpty());
+    $hasVariantsInitial = old('has_variants', !empty($product) && $product->hasVariants());
     $recipeOptions = ($recipes ?? collect())->map(fn ($recipe) => [
         'id' => $recipe->id,
         'name' => $recipe->name,

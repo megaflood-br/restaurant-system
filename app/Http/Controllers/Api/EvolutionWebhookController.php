@@ -21,14 +21,14 @@ class EvolutionWebhookController extends Controller
         $event = strtolower(str_replace('_', '.', (string) $request->input('event', '')));
         $payload = $request->all();
 
-        Log::info('Evolution webhook received', [
-            'event' => $event,
-            'instance' => $request->input('instance'),
-        ]);
-
         if ($event !== 'messages.upsert') {
             return response()->json(['message' => 'Event ignored']);
         }
+
+        Log::info('Evolution webhook: message received', [
+            'event' => $event,
+            'instance' => $request->input('instance'),
+        ]);
 
         foreach ($this->extractMessages($payload) as $message) {
             if (data_get($message, 'key.fromMe') === true) {

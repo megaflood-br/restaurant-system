@@ -19,7 +19,12 @@ class ProductController extends Controller
 {
     public function index(): View
     {
-        $products = Product::with(['category', 'recipe', 'variants.recipe'])->latest()->paginate(10);
+        $with = ['category', 'recipe'];
+        if (\App\Support\ProductVariants::enabled()) {
+            $with[] = 'variants.recipe';
+        }
+
+        $products = Product::with($with)->latest()->paginate(10);
 
         return view('products.index', compact('products'));
     }
@@ -64,9 +69,14 @@ class ProductController extends Controller
 
     public function edit(Product $product): View
     {
+        $with = ['recipe'];
+        if (\App\Support\ProductVariants::enabled()) {
+            $with[] = 'variants.recipe';
+        }
+
         return view('products.edit', [
             ...$this->formData($product),
-            'product' => $product->load(['recipe', 'variants.recipe']),
+            'product' => $product->load($with),
         ]);
     }
 

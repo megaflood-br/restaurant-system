@@ -11,9 +11,11 @@ class ProductSellable
     /** @return array{product: Product, variant: ?ProductVariant, price: float, name: string, variant_label: ?string} */
     public static function resolve(Product $product, ?int $variantId = null): array
     {
-        $product->loadMissing(['variants' => fn ($query) => $query->where('is_available', true)->orderBy('sort_order')]);
+        if (ProductVariants::enabled()) {
+            $product->loadMissing(['variants' => fn ($query) => $query->where('is_available', true)->orderBy('sort_order')]);
+        }
 
-        if ($product->variants->isNotEmpty()) {
+        if ($product->hasVariants()) {
             if (! $variantId) {
                 throw ValidationException::withMessages([
                     'variant_id' => 'Selecione o tamanho ou variação deste produto.',
