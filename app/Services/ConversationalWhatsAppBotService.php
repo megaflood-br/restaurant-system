@@ -14,6 +14,7 @@ use App\Support\ProductSellable;
 use App\Support\ProductVariants;
 use App\Support\WeeklyMenuImages;
 use App\Support\WhatsAppBotPause;
+use App\Support\WhatsAppMenuIntent;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -55,7 +56,7 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        if ($this->matchesIntent($command, ['cardapio', 'cardápio', 'menu'])) {
+        if (WhatsAppMenuIntent::matches($command)) {
             $this->sendMenuImage($phone, $customer);
 
             return;
@@ -514,12 +515,22 @@ class ConversationalWhatsAppBotService
     {
         $url = $this->menuImageUrl();
 
-        if ($url) {
-            try {
-                $this->whatsAppService->sendImageToPhone($phone, $url, null, $customer, null, null, logInteraction: false, sentByBot: true);
-            } catch (\Throwable $exception) {
-                Log::warning('Failed to send WhatsApp menu image', ['error' => $exception->getMessage()]);
-            }
+        if (! $url) {
+            Log::warning('WhatsApp menu image missing for today', [
+                'day' => WeeklyMenuImages::todayKey(),
+            ]);
+            $this->replyText($phone, 'O cardápio em imagem de hoje ainda não foi configurado. Me diga o prato que você quer (ex.: *strogonoff P*).', $customer);
+
+            return;
+        }
+
+        try {
+            $this->whatsAppService->sendImageToPhone($phone, $url, null, $customer, null, null, logInteraction: false, sentByBot: true);
+        } catch (\Throwable $exception) {
+            Log::warning('Failed to send WhatsApp menu image', ['error' => $exception->getMessage()]);
+            $this->replyText($phone, 'Não consegui enviar a imagem do cardápio agora. Me diga o prato que você quer (ex.: *strogonoff P*).', $customer);
+
+            return;
         }
 
         if ($sendFollowup) {
