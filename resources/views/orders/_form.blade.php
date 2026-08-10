@@ -10,9 +10,13 @@
     x-data="{
         type: '{{ old('type', $selectedCustomer ? 'delivery' : 'dine_in') }}',
         customerId: '{{ old('customer_id', $selectedCustomer?->id ?? '') }}',
-        items: [{}],
-        addItem() { this.items.push({}); },
-        removeItem(index) { this.items.splice(index, 1); }
+        items: [{ variantId: '' }],
+        addItem() { this.items.push({ variantId: '' }); },
+        removeItem(index) { this.items.splice(index, 1); },
+        syncVariant(index, event) {
+            const option = event.target.selectedOptions[0];
+            this.items[index].variantId = option?.dataset?.variantId || '';
+        }
     }"
     class="space-y-6">
     @csrf
@@ -68,12 +72,24 @@
             <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3 p-4 bg-gray-50 rounded-lg">
                 <div class="sm:col-span-6">
                     <label class="block text-sm font-medium text-gray-700">Produto</label>
-                    <select :name="`items[${index}][product_id]`" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <select :name="`items[${index}][product_id]`" required @change="syncVariant(index, $event)"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Selecione...</option>
                         @foreach ($products as $product)
-                            <option value="{{ $product->id }}">{{ $product->name }} — R$ {{ number_format($product->price, 2, ',', '.') }}</option>
+                            @if ($product->hasVariants())
+                                @foreach ($product->variants as $variant)
+                                    <option value="{{ $product->id }}" data-variant-id="{{ $variant->id }}">
+                                        {{ $product->name }} ({{ $variant->label }}) — R$ {{ number_format($variant->price, 2, ',', '.') }}
+                                    </option>
+                                @endforeach
+                            @else
+                                <option value="{{ $product->id }}" data-variant-id="">
+                                    {{ $product->name }} — R$ {{ number_format($product->price, 2, ',', '.') }}
+                                </option>
+                            @endif
                         @endforeach
                     </select>
+                    <input type="hidden" :name="`items[${index}][variant_id]`" x-model="item.variantId">
                 </div>
                 <div class="sm:col-span-2">
                     <label class="block text-sm font-medium text-gray-700">Qtd</label>

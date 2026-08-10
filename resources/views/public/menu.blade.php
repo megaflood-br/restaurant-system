@@ -31,8 +31,31 @@
 
                     <div class="space-y-4">
                         @foreach ($category->products as $product)
+                            @php
+                                $variantPayload = $product->variants->map(fn ($variant) => [
+                                    'id' => $variant->id,
+                                    'label' => $variant->label,
+                                    'price' => (float) $variant->price,
+                                    'price_label' => number_format($variant->price, 2, ',', '.'),
+                                ])->values();
+                            @endphp
                             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex"
-                                x-data="{ qty: 1, notes: '', open: false }">
+                                x-data="{
+                                    qty: 1,
+                                    notes: '',
+                                    open: false,
+                                    hasVariants: @js($product->hasVariants()),
+                                    variants: @js($variantPayload),
+                                    selectedVariantId: @js($product->variants->first()?->id),
+                                    selectedPrice() {
+                                        if (!this.hasVariants) return @js((float) $product->price);
+                                        const variant = this.variants.find(v => v.id === this.selectedVariantId);
+                                        return variant ? variant.price : 0;
+                                    },
+                                    selectedPriceLabel() {
+                                        return this.selectedPrice().toFixed(2).replace('.', ',');
+                                    }
+                                }">
                                 @if ($product->image_url)
                                     <img src="{{ $product->image_url }}" alt="{{ $product->name }}"
                                         class="w-28 h-28 object-cover shrink-0">
@@ -48,7 +71,13 @@
                                         @endif
                                     </div>
                                     <div class="flex items-center justify-between mt-2 gap-2">
-                                        <span class="menu-text font-bold">R$ {{ number_format($product->price, 2, ',', '.') }}</span>
+                                        <span class="menu-text font-bold">
+                                            @if ($product->hasVariants())
+                                                R$ {{ $product->priceLabel() }}
+                                            @else
+                                                R$ {{ number_format($product->price, 2, ',', '.') }}
+                                            @endif
+                                        </span>
                                         <button type="button" @click="open = true"
                                             class="rounded-full menu-bg menu-bg-hover text-white text-xs font-semibold px-4 py-2 transition">
                                             Adicionar
@@ -70,11 +99,14 @@
                                                 @if ($product->description)
                                                     <p class="text-sm text-gray-500 mt-1">{{ $product->description }}</p>
                                                 @endif
-                                                <p class="menu-text font-bold text-lg mt-2">R$ {{ number_format($product->price, 2, ',', '.') }}</p>
+                                                <p class="menu-text font-bold text-lg mt-2" x-text="'R$ ' + selectedPriceLabel()">
+                                                    R$ {{ $product->hasVariants() ? $product->priceLabel() : number_format($product->price, 2, ',', '.') }}
+                                                </p>
                                             </div>
 
                                             <form method="POST" action="{{ route('public.cart.add') }}" class="space-y-4"
                                                 @submit.prevent="
+                                                    if (hasVariants && !selectedVariantId) { alert('Selecione o tamanho.'); return; }
                                                     fetch(@js(route('public.cart.add')), {
                                                         method: 'POST',
                                                         body: new FormData($event.target),
@@ -86,6 +118,22 @@
                                                 ">
                                                 @csrf
                                                 <input type="hidden" name="product_id" value="{{ $product->id }}">
+                                                <input type="hidden" name="variant_id" x-bind:value="hasVariants ? selectedVariantId : ''">
+
+                                                <div x-show="hasVariants" x-cloak>
+                                                    <label class="block text-sm font-medium text-gray-700 mb-2">Tamanho</label>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <template x-for="variant in variants" :key="variant.id">
+                                                            <button type="button"
+                                                                @click="selectedVariantId = variant.id"
+                                                                :class="selectedVariantId === variant.id ? 'menu-tab-active' : 'bg-white text-gray-700 border border-gray-200'"
+                                                                class="rounded-full px-4 py-2 text-sm font-semibold transition">
+                                                                <span x-text="variant.label"></span>
+                                                                <span class="opacity-80" x-text="' · R$ ' + variant.price_label"></span>
+                                                            </button>
+                                                        </template>
+                                                    </div>
+                                                </div>
 
                                                 <div>
                                                     <label class="block text-sm font-medium text-gray-700 mb-2">Quantidade</label>
@@ -103,7 +151,7 @@
                                                 </div>
 
                                                 <button type="submit" class="w-full rounded-xl menu-bg menu-bg-hover text-white font-semibold py-3 transition">
-                                                    Adicionar — R$ {{ number_format($product->price, 2, ',', '.') }}
+                                                    <span x-text="'Adicionar — R$ ' + selectedPriceLabel()">Adicionar</span>
                                                 </button>
                                             </form>
                                         </div>

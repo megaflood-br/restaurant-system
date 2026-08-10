@@ -116,19 +116,18 @@ class CheckoutController extends Controller
             $itemsTotal = 0;
 
             foreach ($cart->items() as $item) {
-                $product = Product::findOrFail($item['product_id']);
-                $subtotal = $product->price * $item['quantity'];
-
                 $order->items()->create([
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
+                    'product_id' => $item['product_id'],
+                    'product_variant_id' => $item['variant_id'] ?? null,
+                    'variant_label' => $item['variant_label'] ?? null,
+                    'product_name' => $item['name'],
                     'quantity' => $item['quantity'],
-                    'unit_price' => $product->price,
-                    'subtotal' => $subtotal,
+                    'unit_price' => $item['price'],
+                    'subtotal' => $item['subtotal'],
                     'notes' => $item['notes'],
                 ]);
 
-                $itemsTotal += $subtotal;
+                $itemsTotal += $item['subtotal'];
             }
 
             $order->update(['total' => $itemsTotal + $deliveryFee]);
@@ -136,7 +135,7 @@ class CheckoutController extends Controller
             return $order;
         });
 
-        $inventory->deductForOrder($order->fresh(['items.product.ingredients']));
+        $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
 
         $cart->clear();
 

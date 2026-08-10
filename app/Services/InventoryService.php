@@ -16,15 +16,17 @@ class InventoryService
             return;
         }
 
-        $order->load('items.product.recipe.ingredients');
+        $order->load('items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients');
 
         DB::transaction(function () use ($order, $userId) {
             foreach ($order->items as $item) {
-                if (! $item->product?->recipe) {
+                $recipe = $item->productVariant?->recipe ?? $item->product?->recipe;
+
+                if (! $recipe) {
                     continue;
                 }
 
-                foreach ($item->product->recipe->ingredients as $ingredient) {
+                foreach ($recipe->ingredients as $ingredient) {
                     $quantity = (float) $ingredient->pivot->quantity * (int) $item->quantity;
 
                     if ($quantity <= 0) {
@@ -53,15 +55,17 @@ class InventoryService
             return;
         }
 
-        $order->load('items.product.recipe.ingredients');
+        $order->load('items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients');
 
         DB::transaction(function () use ($order, $userId) {
             foreach ($order->items as $item) {
-                if (! $item->product?->recipe) {
+                $recipe = $item->productVariant?->recipe ?? $item->product?->recipe;
+
+                if (! $recipe) {
                     continue;
                 }
 
-                foreach ($item->product->recipe->ingredients as $ingredient) {
+                foreach ($recipe->ingredients as $ingredient) {
                     $quantity = (float) $ingredient->pivot->quantity * (int) $item->quantity;
 
                     if ($quantity <= 0) {

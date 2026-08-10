@@ -56,6 +56,11 @@ class Recipe extends Model
         return $this->hasMany(Product::class);
     }
 
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
     public function totalCost(): float
     {
         return $this->ingredients->sum(function (Ingredient $ingredient) {

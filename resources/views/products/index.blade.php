@@ -45,16 +45,47 @@
                                             @endif
                                         </td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ $product->category->name }}</td>
-                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">R$ {{ number_format($product->price, 2, ',', '.') }}</td>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                            @if ($product->hasVariants())
+                                                <span>R$ {{ $product->priceLabel() }}</span>
+                                                <p class="text-xs text-gray-500">{{ $product->variants->count() }} variações</p>
+                                            @else
+                                                R$ {{ number_format($product->price, 2, ',', '.') }}
+                                            @endif
+                                        </td>
                                         <td class="px-4 py-3 text-sm text-gray-700">
-                                            @if ($product->recipe)
+                                            @if ($product->hasVariants())
+                                                @foreach ($product->variants as $variant)
+                                                    <div class="text-xs">
+                                                        {{ $variant->label }}:
+                                                        @if ($variant->recipe)
+                                                            R$ {{ number_format($variant->foodCost(), 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </div>
+                                                @endforeach
+                                            @elseif ($product->recipe)
                                                 R$ {{ number_format($product->foodCost(), 2, ',', '.') }}
                                             @else
                                                 —
                                             @endif
                                         </td>
                                         <td class="px-4 py-3 text-sm">
-                                            @if ($product->recipe)
+                                            @if ($product->hasVariants())
+                                                <div class="space-y-1">
+                                                    @foreach ($product->variants as $variant)
+                                                        <div class="text-xs">
+                                                            <span class="font-medium">{{ $variant->label }}:</span>
+                                                            @if ($variant->recipe)
+                                                                <a href="{{ route('recipes.edit', $variant->recipe) }}" class="text-indigo-600 hover:underline">{{ $variant->recipe->name }}</a>
+                                                            @else
+                                                                <span class="text-amber-600">Sem ficha</span>
+                                                            @endif
+                                                        </div>
+                                                    @endforeach
+                                                </div>
+                                            @elseif ($product->recipe)
                                                 <a href="{{ route('recipes.edit', $product->recipe) }}" class="text-indigo-600 hover:underline">{{ $product->recipe->name }}</a>
                                             @else
                                                 <span class="text-amber-600">Sem vínculo</span>

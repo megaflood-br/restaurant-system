@@ -69,6 +69,7 @@ class WaiterOrderController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'exists:products,id'],
+            'variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'quantity' => ['required', 'integer', 'min:1', 'max:99'],
             'notes' => ['nullable', 'string', 'max:255'],
             'comanda_number' => ['nullable', 'integer', 'min:1', 'max:999'],
@@ -78,10 +79,14 @@ class WaiterOrderController extends Controller
             $cart->setComandaNumber((int) $validated['comanda_number']);
         }
 
+        $product = Product::with('variants')->findOrFail($validated['product_id']);
+        \App\Support\ProductSellable::resolve($product, $validated['variant_id'] ?? null);
+
         $cart->add(
             (int) $validated['product_id'],
             (int) $validated['quantity'],
             $validated['notes'] ?? null,
+            isset($validated['variant_id']) ? (int) $validated['variant_id'] : null,
         );
 
         if ($request->wantsJson()) {
@@ -99,6 +104,7 @@ class WaiterOrderController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'integer'],
+            'variant_id' => ['nullable', 'integer'],
             'quantity' => ['required', 'integer', 'min:0', 'max:99'],
             'notes' => ['nullable', 'string'],
         ]);
@@ -107,6 +113,7 @@ class WaiterOrderController extends Controller
             (int) $validated['product_id'],
             (int) $validated['quantity'],
             $validated['notes'] ?? null,
+            isset($validated['variant_id']) ? (int) $validated['variant_id'] : null,
         );
 
         return back();
@@ -116,10 +123,15 @@ class WaiterOrderController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'integer'],
+            'variant_id' => ['nullable', 'integer'],
             'notes' => ['nullable', 'string'],
         ]);
 
-        $cart->remove((int) $validated['product_id'], $validated['notes'] ?? null);
+        $cart->remove(
+            (int) $validated['product_id'],
+            $validated['notes'] ?? null,
+            isset($validated['variant_id']) ? (int) $validated['variant_id'] : null,
+        );
 
         return back()->with('success', 'Item removido.');
     }
@@ -157,19 +169,18 @@ class WaiterOrderController extends Controller
             $total = 0;
 
             foreach ($cart->items() as $item) {
-                $product = Product::findOrFail($item['product_id']);
-                $subtotal = $product->price * $item['quantity'];
-
                 $order->items()->create([
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
+                    'product_id' => $item['product_id'],
+                    'product_variant_id' => $item['variant_id'] ?? null,
+                    'variant_label' => $item['variant_label'] ?? null,
+                    'product_name' => $item['name'],
                     'quantity' => $item['quantity'],
-                    'unit_price' => $product->price,
-                    'subtotal' => $subtotal,
+                    'unit_price' => $item['price'],
+                    'subtotal' => $item['subtotal'],
                     'notes' => $item['notes'],
                 ]);
 
-                $total += $subtotal;
+                $total += $item['subtotal'];
             }
 
             $order->update(['total' => $total]);
@@ -177,7 +188,7 @@ class WaiterOrderController extends Controller
             return $order;
         });
 
-        $inventory->deductForOrder($order->fresh(['items.product.ingredients']), $request->user()->id);
+        $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
 
         $comandaNumber = (int) $validated['comanda_number'];
         $cart->clearItems();

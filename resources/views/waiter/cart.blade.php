@@ -27,6 +27,9 @@
                             @csrf
                             @method('PATCH')
                             <input type="hidden" name="product_id" value="{{ $item['product_id'] }}">
+                            @if (!empty($item['variant_id']))
+                                <input type="hidden" name="variant_id" value="{{ $item['variant_id'] }}">
+                            @endif
                             <input type="hidden" name="notes" value="{{ $item['notes'] }}">
                             <input type="hidden" name="quantity" value="{{ max(0, $item['quantity'] - 1) }}">
                             <button type="submit" class="w-10 h-10 rounded-xl bg-gray-100 font-bold text-lg active:bg-gray-200">−</button>
@@ -36,6 +39,9 @@
                             @csrf
                             @method('PATCH')
                             <input type="hidden" name="product_id" value="{{ $item['product_id'] }}">
+                            @if (!empty($item['variant_id']))
+                                <input type="hidden" name="variant_id" value="{{ $item['variant_id'] }}">
+                            @endif
                             <input type="hidden" name="notes" value="{{ $item['notes'] }}">
                             <input type="hidden" name="quantity" value="{{ $item['quantity'] + 1 }}">
                             <button type="submit" class="w-10 h-10 rounded-xl bg-gray-100 font-bold text-lg active:bg-gray-200">+</button>
@@ -45,6 +51,9 @@
                             @csrf
                             @method('DELETE')
                             <input type="hidden" name="product_id" value="{{ $item['product_id'] }}">
+                            @if (!empty($item['variant_id']))
+                                <input type="hidden" name="variant_id" value="{{ $item['variant_id'] }}">
+                            @endif
                             <input type="hidden" name="notes" value="{{ $item['notes'] }}">
                             <button type="submit" class="text-red-500 text-sm font-semibold px-2 py-1">Remover</button>
                         </form>

@@ -23,6 +23,9 @@
                             @csrf
                             @method('PATCH')
                             <input type="hidden" name="product_id" value="{{ $item['product_id'] }}">
+                            @if (!empty($item['variant_id']))
+                                <input type="hidden" name="variant_id" value="{{ $item['variant_id'] }}">
+                            @endif
                             <input type="hidden" name="notes" value="{{ $item['notes'] }}">
                             <input type="hidden" name="quantity" value="{{ max(0, $item['quantity'] - 1) }}">
                             <button type="submit" class="w-8 h-8 rounded-full bg-gray-100 font-bold">−</button>
@@ -32,6 +35,9 @@
                             @csrf
                             @method('PATCH')
                             <input type="hidden" name="product_id" value="{{ $item['product_id'] }}">
+                            @if (!empty($item['variant_id']))
+                                <input type="hidden" name="variant_id" value="{{ $item['variant_id'] }}">
+                            @endif
                             <input type="hidden" name="notes" value="{{ $item['notes'] }}">
                             <input type="hidden" name="quantity" value="{{ $item['quantity'] + 1 }}">
                             <button type="submit" class="w-8 h-8 rounded-full bg-gray-100 font-bold">+</button>
@@ -41,6 +47,9 @@
                             @csrf
                             @method('DELETE')
                             <input type="hidden" name="product_id" value="{{ $item['product_id'] }}">
+                            @if (!empty($item['variant_id']))
+                                <input type="hidden" name="variant_id" value="{{ $item['variant_id'] }}">
+                            @endif
                             <input type="hidden" name="notes" value="{{ $item['notes'] }}">
                             <button type="submit" class="text-red-500 text-xs font-medium ml-2">Remover</button>
                         </form>

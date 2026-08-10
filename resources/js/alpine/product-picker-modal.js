@@ -5,6 +5,7 @@ export function registerProductPickerModal(Alpine) {
         activeCategory: config.activeCategory ?? null,
         products: config.products ?? [],
         selectedProduct: null,
+        selectedVariantId: null,
         qty: 1,
         notes: '',
         cartCount: 0,
@@ -30,9 +31,30 @@ export function registerProductPickerModal(Alpine) {
 
         openProduct(id) {
             this.selectedProduct = this.products.find((p) => p.id === id) || null;
+            this.selectedVariantId = this.selectedProduct?.has_variants
+                ? this.selectedProduct.variants[0]?.id ?? null
+                : null;
             this.qty = 1;
             this.notes = '';
             this.productOpen = true;
+        },
+
+        selectedPrice() {
+            if (!this.selectedProduct) {
+                return 0;
+            }
+
+            if (this.selectedProduct.has_variants) {
+                const variant = this.selectedProduct.variants.find((v) => v.id === this.selectedVariantId);
+
+                return variant ? variant.price : 0;
+            }
+
+            return this.selectedProduct.price;
+        },
+
+        selectedPriceLabel() {
+            return this.selectedPrice().toFixed(2).replace('.', ',');
         },
 
         formatMoney(value) {
@@ -64,6 +86,12 @@ export function registerProductPickerModal(Alpine) {
                 return;
             }
 
+            if (this.selectedProduct.has_variants && !this.selectedVariantId) {
+                alert('Selecione o tamanho.');
+
+                return;
+            }
+
             this.adding = true;
 
             try {
@@ -71,6 +99,10 @@ export function registerProductPickerModal(Alpine) {
                 body.append('_token', this.csrf);
                 body.append('product_id', this.selectedProduct.id);
                 body.append('quantity', this.qty);
+
+                if (this.selectedProduct.has_variants && this.selectedVariantId) {
+                    body.append('variant_id', this.selectedVariantId);
+                }
 
                 if (this.notes) {
                     body.append('notes', this.notes);

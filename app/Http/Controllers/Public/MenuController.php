@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Models\Product;
 use App\Services\CartService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -20,7 +21,7 @@ class MenuController extends Controller
 
         $categories = Category::query()
             ->where('is_active', true)
-            ->with(['products' => fn ($query) => $query->where('is_available', true)->with('recipe')->orderBy('name')])
+            ->with(['products' => fn ($query) => $query->where('is_available', true)->with(['recipe', 'variants' => fn ($q) => $q->where('is_available', true)->orderBy('sort_order')])->orderBy('name')])
             ->orderBy('name')
             ->get()
             ->filter(fn ($category) => $category->products->isNotEmpty());
@@ -50,14 +51,19 @@ class MenuController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'exists:products,id'],
+            'variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'quantity' => ['required', 'integer', 'min:1', 'max:99'],
             'notes' => ['nullable', 'string', 'max:255'],
         ]);
+
+        $product = Product::with('variants')->findOrFail($validated['product_id']);
+        \App\Support\ProductSellable::resolve($product, $validated['variant_id'] ?? null);
 
         $cart->add(
             (int) $validated['product_id'],
             (int) $validated['quantity'],
             $validated['notes'] ?? null,
+            isset($validated['variant_id']) ? (int) $validated['variant_id'] : null,
         );
 
         if ($request->wantsJson()) {
@@ -75,6 +81,7 @@ class MenuController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'integer'],
+            'variant_id' => ['nullable', 'integer'],
             'quantity' => ['required', 'integer', 'min:0', 'max:99'],
             'notes' => ['nullable', 'string'],
         ]);
@@ -83,6 +90,7 @@ class MenuController extends Controller
             (int) $validated['product_id'],
             (int) $validated['quantity'],
             $validated['notes'] ?? null,
+            isset($validated['variant_id']) ? (int) $validated['variant_id'] : null,
         );
 
         return back();
@@ -92,10 +100,15 @@ class MenuController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['required', 'integer'],
+            'variant_id' => ['nullable', 'integer'],
             'notes' => ['nullable', 'string'],
         ]);
 
-        $cart->remove((int) $validated['product_id'], $validated['notes'] ?? null);
+        $cart->remove(
+            (int) $validated['product_id'],
+            $validated['notes'] ?? null,
+            isset($validated['variant_id']) ? (int) $validated['variant_id'] : null,
+        );
 
         return back()->with('success', 'Item removido.');
     }

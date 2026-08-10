@@ -15,6 +15,7 @@ use App\Services\OrderPrinterService;
 use App\Services\WhatsAppService;
 use App\Support\PaymentMethod;
 use App\Support\PhoneNumber;
+use App\Support\ProductSellable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -111,6 +112,7 @@ class OrderApiController extends Controller
             'notes' => ['nullable', 'string', 'max:500'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
             'items.*.notes' => ['nullable', 'string', 'max:255'],
             'print_kitchen' => ['boolean'],
@@ -157,19 +159,16 @@ class OrderApiController extends Controller
             $itemsTotal = 0;
 
             foreach ($validated['items'] as $item) {
-                $product = Product::findOrFail($item['product_id']);
-                $subtotal = $product->price * $item['quantity'];
+                $product = Product::with('variants')->findOrFail($item['product_id']);
+                $line = ProductSellable::orderItemAttributes(
+                    $product,
+                    (int) $item['quantity'],
+                    isset($item['variant_id']) ? (int) $item['variant_id'] : null,
+                    $item['notes'] ?? null,
+                );
 
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'quantity' => $item['quantity'],
-                    'unit_price' => $product->price,
-                    'subtotal' => $subtotal,
-                    'notes' => $item['notes'] ?? null,
-                ]);
-
-                $itemsTotal += $subtotal;
+                $order->items()->create($line);
+                $itemsTotal += $line['subtotal'];
             }
 
             $order->update(['total' => $itemsTotal + $deliveryFee]);
@@ -177,7 +176,7 @@ class OrderApiController extends Controller
             return $order;
         });
 
-        $inventory->deductForOrder($order->fresh(['items.product.recipe.ingredients']));
+        $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
 
         if ($request->boolean('print_kitchen', true)) {
             try {
@@ -289,7 +288,7 @@ class OrderApiController extends Controller
         $order->update(['status' => $validated['status']]);
 
         if ($validated['status'] === 'cancelled' && $previousStatus !== 'cancelled') {
-            $inventory->restoreForOrder($order->fresh(['items.product.ingredients']));
+            $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
         }
 
         return response()->json([

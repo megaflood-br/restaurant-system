@@ -25,7 +25,6 @@ class CartService
             return $defaults;
         }
 
-        // Sessões antigas usavam table_number (antes da migração para comanda)
         if (! array_key_exists('comanda_number', $cart) && array_key_exists('table_number', $cart)) {
             $cart['comanda_number'] = $cart['table_number'];
             unset($cart['table_number']);
@@ -44,7 +43,7 @@ class CartService
             return collect();
         }
 
-        $products = Product::with(['category', 'recipe'])
+        $products = Product::with(['category', 'recipe', 'variants.recipe'])
             ->whereIn('id', $productIds)
             ->where('is_available', true)
             ->get()
@@ -57,14 +56,31 @@ class CartService
                 return null;
             }
 
+            $variantId = $item['variant_id'] ?? null;
+            $variant = $variantId ? $product->variants->firstWhere('id', $variantId) : null;
+
+            if ($product->hasVariants()) {
+                if (! $variant || ! $variant->is_available) {
+                    return null;
+                }
+
+                $price = (float) $variant->price;
+                $name = $product->name.' ('.$variant->label.')';
+            } else {
+                $price = (float) $product->price;
+                $name = $product->name;
+            }
+
             return [
                 'product_id' => $product->id,
-                'name' => $product->name,
-                'price' => (float) $product->price,
+                'variant_id' => $variant?->id,
+                'variant_label' => $variant?->label,
+                'name' => $name,
+                'price' => $price,
                 'image_url' => $product->image_url,
                 'quantity' => (int) $item['quantity'],
                 'notes' => $item['notes'] ?? null,
-                'subtotal' => (float) $product->price * (int) $item['quantity'],
+                'subtotal' => $price * (int) $item['quantity'],
             ];
         })->filter()->values();
     }
@@ -99,15 +115,14 @@ class CartService
         session([$this->sessionKey => $cart]);
     }
 
-    public function add(int $productId, int $quantity = 1, ?string $notes = null): void
+    public function add(int $productId, int $quantity = 1, ?string $notes = null, ?int $variantId = null): void
     {
         $cart = $this->all();
         $items = $cart['items'];
-
         $found = false;
 
         foreach ($items as &$item) {
-            if ($item['product_id'] === $productId && ($item['notes'] ?? null) === $notes) {
+            if ($this->matchesItem($item, $productId, $variantId, $notes)) {
                 $item['quantity'] += $quantity;
                 $found = true;
                 break;
@@ -118,6 +133,7 @@ class CartService
         if (! $found) {
             $items[] = [
                 'product_id' => $productId,
+                'variant_id' => $variantId,
                 'quantity' => $quantity,
                 'notes' => $notes,
             ];
@@ -127,13 +143,13 @@ class CartService
         session([$this->sessionKey => $cart]);
     }
 
-    public function update(int $productId, int $quantity, ?string $notes = null): void
+    public function update(int $productId, int $quantity, ?string $notes = null, ?int $variantId = null): void
     {
         $cart = $this->all();
         $items = [];
 
         foreach ($cart['items'] as $item) {
-            if ($item['product_id'] === $productId && ($item['notes'] ?? null) === $notes) {
+            if ($this->matchesItem($item, $productId, $variantId, $notes)) {
                 if ($quantity > 0) {
                     $item['quantity'] = $quantity;
                     $items[] = $item;
@@ -147,9 +163,9 @@ class CartService
         session([$this->sessionKey => $cart]);
     }
 
-    public function remove(int $productId, ?string $notes = null): void
+    public function remove(int $productId, ?string $notes = null, ?int $variantId = null): void
     {
-        $this->update($productId, 0, $notes);
+        $this->update($productId, 0, $notes, $variantId);
     }
 
     public function clearItems(): void
@@ -162,5 +178,13 @@ class CartService
     public function clear(): void
     {
         session()->forget($this->sessionKey);
+    }
+
+    /** @param  array<string, mixed>  $item */
+    private function matchesItem(array $item, int $productId, ?int $variantId, ?string $notes): bool
+    {
+        return (int) $item['product_id'] === $productId
+            && (int) ($item['variant_id'] ?? 0) === (int) ($variantId ?? 0)
+            && ($item['notes'] ?? null) === $notes;
     }
 }

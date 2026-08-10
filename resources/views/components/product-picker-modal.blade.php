@@ -26,8 +26,15 @@
     $productsJson = $categories->flatMap(fn ($cat) => $cat->products->map(fn ($p) => [
         'id' => $p->id,
         'name' => $p->name,
-        'price' => (float) $p->price,
-        'price_label' => number_format($p->price, 2, ',', '.'),
+        'price' => (float) $p->displayPrice(),
+        'price_label' => $p->priceLabel(),
+        'has_variants' => $p->hasVariants(),
+        'variants' => $p->variants->map(fn ($v) => [
+            'id' => $v->id,
+            'label' => $v->label,
+            'price' => (float) $v->price,
+            'price_label' => number_format($v->price, 2, ',', '.'),
+        ])->values()->all(),
         'image_url' => $p->image_url,
         'category_id' => $cat->id,
     ]))->values();
@@ -91,7 +98,13 @@
                             @endif
                             <div class="flex-1 min-w-0">
                                 <p class="font-semibold text-sm text-gray-900 truncate">{{ $product->name }}</p>
-                                <p class="text-sm font-bold {{ $accentClasses['price'] }}">R$ {{ number_format($product->price, 2, ',', '.') }}</p>
+                                <p class="text-sm font-bold {{ $accentClasses['price'] }}">
+                                    @if ($product->hasVariants())
+                                        R$ {{ $product->priceLabel() }}
+                                    @else
+                                        R$ {{ number_format($product->price, 2, ',', '.') }}
+                                    @endif
+                                </p>
                             </div>
                             <button type="button" @click="openProduct({{ $product->id }})"
                                 class="shrink-0 rounded-xl {{ $accentClasses['btn'] }} text-white text-xs font-bold px-4 py-2.5">
@@ -124,9 +137,23 @@
             <div class="flex justify-between items-start">
                 <div>
                     <h3 class="text-lg font-bold" x-text="selectedProduct?.name"></h3>
-                    <p class="font-bold {{ $accentClasses['price'] }} mt-1" x-text="selectedProduct ? 'R$ ' + selectedProduct.price_label : ''"></p>
+                    <p class="font-bold {{ $accentClasses['price'] }} mt-1" x-text="selectedProduct ? 'R$ ' + selectedPriceLabel() : ''"></p>
                 </div>
                 <button type="button" @click="productOpen = false" class="text-gray-400 text-2xl leading-none">&times;</button>
+            </div>
+            <div x-show="selectedProduct?.has_variants" x-cloak>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Tamanho</label>
+                <div class="flex flex-wrap gap-2">
+                    <template x-for="variant in (selectedProduct?.variants || [])" :key="variant.id">
+                        <button type="button"
+                            @click="selectedVariantId = variant.id"
+                            :class="selectedVariantId === variant.id ? '{{ $accentClasses['tab_active'] }}' : 'bg-gray-100 text-gray-700'"
+                            class="rounded-full px-3 py-1.5 text-xs font-semibold transition">
+                            <span x-text="variant.label"></span>
+                            <span class="opacity-80" x-text="' · R$ ' + variant.price_label"></span>
+                        </button>
+                    </template>
+                </div>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Quantidade</label>

@@ -22,8 +22,15 @@ class MenuApiController extends Controller
                     'id' => $product->id,
                     'name' => $product->name,
                     'description' => $product->description,
-                    'price' => (float) $product->price,
-                    'price_formatted' => number_format((float) $product->price, 2, ',', '.'),
+                    'price' => (float) $product->displayPrice(),
+                    'price_formatted' => $product->priceLabel(),
+                    'has_variants' => $product->hasVariants(),
+                    'variants' => $product->variants->map(fn ($variant) => [
+                        'id' => $variant->id,
+                        'label' => $variant->label,
+                        'price' => (float) $variant->price,
+                        'price_formatted' => number_format((float) $variant->price, 2, ',', '.'),
+                    ])->values(),
                     'image_url' => $product->image_url,
                     'is_available' => (bool) $product->is_available,
                 ];

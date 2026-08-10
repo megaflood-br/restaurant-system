@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
@@ -49,6 +50,58 @@ class Product extends Model
     public function recipe(): BelongsTo
     {
         return $this->belongsTo(Recipe::class);
+    }
+
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class)->orderBy('sort_order');
+    }
+
+    public function hasVariants(): bool
+    {
+        if ($this->relationLoaded('variants')) {
+            return $this->variants->isNotEmpty();
+        }
+
+        return $this->variants()->exists();
+    }
+
+    public function availableVariants()
+    {
+        return $this->variants()->where('is_available', true)->orderBy('sort_order');
+    }
+
+    public function displayPrice(): float
+    {
+        if ($this->hasVariants()) {
+            $variants = $this->relationLoaded('variants')
+                ? $this->variants->where('is_available', true)
+                : $this->availableVariants()->get();
+
+            return (float) ($variants->min('price') ?? $this->price);
+        }
+
+        return (float) $this->price;
+    }
+
+    public function priceLabel(): string
+    {
+        if ($this->hasVariants()) {
+            $variants = $this->relationLoaded('variants')
+                ? $this->variants->where('is_available', true)
+                : $this->availableVariants()->get();
+
+            $min = (float) ($variants->min('price') ?? $this->price);
+            $max = (float) ($variants->max('price') ?? $min);
+
+            if ($min === $max) {
+                return number_format($min, 2, ',', '.');
+            }
+
+            return number_format($min, 2, ',', '.').' – '.number_format($max, 2, ',', '.');
+        }
+
+        return number_format((float) $this->price, 2, ',', '.');
     }
 
     public function ingredients(): BelongsToMany

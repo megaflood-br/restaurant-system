@@ -50,8 +50,28 @@
 
                     <div class="space-y-3">
                         @foreach ($category->products as $product)
+                            @php
+                                $variantPayload = $product->variants->map(fn ($variant) => [
+                                    'id' => $variant->id,
+                                    'label' => $variant->label,
+                                    'price' => (float) $variant->price,
+                                    'price_label' => number_format($variant->price, 2, ',', '.'),
+                                ])->values();
+                            @endphp
                             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex"
-                                x-data="{ qty: 1, notes: '', open: false }">
+                                x-data="{
+                                    qty: 1,
+                                    notes: '',
+                                    open: false,
+                                    hasVariants: @js($product->hasVariants()),
+                                    variants: @js($variantPayload),
+                                    selectedVariantId: @js($product->variants->first()?->id),
+                                    selectedPriceLabel() {
+                                        if (!this.hasVariants) return @js(number_format($product->price, 2, ',', '.'));
+                                        const variant = this.variants.find(v => v.id === this.selectedVariantId);
+                                        return variant ? variant.price_label : '0,00';
+                                    }
+                                }">
                                 @if ($product->image_url)
                                     <img src="{{ $product->image_url }}" alt="{{ $product->name }}"
                                         class="w-24 h-24 rounded-l-2xl object-cover shrink-0">
@@ -62,7 +82,13 @@
                                 <div class="flex-1 p-3 flex flex-col justify-between min-w-0">
                                     <div>
                                         <h3 class="font-semibold text-gray-900 leading-tight">{{ $product->name }}</h3>
-                                        <p class="text-indigo-600 font-bold mt-1">R$ {{ number_format($product->price, 2, ',', '.') }}</p>
+                                        <p class="text-indigo-600 font-bold mt-1">
+                                            @if ($product->hasVariants())
+                                                R$ {{ $product->priceLabel() }}
+                                            @else
+                                                R$ {{ number_format($product->price, 2, ',', '.') }}
+                                            @endif
+                                        </p>
                                     </div>
                                     <div class="flex items-center gap-2 mt-2 justify-end">
                                         <button type="button" @click="open = true"
@@ -85,13 +111,16 @@
                                                 <div class="flex justify-between items-start">
                                                     <div>
                                                         <h3 class="text-xl font-bold">{{ $product->name }}</h3>
-                                                        <p class="text-indigo-600 font-bold text-lg mt-1">R$ {{ number_format($product->price, 2, ',', '.') }}</p>
+                                                        <p class="text-indigo-600 font-bold text-lg mt-1" x-text="'R$ ' + selectedPriceLabel()">
+                                                            R$ {{ $product->hasVariants() ? $product->priceLabel() : number_format($product->price, 2, ',', '.') }}
+                                                        </p>
                                                     </div>
                                                     <button type="button" @click="open = false" class="text-gray-400 text-2xl leading-none p-1">&times;</button>
                                                 </div>
 
                                                 <form method="POST" action="{{ route('waiter.cart.add') }}" class="space-y-4"
                                                     @submit.prevent="
+                                                        if (hasVariants && !selectedVariantId) { alert('Selecione o tamanho.'); return; }
                                                         fetch(@js(route('waiter.cart.add')), {
                                                             method: 'POST',
                                                             body: new FormData($event.target),
@@ -103,6 +132,22 @@
                                                         <input type="hidden" name="comanda_number" value="{{ $comandaNumber }}">
                                                     @endif
                                                     <input type="hidden" name="product_id" value="{{ $product->id }}">
+                                                    <input type="hidden" name="variant_id" x-bind:value="hasVariants ? selectedVariantId : ''">
+
+                                                    <div x-show="hasVariants" x-cloak>
+                                                        <label class="block text-sm font-medium text-gray-700 mb-2">Tamanho</label>
+                                                        <div class="flex flex-wrap gap-2">
+                                                            <template x-for="variant in variants" :key="variant.id">
+                                                                <button type="button"
+                                                                    @click="selectedVariantId = variant.id"
+                                                                    :class="selectedVariantId === variant.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'"
+                                                                    class="rounded-full px-4 py-2 text-sm font-semibold transition">
+                                                                    <span x-text="variant.label"></span>
+                                                                    <span class="opacity-80" x-text="' · R$ ' + variant.price_label"></span>
+                                                                </button>
+                                                            </template>
+                                                        </div>
+                                                    </div>
 
                                                     <div>
                                                         <label class="block text-sm font-medium text-gray-700 mb-2">Quantidade</label>

@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
+use App\Support\ProductSellable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ class OrderController extends Controller
             ->paginate(10);
 
         $products = Product::with('category')
+            ->with(['variants' => fn ($q) => $q->where('is_available', true)->orderBy('sort_order')])
             ->where('is_available', true)
             ->orderBy('name')
             ->get();
@@ -39,6 +41,7 @@ class OrderController extends Controller
     public function create(Request $request): View
     {
         $products = Product::with('category')
+            ->with(['variants' => fn ($q) => $q->where('is_available', true)->orderBy('sort_order')])
             ->where('is_available', true)
             ->orderBy('name')
             ->get();
@@ -69,6 +72,7 @@ class OrderController extends Controller
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.notes' => ['nullable', 'string'],
         ]);
@@ -93,19 +97,16 @@ class OrderController extends Controller
             $total = 0;
 
             foreach ($validated['items'] as $item) {
-                $product = Product::findOrFail($item['product_id']);
-                $subtotal = $product->price * $item['quantity'];
+                $product = Product::with('variants')->findOrFail($item['product_id']);
+                $line = ProductSellable::orderItemAttributes(
+                    $product,
+                    (int) $item['quantity'],
+                    isset($item['variant_id']) ? (int) $item['variant_id'] : null,
+                    $item['notes'] ?? null,
+                );
 
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'quantity' => $item['quantity'],
-                    'unit_price' => $product->price,
-                    'subtotal' => $subtotal,
-                    'notes' => $item['notes'] ?? null,
-                ]);
-
-                $total += $subtotal;
+                $order->items()->create($line);
+                $total += $line['subtotal'];
             }
 
             $order->update(['total' => $total]);
@@ -113,7 +114,7 @@ class OrderController extends Controller
             return $order;
         });
 
-        $inventory->deductForOrder($order->fresh(['items.product.ingredients']), $request->user()->id);
+        $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
 
         $this->tryPrint($order);
 
@@ -155,7 +156,7 @@ class OrderController extends Controller
         $order->update(['status' => $validated['status']]);
 
         if ($validated['status'] === 'cancelled' && $previousStatus !== 'cancelled') {
-            $inventory->restoreForOrder($order->fresh(['items.product.ingredients']), $request->user()->id);
+            $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
         }
 
         return back()->with('success', 'Status do pedido atualizado.');
