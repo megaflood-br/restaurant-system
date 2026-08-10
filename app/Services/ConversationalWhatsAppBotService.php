@@ -12,6 +12,7 @@ use App\Support\PaymentMethod;
 use App\Support\PhoneNumber;
 use App\Support\ProductSellable;
 use App\Support\ProductVariants;
+use App\Support\SideOptions;
 use App\Support\WeeklyMenuImages;
 use App\Support\WhatsAppBotPause;
 use App\Support\WhatsAppMenuIntent;
@@ -101,6 +102,7 @@ class ConversationalWhatsAppBotService
 
         match ($state) {
             'ordering' => $this->handleOrdering($phone, $text, $customer),
+            'side' => $this->handleSide($phone, $text, $customer),
             'extras' => $this->handleExtras($phone, $text, $customer),
             'address' => $this->handleAddress($phone, $text, $customer),
             'schedule' => $this->handleSchedule($phone, $text, $customer),
@@ -142,8 +144,8 @@ class ConversationalWhatsAppBotService
                 return;
             }
 
-            $this->setSession($phone, array_merge($session, ['state' => 'extras']));
-            $this->replyText($phone, $this->message('extras_message'), $customer);
+            $this->setSession($phone, array_merge($session, ['state' => 'ordering']));
+            $this->askSideOrExtras($phone, $customer);
 
             return;
         }
@@ -215,6 +217,43 @@ class ConversationalWhatsAppBotService
         $this->replyText($phone, $this->render($this->message('order_added_message'), [
             'items' => $addedLines.' 🍽️',
         ]), $customer);
+    }
+
+    private function askSideOrExtras(string $phone, ?Customer $customer): void
+    {
+        if (SideOptions::enabled()) {
+            $this->setSession($phone, array_merge($this->getSession($phone), ['state' => 'side']));
+            $this->replyText($phone, $this->render($this->message('side_message'), [
+                'options' => SideOptions::listForMessage(),
+            ]), $customer);
+
+            return;
+        }
+
+        $this->setSession($phone, array_merge($this->getSession($phone), ['state' => 'extras']));
+        $this->replyText($phone, $this->message('extras_message'), $customer);
+    }
+
+    private function handleSide(string $phone, string $text, ?Customer $customer): void
+    {
+        $side = SideOptions::resolve($text);
+
+        if ($side === null) {
+            $this->replyText(
+                $phone,
+                'Não entendi o acompanhamento. Escolha uma opção:\n\n'.SideOptions::listForMessage()."\n\nEx.: *1* ou *fritas*.",
+                $customer
+            );
+
+            return;
+        }
+
+        $session = $this->getSession($phone);
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'extras',
+            'side' => $side,
+        ]));
+        $this->replyText($phone, $this->message('extras_message'), $customer);
     }
 
     private function handleExtras(string $phone, string $text, ?Customer $customer): void
@@ -416,15 +455,35 @@ class ConversationalWhatsAppBotService
 
     private function createOrder(string $phone, ?Customer $customer, array $session): void
     {
-        $cart = $session['cart'] ?? [];
+        $lockKey = 'wa-create-order:'.$this->normalizedPhoneKey($phone);
+        $lock = Cache::lock($lockKey, 20);
 
-        if ($cart === []) {
-            $this->replyText($phone, 'Seu pedido está vazio. Envie *oi* para começar novamente.', $customer);
+        if (! $lock->get()) {
+            Log::info('WhatsApp order create skipped — lock busy', ['phone' => $phone]);
 
             return;
         }
 
+        $claimedSession = null;
+
         try {
+            // Re-read under lock so concurrent finalize cannot reuse the same cart.
+            $session = $this->getSession($phone);
+            $cart = $session['cart'] ?? [];
+
+            if ($cart === [] || ($session['order_claimed'] ?? false) === true) {
+                Log::info('WhatsApp order create skipped — empty or already claimed', ['phone' => $phone]);
+
+                return;
+            }
+
+            $claimedSession = $session;
+            $this->setSession($phone, array_merge($session, [
+                'cart' => [],
+                'order_claimed' => true,
+                'state' => 'creating',
+            ]));
+
             $order = DB::transaction(function () use ($cart, $customer, $phone, $session) {
                 $deliveryFee = (float) ($session['delivery_fee'] ?? 0);
                 $orderType = $session['order_type'] ?? 'takeaway';
@@ -497,8 +556,14 @@ class ConversationalWhatsAppBotService
                 'scheduled_for' => OrderSchedule::formatForMessage($order->scheduled_for),
             ]), $customer, $order);
         } catch (\Throwable $exception) {
+            if (is_array($claimedSession)) {
+                $this->setSession($phone, $claimedSession);
+            }
+
             Log::error('Conversational WhatsApp order creation failed', ['error' => $exception->getMessage()]);
             $this->replyText($phone, 'Não foi possível criar o pedido. Tente novamente ou entre em contato conosco.', $customer);
+        } finally {
+            optional($lock)->release();
         }
     }
 
@@ -886,6 +951,10 @@ class ConversationalWhatsAppBotService
             $lines[] = '*Entrega:* Retirada no balcão';
         }
 
+        if (filled($session['side'] ?? null)) {
+            $lines[] = '*Acompanhamento:* '.$session['side'];
+        }
+
         if (filled($session['extras_notes'] ?? null)) {
             $lines[] = '*Observações:* '.$session['extras_notes'];
         }
@@ -904,6 +973,10 @@ class ConversationalWhatsAppBotService
     private function buildOrderNotes(array $session): string
     {
         $parts = ['Pedido via WhatsApp'];
+
+        if (filled($session['side'] ?? null)) {
+            $parts[] = 'Acompanhamento: '.$session['side'];
+        }
 
         if (filled($session['extras_notes'] ?? null)) {
             $parts[] = 'Obs: '.$session['extras_notes'];
@@ -1263,9 +1336,50 @@ class ConversationalWhatsAppBotService
             return ['ok' => false, 'error' => 'Carrinho vazio.'];
         }
 
+        if (SideOptions::enabled()) {
+            $this->setSession($phone, array_merge($session, ['state' => 'side']));
+            $message = $this->render($this->message('side_message'), [
+                'options' => SideOptions::listForMessage(),
+            ]);
+
+            return ['ok' => true, 'next' => 'side', 'message' => $message, 'side_options' => SideOptions::all()];
+        }
+
         $this->setSession($phone, array_merge($session, ['state' => 'extras']));
 
         return ['ok' => true, 'next' => 'extras', 'message' => $this->message('extras_message')];
+    }
+
+    /** @return array<string, mixed> */
+    public function toolSetSide(string $phone, string $side, ?string $pushName): array
+    {
+        if (! SideOptions::enabled()) {
+            return $this->toolSetExtras($phone, '', $pushName);
+        }
+
+        $resolved = SideOptions::resolve($side);
+
+        if ($resolved === null) {
+            return [
+                'ok' => false,
+                'error' => 'Acompanhamento inválido.',
+                'side_options' => SideOptions::all(),
+                'message' => 'Escolha uma opção:\n'.SideOptions::listForMessage(),
+            ];
+        }
+
+        $session = $this->getSession($phone);
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'extras',
+            'side' => $resolved,
+        ]));
+
+        return [
+            'ok' => true,
+            'side' => $resolved,
+            'next' => 'extras',
+            'message' => $this->message('extras_message'),
+        ];
     }
 
     /** @return array<string, mixed> */

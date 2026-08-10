@@ -157,6 +157,7 @@
         'menu_followup_message' => '1b. Após enviar cardápio',
         'human_handoff_message' => 'Atendente humano (cliente pediu)',
         'bot_resumed_message' => 'Bot reativado (cliente digitou bot)',
+        'side_message' => '2b. Acompanhamento (fritas/legumes)',
         'extras_message' => '3. Talher / observações',
         'address_message' => '4. Endereço ou retirada',
         'schedule_message' => '4b. Horário (agora ou agendar)',
@@ -168,8 +169,19 @@
             <label for="{{ $field }}" class="block text-sm font-medium text-gray-700">{{ $label }}</label>
             <textarea name="{{ $field }}" id="{{ $field }}" rows="4"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old($field, $whatsappAgent[$field]) }}</textarea>
+            @if ($field === 'side_message')
+                <p class="mt-1 text-xs text-gray-500">Placeholder: <code class="bg-gray-100 px-1 rounded">{options}</code>. Deixe as opções abaixo vazias para pular esta etapa.</p>
+            @endif
         </div>
     @endforeach
+
+    <div>
+        <label for="side_options" class="block text-sm font-medium text-gray-700">Opções de acompanhamento</label>
+        <textarea name="side_options" id="side_options" rows="3"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            placeholder="Batata frita&#10;Legumes">{{ old('side_options', $whatsappAgent['side_options_text'] ?? '') }}</textarea>
+        <p class="mt-1 text-xs text-gray-500">Uma opção por linha (ex.: Batata frita, Legumes). O bot pergunta isso depois dos pratos.</p>
+    </div>
 
     <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-indigo-700">
         Salvar agente

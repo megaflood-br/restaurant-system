@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\SideOptions;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -93,17 +94,19 @@ class OpenAiWhatsAppAgentService
             'Horário de funcionamento: '.$this->bot->openingHoursLabel(),
             'Agora no restaurante: '.now()->timezone(config('app.timezone'))->format('d/m/Y H:i').' ('.config('app.timezone').')',
             'Objetivo: ajudar a montar pedido (itens com tamanho P/M/G quando existir), entrega ou retirada, horário (agora ou agendado), pagamento e Pix.',
-            'Fluxo: itens → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
+            'Fluxo: itens → acompanhamento (set_side: fritas/legumes) → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
             'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h"), use set_schedule assim que possível.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
             'Nunca invente pratos ou preços — consulte get_menu.',
             'Quando o cliente pedir cardápio/menu (ex.: "cardápio", "cardápio de hoje", "manda o menu"), chame OBRIGATORIAMENTE send_menu_image.',
             'NÃO liste o cardápio completo em texto (nomes e preços). A resposta ao pedido de cardápio é a imagem do dia.',
             'get_menu serve apenas para montar/confirmar itens do pedido, nunca para exibir o cardápio ao cliente.',
+            'Após finalizar os itens (finalize_items), se houver opções de acompanhamento, chame set_side antes de set_extras.',
             'Na primeira saudação, também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
             'Seja breve, clara e amigável em português do Brasil.',
             'Estado atual da sessão: '.json_encode($session, JSON_UNESCAPED_UNICODE),
             'Cardápio resumido (uso interno): '.json_encode($menu, JSON_UNESCAPED_UNICODE),
+            'Acompanhamentos disponíveis: '.json_encode(SideOptions::all(), JSON_UNESCAPED_UNICODE),
         ]);
 
         $messages = [
@@ -128,6 +131,7 @@ class OpenAiWhatsAppAgentService
             'add_to_cart' => $this->bot->toolAddToCart($phone, $arguments, $pushName),
             'view_cart' => $this->bot->toolViewCart($phone),
             'finalize_items' => $this->bot->toolFinalizeItems($phone, $pushName),
+            'set_side' => $this->bot->toolSetSide($phone, (string) ($arguments['side'] ?? ''), $pushName),
             'set_extras' => $this->bot->toolSetExtras($phone, (string) ($arguments['notes'] ?? ''), $pushName),
             'set_schedule' => $this->bot->toolSetSchedule($phone, (string) ($arguments['schedule'] ?? ''), $pushName),
             'quote_delivery' => $this->bot->toolQuoteDelivery($phone, (string) ($arguments['address'] ?? ''), $pushName),
@@ -185,8 +189,19 @@ class OpenAiWhatsAppAgentService
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'finalize_items',
-                'description' => 'Cliente terminou de pedir pratos; avança para observações/talher.',
+                'description' => 'Cliente terminou de pedir pratos; avança para acompanhamento/observações.',
                 'parameters' => ['type' => 'object', 'properties' => new \stdClass],
+            ]],
+            ['type' => 'function', 'function' => [
+                'name' => 'set_side',
+                'description' => 'Define o acompanhamento do pedido (ex.: Batata frita, Legumes, fritas, 1, 2).',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'side' => ['type' => 'string', 'description' => 'Opção de acompanhamento escolhida pelo cliente'],
+                    ],
+                    'required' => ['side'],
+                ],
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'set_extras',

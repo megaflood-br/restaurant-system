@@ -7,6 +7,7 @@ use App\Services\WhatsAppService;
 use App\Support\WhatsAppBotPause;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class EvolutionWebhookController extends Controller
@@ -58,6 +59,20 @@ class EvolutionWebhookController extends Controller
 
             $phone = explode('@', $remoteJid)[0];
             $pushName = data_get($message, 'pushName');
+            $evolutionMessageId = data_get($message, 'key.id');
+
+            if (is_string($evolutionMessageId) && $evolutionMessageId !== '') {
+                $dedupeKey = 'wa:evolution-msg:'.$evolutionMessageId;
+
+                if (! Cache::add($dedupeKey, 1, now()->addMinutes(10))) {
+                    Log::info('Evolution webhook duplicate message skipped', [
+                        'evolution_message_id' => $evolutionMessageId,
+                        'phone' => $phone,
+                    ]);
+
+                    continue;
+                }
+            }
 
             try {
                 $whatsAppService->handleInboundMessage($phone, trim($text), $message, $pushName);
