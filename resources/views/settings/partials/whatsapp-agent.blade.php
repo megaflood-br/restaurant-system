@@ -43,15 +43,46 @@
     </div>
 
     <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2">Imagem do cardápio (WhatsApp)</label>
-        @if ($whatsappAgent['menu_image_url'])
-            <img src="{{ $whatsappAgent['menu_image_url'] }}" alt="Cardápio" class="mb-3 max-h-48 rounded-lg border border-gray-200">
-            <label class="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <input type="checkbox" name="remove_menu_image" value="1" class="rounded border-gray-300 text-indigo-600"> Remover imagem
-            </label>
-        @endif
-        <input type="file" name="menu_image" accept="image/jpeg,image/png,image/webp"
-            class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-indigo-50 file:text-indigo-700">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Imagens do cardápio por dia da semana</label>
+        <p class="text-xs text-gray-500 mb-4">
+            O bot envia automaticamente a imagem do dia atual
+            (<strong>{{ $whatsappAgent['today_menu_label'] }}</strong>).
+            Cadastre uma imagem para cada dia — o cardápio muda diariamente.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            @foreach (\App\Support\WeeklyMenuImages::labels() as $day => $label)
+                @php($isToday = $day === $whatsappAgent['today_menu_day'])
+                <div @class([
+                    'rounded-lg border p-4 space-y-3',
+                    'border-indigo-300 bg-indigo-50/40 ring-1 ring-indigo-200' => $isToday,
+                    'border-gray-200 bg-gray-50' => ! $isToday,
+                ])>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-semibold text-gray-900">{{ $label }}</span>
+                        @if ($isToday)
+                            <span class="text-xs font-medium text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">Hoje</span>
+                        @endif
+                    </div>
+
+                    @if ($whatsappAgent['menu_image_urls'][$day] ?? null)
+                        <img src="{{ $whatsappAgent['menu_image_urls'][$day] }}" alt="Cardápio {{ $label }}"
+                            class="w-full max-h-40 object-contain rounded-lg border border-gray-200 bg-white">
+                        <label class="flex items-center gap-2 text-sm text-gray-600">
+                            <input type="checkbox" name="remove_menu_images[{{ $day }}]" value="1" class="rounded border-gray-300 text-indigo-600">
+                            Remover imagem
+                        </label>
+                    @else
+                        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                            Nenhuma imagem cadastrada para este dia.
+                        </p>
+                    @endif
+
+                    <input type="file" name="menu_images[{{ $day }}]" accept="image/jpeg,image/png,image/webp"
+                        class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-indigo-50 file:text-indigo-700">
+                </div>
+            @endforeach
+        </div>
     </div>
 
     @foreach ([

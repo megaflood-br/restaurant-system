@@ -78,6 +78,7 @@ class AppSettings
             'whatsapp_agent.pix_key' => Setting::get('whatsapp_agent', 'pix_key', config('whatsapp_agent.pix_key')),
             'whatsapp_agent.estimated_minutes' => (int) Setting::get('whatsapp_agent', 'estimated_minutes', config('whatsapp_agent.estimated_minutes')),
             'whatsapp_agent.menu_image' => Setting::get('whatsapp_agent', 'menu_image', config('whatsapp_agent.menu_image')),
+            'whatsapp_agent.menu_images' => self::weeklyMenuImagesFromSettings(),
             'whatsapp_agent.order_added_message' => Setting::get('whatsapp_agent', 'order_added_message', config('whatsapp_agent.order_added_message')),
             'whatsapp_agent.delivery_quote_message' => Setting::get('whatsapp_agent', 'delivery_quote_message', config('whatsapp_agent.delivery_quote_message')),
             'whatsapp_agent.cancel_message' => Setting::get('whatsapp_agent', 'cancel_message', config('whatsapp_agent.cancel_message')),
@@ -178,6 +179,7 @@ class AppSettings
                 'pix_key' => config('whatsapp_agent.pix_key', ''),
                 'estimated_minutes' => config('whatsapp_agent.estimated_minutes', 45),
                 'menu_image' => config('whatsapp_agent.menu_image'),
+                'menu_images' => json_encode(WeeklyMenuImages::empty()),
                 'order_added_message' => config('whatsapp_agent.order_added_message', ''),
                 'delivery_quote_message' => config('whatsapp_agent.delivery_quote_message', ''),
                 'cancel_message' => config('whatsapp_agent.cancel_message', ''),
@@ -284,12 +286,33 @@ class AppSettings
             'confirmed_message' => config('whatsapp_agent.confirmed_message'),
             'pix_key' => config('whatsapp_agent.pix_key'),
             'estimated_minutes' => config('whatsapp_agent.estimated_minutes'),
-            'menu_image' => config('whatsapp_agent.menu_image'),
-            'menu_image_url' => DigitalMenu::assetUrl(config('whatsapp_agent.menu_image')),
+            'menu_images' => WeeklyMenuImages::normalize(config('whatsapp_agent.menu_images')),
+            'menu_image_urls' => WeeklyMenuImages::urls(),
+            'menu_image_url' => WeeklyMenuImages::urlForToday(),
+            'today_menu_day' => WeeklyMenuImages::todayKey(),
+            'today_menu_label' => WeeklyMenuImages::labels()[WeeklyMenuImages::todayKey()],
             'order_added_message' => config('whatsapp_agent.order_added_message'),
             'delivery_quote_message' => config('whatsapp_agent.delivery_quote_message'),
             'cancel_message' => config('whatsapp_agent.cancel_message'),
             'status_not_found_message' => config('whatsapp_agent.status_not_found_message'),
         ];
+    }
+
+    /** @return array<string, string|null> */
+    private static function weeklyMenuImagesFromSettings(): array
+    {
+        $stored = Setting::get('whatsapp_agent', 'menu_images');
+
+        if ($stored !== null) {
+            return WeeklyMenuImages::normalize($stored);
+        }
+
+        $legacy = Setting::get('whatsapp_agent', 'menu_image', config('whatsapp_agent.menu_image'));
+
+        if (filled($legacy)) {
+            return WeeklyMenuImages::fromLegacy((string) $legacy);
+        }
+
+        return WeeklyMenuImages::normalize(config('whatsapp_agent.menu_images'));
     }
 }

@@ -6,9 +6,9 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\WhatsAppMessage;
-use App\Support\DigitalMenu;
 use App\Support\PaymentMethod;
 use App\Support\PhoneNumber;
+use App\Support\WeeklyMenuImages;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -600,7 +600,7 @@ class ConversationalWhatsAppBotService
 
     private function menuImageUrl(): ?string
     {
-        return DigitalMenu::assetUrl(config('whatsapp_agent.menu_image'));
+        return WeeklyMenuImages::urlForToday();
     }
 
     private function message(string $key): string

@@ -16,6 +16,7 @@ Route::prefix('v1')->middleware('integration.api')->name('api.v1.')->group(funct
     Route::get('/', IntegrationDocsController::class)->name('docs');
 
     Route::get('menu', [MenuApiController::class, 'index'])->name('menu');
+    Route::get('menu/image/today', [MenuApiController::class, 'todayImage'])->name('menu.image.today');
 
     Route::get('orders', [OrderApiController::class, 'index'])->name('orders.index');
     Route::post('orders', [OrderApiController::class, 'store'])->name('orders.store');

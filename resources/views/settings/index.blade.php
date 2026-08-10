@@ -367,7 +367,7 @@
                             <h3 class="font-semibold text-gray-900">Endpoints da API</h3>
                             <p class="text-gray-500">Base: <code class="text-indigo-700">{{ $integration['api_base_url'] }}</code></p>
                             <ul class="space-y-2 text-gray-700 font-mono text-xs">
-                                <li>GET /menu</li>
+                                <li>GET /menu · GET /menu/image/today</li>
                                 <li>GET /orders · POST /orders · PATCH /orders/{id}/status</li>
                                 <li>GET /orders/by-phone/{phone}</li>
                                 <li>GET /customers · POST /customers · GET /customers/by-phone/{phone}</li>

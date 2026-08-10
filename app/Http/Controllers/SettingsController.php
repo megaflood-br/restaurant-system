@@ -6,6 +6,7 @@ use App\Models\Setting;
 use App\Models\WhatsAppMessage;
 use App\Services\OrderPrinterService;
 use App\Support\AppSettings;
+use App\Support\WeeklyMenuImages;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -279,7 +280,7 @@ class SettingsController extends Controller
     {
         AppSettings::loadIntoConfig();
 
-        $validated = $request->validate([
+        $rules = [
             'restaurant_name' => ['nullable', 'string', 'max:255'],
             'welcome_message' => ['nullable', 'string', 'max:4000'],
             'menu_followup_message' => ['nullable', 'string', 'max:2000'],
@@ -290,18 +291,25 @@ class SettingsController extends Controller
             'confirmed_message' => ['nullable', 'string', 'max:2000'],
             'pix_key' => ['nullable', 'string', 'max:255'],
             'estimated_minutes' => ['required', 'integer', 'min:5', 'max:240'],
-            'menu_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
-            'remove_menu_image' => ['sometimes', 'boolean'],
-        ]);
+        ];
 
-        $menuImage = config('whatsapp_agent.menu_image');
+        foreach (WeeklyMenuImages::DAYS as $day) {
+            $rules["menu_images.{$day}"] = ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'];
+            $rules["remove_menu_images.{$day}"] = ['sometimes', 'boolean'];
+        }
 
-        if ($request->boolean('remove_menu_image')) {
-            $this->deletePublicFile($menuImage);
-            $menuImage = null;
-        } elseif ($request->hasFile('menu_image')) {
-            $this->deletePublicFile($menuImage);
-            $menuImage = $request->file('menu_image')->store('whatsapp', 'public');
+        $validated = $request->validate($rules);
+
+        $menuImages = WeeklyMenuImages::normalize(config('whatsapp_agent.menu_images'));
+
+        foreach (WeeklyMenuImages::DAYS as $day) {
+            if ($request->boolean("remove_menu_images.{$day}")) {
+                $this->deletePublicFile($menuImages[$day]);
+                $menuImages[$day] = null;
+            } elseif ($request->hasFile("menu_images.{$day}")) {
+                $this->deletePublicFile($menuImages[$day]);
+                $menuImages[$day] = $request->file("menu_images.{$day}")->store('whatsapp', 'public');
+            }
         }
 
         Setting::setMany('whatsapp_agent', [
@@ -318,7 +326,8 @@ class SettingsController extends Controller
             'confirmed_message' => $validated['confirmed_message'] ?? '',
             'pix_key' => $validated['pix_key'] ?? '',
             'estimated_minutes' => $validated['estimated_minutes'],
-            'menu_image' => $menuImage,
+            'menu_images' => json_encode($menuImages),
+            'menu_image' => null,
         ]);
 
         AppSettings::loadIntoConfig();

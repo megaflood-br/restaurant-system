@@ -22,6 +22,7 @@ class IntegrationDocsController extends Controller
             ],
             'endpoints' => [
                 'menu' => ['GET', "{$base}/menu"],
+                'menu_image_today' => ['GET', "{$base}/menu/image/today"],
                 'orders' => [
                     'list' => ['GET', "{$base}/orders?status=&type=&phone=&today=&open=&limit="],
                     'show' => ['GET', "{$base}/orders/{id}"],

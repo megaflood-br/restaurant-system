@@ -45,4 +45,15 @@ class MenuApiController extends Controller
 
         return response()->json(['data' => $data->values()]);
     }
+
+    public function todayImage(): JsonResponse
+    {
+        return response()->json([
+            'data' => [
+                'day' => \App\Support\WeeklyMenuImages::todayKey(),
+                'day_label' => \App\Support\WeeklyMenuImages::labels()[\App\Support\WeeklyMenuImages::todayKey()],
+                'image_url' => \App\Support\WeeklyMenuImages::urlForToday(),
+            ],
+        ]);
+    }
 }
