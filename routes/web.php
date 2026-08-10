@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\ComandaController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ComandaController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryAreaController;
@@ -9,16 +9,17 @@ use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderPrintController;
 use App\Http\Controllers\ProductController;
-use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\CheckoutController;
 use App\Http\Controllers\Public\MenuController;
+use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StockCategoryController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\Waiter\WaiterComandaController;
 use App\Http\Controllers\Waiter\WaiterOrderController;
 use App\Http\Controllers\WhatsAppController;
+use App\Support\DigitalMenu;
 use Illuminate\Support\Facades\Route;
 
 $publicMenuRoutes = function (): void {
@@ -38,7 +39,7 @@ if (filled($publicDomain)) {
     Route::domain($publicDomain)->name('public.')->group($publicMenuRoutes);
 
     Route::get('/cardapio/{path?}', function (?string $path = null) {
-        $target = \App\Support\DigitalMenu::publicUrl($path ? '/'.$path : '/');
+        $target = DigitalMenu::publicUrl($path ? '/'.$path : '/');
 
         return redirect()->away($target, 301);
     })->where('path', '.*');
@@ -95,7 +96,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::get('ingredients/{ingredient}/movement', [IngredientController::class, 'movementForm'])->name('ingredients.movement');
         Route::post('ingredients/{ingredient}/movement', [IngredientController::class, 'storeMovement'])->name('ingredients.movement.store');
 
-        Route::resource('orders', OrderController::class)->only(['index', 'create', 'store', 'show']);
+        Route::resource('orders', OrderController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::patch('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status');
         Route::get('orders/{order}/print', [OrderPrintController::class, 'show'])->name('orders.print');
         Route::post('orders/{order}/print/network', [OrderPrintController::class, 'network'])->name('orders.print.network');

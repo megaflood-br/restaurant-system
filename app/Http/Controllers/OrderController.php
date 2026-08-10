@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
 use App\Support\ProductSellable;
+use App\Support\ProductVariants;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,7 @@ class OrderController extends Controller
             ->paginate(10);
 
         $with = ['category', 'recipe'];
-        if (\App\Support\ProductVariants::enabled()) {
+        if (ProductVariants::enabled()) {
             $with['variants'] = fn ($q) => $q->where('is_available', true)->orderBy('sort_order');
         }
 
@@ -45,7 +46,7 @@ class OrderController extends Controller
     public function create(Request $request): View
     {
         $with = ['category', 'recipe'];
-        if (\App\Support\ProductVariants::enabled()) {
+        if (ProductVariants::enabled()) {
             $with['variants'] = fn ($q) => $q->where('is_available', true)->orderBy('sort_order');
         }
 
@@ -80,7 +81,7 @@ class OrderController extends Controller
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
-            'items.*.variant_id' => \App\Support\ProductVariants::variantIdRules(),
+            'items.*.variant_id' => ProductVariants::variantIdRules(),
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.notes' => ['nullable', 'string'],
         ]);
@@ -105,7 +106,7 @@ class OrderController extends Controller
             $total = 0;
 
             foreach ($validated['items'] as $item) {
-                $product = \App\Support\ProductVariants::loadProduct((int) $item['product_id']);
+                $product = ProductVariants::loadProduct((int) $item['product_id']);
                 $line = ProductSellable::orderItemAttributes(
                     $product,
                     (int) $item['quantity'],
@@ -152,6 +153,25 @@ class OrderController extends Controller
         $order->load('items.product', 'user', 'customer', 'deliveryArea');
 
         return view('orders.show', compact('order'));
+    }
+
+    public function destroy(Request $request, Order $order, InventoryService $inventory): RedirectResponse
+    {
+        $orderNumber = $order->order_number;
+
+        DB::transaction(function () use ($order, $inventory, $request) {
+            $fresh = $order->fresh(['items.product.recipe', 'items.productVariant.recipe']);
+
+            if ($fresh && $fresh->inventory_deducted_at && $fresh->status !== 'cancelled') {
+                $inventory->restoreForOrder($fresh, $request->user()->id);
+            }
+
+            $order->delete();
+        });
+
+        return redirect()
+            ->route('orders.index')
+            ->with('success', "Pedido {$orderNumber} excluído com sucesso.");
     }
 
     public function updateStatus(Request $request, Order $order, InventoryService $inventory): RedirectResponse

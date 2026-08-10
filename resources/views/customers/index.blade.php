@@ -58,9 +58,15 @@
                                                 {{ $customer->is_active ? 'Ativo' : 'Inativo' }}
                                             </span>
                                         </td>
-                                        <td class="px-4 py-3 text-right space-x-2">
+                                        <td class="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                                             <a href="{{ route('customers.show', $customer) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Perfil</a>
                                             <a href="{{ route('customers.edit', $customer) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Editar</a>
+                                            <form method="POST" action="{{ route('customers.destroy', $customer) }}" class="inline"
+                                                onsubmit="return confirm('Excluir o cliente {{ $customer->name }}? Pedidos vinculados serão mantidos sem o vínculo do cliente.');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-red-600 hover:text-red-800 text-sm">Excluir</button>
+                                            </form>
                                         </td>
                                     </tr>
                                 @empty
@@ -88,6 +94,12 @@
                                 <div class="mt-3 flex gap-3 text-sm">
                                     <a href="{{ route('customers.show', $customer) }}" class="text-indigo-600">Perfil</a>
                                     <a href="{{ route('customers.edit', $customer) }}" class="text-indigo-600">Editar</a>
+                                    <form method="POST" action="{{ route('customers.destroy', $customer) }}" class="inline"
+                                        onsubmit="return confirm('Excluir o cliente {{ $customer->name }}?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-red-600">Excluir</button>
+                                    </form>
                                 </div>
                             </div>
                         @empty

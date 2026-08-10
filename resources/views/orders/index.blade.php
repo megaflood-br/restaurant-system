@@ -36,6 +36,12 @@
                                 <div class="mt-3 flex gap-3 text-sm">
                                     <a href="{{ route('orders.show', $order) }}" class="text-indigo-600">Detalhes</a>
                                     <a href="{{ route('orders.print', $order) }}" target="_blank" class="text-gray-600">Imprimir</a>
+                                    <form method="POST" action="{{ route('orders.destroy', $order) }}" class="inline"
+                                        onsubmit="return confirm('Excluir o pedido {{ $order->order_number }}?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-red-600">Excluir</button>
+                                    </form>
                                 </div>
                             </div>
                         @empty

@@ -101,15 +101,12 @@ class CustomerController extends Controller
 
     public function destroy(Customer $customer): RedirectResponse
     {
-        if ($customer->orders()->exists()) {
-            return back()->with('error', 'Não é possível excluir um cliente com pedidos vinculados.');
-        }
-
+        $name = $customer->name;
         $customer->delete();
 
         return redirect()
             ->route('customers.index')
-            ->with('success', 'Cliente excluído com sucesso.');
+            ->with('success', "Cliente {$name} excluído com sucesso. Pedidos vinculados foram mantidos sem o vínculo do cliente.");
     }
 
     public function storeInteraction(Request $request, Customer $customer): RedirectResponse
