@@ -93,18 +93,18 @@ Configure em **Configurações → Impressão** (não depende de variáveis `PRI
 
 ### Modo agente local (recomendado com painel na nuvem)
 
-O servidor enfileira o cupom; um script no **PC do restaurante** (mesma rede da impressora) busca e imprime em `192.168.1.100:9100`.
+O servidor enfileira o cupom; um **pacote pequeno** no PC do restaurante imprime
+em `192.168.1.100:9100`. **Não precisa clonar o sistema Laravel.**
 
-1. Modo: **Agente local**
-2. Largura: `48` (bobina 80mm)
-3. Copie o token em **Configurações → Integração**
-4. No PC do restaurante, com PHP instalado:
+1. Modo: **Agente local** (+ largura `48` para bobina 80mm)
+2. Token em **Configurações → Integração**
+3. No PC do restaurante, baixe só a pasta [`print-agent/`](print-agent/):
+   - `print-agent.php`, `iniciar.bat`, `config.example.ini`, `LEIA-ME.txt`
+   - Ou rode `print-agent/baixar-agente.bat` (baixa para a Área de Trabalho)
+4. Copie `config.example.ini` → `config.ini`, cole URL/token/IP
+5. Duplo clique em `iniciar.bat` (deixe a janela aberta)
 
-```bash
-php scripts/print-agent.php --url=https://app.bellabistro.com.br --token=SEU_TOKEN --printer=192.168.1.100 --port=9100
-```
-
-Deixe o processo rodando. Pedidos do WhatsApp, cardápio e painel imprimem automaticamente.
+Requisito no PC: [PHP para Windows](https://windows.php.net/download/) no PATH.
 
 ### Modo navegador
 

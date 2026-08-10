@@ -1,0 +1,31 @@
+AGENTE LOCAL DE IMPRESSÃO — Bella Bistrô
+========================================
+
+NÃO precisa baixar o sistema Laravel inteiro.
+Só estes arquivos + PHP no Windows.
+
+1) No painel (nuvem):
+   - Configurações → Impressão → modo "Agente local" → Salvar
+   - Configurações → Integração → copiar o Token da API
+
+2) Neste PC do restaurante:
+   a) Instale PHP (se ainda não tiver): https://windows.php.net/download/
+      (marque Add PHP to PATH)
+   b) Copie config.example.ini para config.ini
+   c) Edite config.ini:
+        url     = https://app.bellabistro.com.br
+        token   = (cole o token)
+        printer = 192.168.1.100
+        port    = 9100
+   d) Duplo clique em iniciar.bat
+      Deixe a janela aberta enquanto o restaurante funciona.
+
+3) Teste:
+   - No painel: Impressão → Testar
+   - Ou mude um pedido para "Preparando"
+
+ATUALIZAR só o agente (sem o sistema):
+  Baixe de novo print-agent.php / iniciar.bat desta pasta no GitHub:
+  https://github.com/megaflood-br/restaurant-system/tree/main/print-agent
+
+Ou rode baixar-agente.bat (baixa direto para a Área de Trabalho).

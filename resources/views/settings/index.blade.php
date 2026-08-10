@@ -289,10 +289,14 @@
                                     <ol class="list-decimal list-inside space-y-0.5">
                                         <li>Escolha o modo <strong>Agente local</strong> e salve.</li>
                                         <li>Copie o <strong>token da API</strong> em Configurações → Integração.</li>
-                                        <li>No PC do restaurante (com PHP instalado), rode:</li>
+                                        <li>No PC do restaurante, baixe <strong>só</strong> a pasta <code class="bg-amber-100 px-1 rounded">print-agent</code> (não precisa do sistema inteiro):</li>
                                     </ol>
-                                    <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-[11px] leading-relaxed">php scripts/print-agent.php --url={{ url('/') }} --token=SEU_TOKEN --printer=192.168.1.100 --port=9100</pre>
-                                    <p class="mt-1">Deixe essa janela aberta. Com “imprimir ao Preparando”, a comanda só entra na fila quando você mudar o status.</p>
+                                    <p class="mt-1"><a class="underline font-medium" href="https://github.com/megaflood-br/restaurant-system/tree/main/print-agent" target="_blank" rel="noopener">github.com/.../print-agent</a></p>
+                                    <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-[11px] leading-relaxed">1. Copie config.example.ini → config.ini (cole o token)
+2. Duplo clique em iniciar.bat
+   (precisa ter PHP no Windows)</pre>
+                                    <p class="mt-1">Ou baixe o atalho <code class="bg-amber-100 px-1 rounded">baixar-agente.bat</code> — ele coloca os arquivos na Área de Trabalho.</p>
+                                    <p class="mt-1">Deixe a janela aberta. Com “imprimir ao Preparando”, a comanda só entra na fila quando você mudar o status.</p>
                                     <p class="mt-2"><strong>Rede IP direta:</strong> IP <code class="bg-amber-100 px-1 rounded">192.168.1.100</code>, porta <code class="bg-amber-100 px-1 rounded">9100</code>, largura <code class="bg-amber-100 px-1 rounded">48</code> (80mm). Só funciona se o servidor alcançar esse IP.</p>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
