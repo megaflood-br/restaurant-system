@@ -121,17 +121,25 @@
                     </form>
 
 
-                    <a href="{{ route('orders.print', ['order' => $order, 'autoprint' => 1]) }}" target="_blank" class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700">
-                        Imprimir comanda
-                    </a>
+                    @php
+                        $serverSidePrint = in_array(config('printing.driver'), ['network', 'agent'], true)
+                            && (config('printing.driver') === 'agent' || filled(config('printing.network.host')));
+                    @endphp
 
-                    @if (in_array(config('printing.driver'), ['network', 'agent'], true) && (config('printing.driver') === 'agent' || config('printing.network.host')))
+                    @if ($serverSidePrint)
                         <form method="POST" action="{{ route('orders.print.network', $order) }}">
                             @csrf
-                            <button type="submit" class="inline-flex items-center px-4 py-2 bg-yellow-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-yellow-700">
-                                {{ config('printing.driver') === 'agent' ? 'Enfileirar impressão' : 'Imprimir na rede' }}
+                            <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500">
+                                {{ config('printing.driver') === 'agent' ? 'Imprimir (agente)' : 'Imprimir na rede' }}
                             </button>
                         </form>
+                        <a href="{{ route('orders.print', ['order' => $order]) }}" target="_blank" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest hover:bg-gray-50">
+                            Ver no navegador
+                        </a>
+                    @else
+                        <a href="{{ route('orders.print', ['order' => $order, 'autoprint' => 1]) }}" target="_blank" class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700">
+                            Imprimir comanda
+                        </a>
                     @endif
 
                     <form method="POST" action="{{ route('orders.destroy', $order) }}"

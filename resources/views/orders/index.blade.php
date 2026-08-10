@@ -35,7 +35,11 @@
                                 <p class="text-sm text-gray-600 mt-2">{{ $typeLabels[$order->type] ?? $order->type }} · R$ {{ number_format($order->total, 2, ',', '.') }}</p>
                                 <div class="mt-3 flex gap-3 text-sm">
                                     <a href="{{ route('orders.show', $order) }}" class="text-indigo-600">Detalhes</a>
-                                    <a href="{{ route('orders.print', $order) }}" target="_blank" class="text-gray-600">Imprimir</a>
+                                    @include('orders._print-action', [
+                                        'order' => $order,
+                                        'linkClass' => 'text-gray-600',
+                                        'buttonClass' => 'text-gray-600',
+                                    ])
                                     <form method="POST" action="{{ route('orders.destroy', $order) }}" class="inline"
                                         onsubmit="return confirm('Excluir o pedido {{ $order->order_number }}?');">
                                         @csrf

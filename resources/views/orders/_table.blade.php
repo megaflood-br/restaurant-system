@@ -40,7 +40,7 @@
                 <td class="px-4 py-3"><x-order-status-badge :status="$order->status" /></td>
                 <td class="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                     <a href="{{ route('orders.show', $order) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Detalhes</a>
-                    <a href="{{ route('orders.print', $order) }}" target="_blank" class="text-gray-600 hover:text-gray-800 text-sm">Imprimir</a>
+                    @include('orders._print-action', ['order' => $order])
                     <form method="POST" action="{{ route('orders.destroy', $order) }}" class="inline"
                         onsubmit="return confirm('Excluir o pedido {{ $order->order_number }}? Esta ação não pode ser desfeita.');">
                         @csrf
