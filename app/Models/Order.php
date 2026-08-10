@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\ElapsedTime;
+use App\Support\OrderSchedule;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,6 +22,7 @@ class Order extends Model
         'customer_name',
         'customer_phone',
         'notes',
+        'scheduled_for',
         'total',
         'payment_method',
         'user_id',
@@ -32,6 +34,7 @@ class Order extends Model
         return [
             'total' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
+            'scheduled_for' => 'datetime',
             'inventory_deducted_at' => 'datetime',
         ];
     }
@@ -108,5 +111,19 @@ class Order extends Model
     public static function delayThresholdMinutes(): int
     {
         return (int) config('restaurant.order_delay_minutes', 25);
+    }
+
+    public function scheduledLabel(): ?string
+    {
+        if ($this->scheduled_for === null) {
+            return null;
+        }
+
+        return OrderSchedule::formatLabel($this->scheduled_for);
+    }
+
+    public function isScheduled(): bool
+    {
+        return $this->scheduled_for !== null && $this->scheduled_for->isFuture();
     }
 }

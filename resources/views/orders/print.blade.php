@@ -67,6 +67,9 @@
 
         <div><strong>Pedido:</strong> {{ $order->order_number }}</div>
         <div><strong>Data:</strong> {{ $order->created_at->format('d/m/Y H:i') }}</div>
+        @if ($order->scheduled_for)
+            <div class="large center" style="margin: 6px 0; padding: 4px; border: 2px solid #000;">*** AGENDADO: {{ strtoupper($order->scheduledLabel()) }} ***</div>
+        @endif
         <div><strong>Tipo:</strong> {{ $typeLabels[$order->type] ?? $order->type }}</div>
 
         @if ($order->type === 'dine_in')

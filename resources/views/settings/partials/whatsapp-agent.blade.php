@@ -1,6 +1,6 @@
 <p class="text-sm text-gray-600 mb-6">
     Configure o agente conversacional do WhatsApp. Quando ativo, o sistema responde automaticamente seguindo o fluxo abaixo — sem depender do n8n para as mensagens.
-    Placeholders: <code class="text-xs bg-gray-100 px-1 rounded">{restaurant_name}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{items}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{total}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{distance_km}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{delivery_fee}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{minutes}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{pix_key}</code>.
+    Placeholders: <code class="text-xs bg-gray-100 px-1 rounded">{restaurant_name}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{items}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{total}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{distance_km}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{delivery_fee}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{minutes}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{scheduled_for}</code>, <code class="text-xs bg-gray-100 px-1 rounded">{pix_key}</code>.
 </p>
 
 <form method="POST" action="{{ route('settings.whatsapp-agent.update') }}" enctype="multipart/form-data" class="space-y-6">
@@ -73,6 +73,36 @@
         </div>
     </div>
 
+    <div class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4 space-y-4">
+        <label class="flex items-center gap-2 text-sm font-medium text-emerald-900">
+            <input type="checkbox" name="scheduling_enabled" value="1" @checked(old('scheduling_enabled', $whatsappAgent['scheduling_enabled'])) class="rounded border-gray-300 text-indigo-600">
+            Permitir agendamento de pedidos (cliente pede cedo, recebe mais tarde)
+        </label>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="schedule_min_minutes" class="block text-sm font-medium text-gray-700">Antecedência mínima (minutos)</label>
+                <input type="number" name="schedule_min_minutes" id="schedule_min_minutes" min="15" max="240"
+                    value="{{ old('schedule_min_minutes', $whatsappAgent['schedule_min_minutes']) }}" required
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label for="schedule_max_days" class="block text-sm font-medium text-gray-700">Agendar até quantos dias à frente</label>
+                <select name="schedule_max_days" id="schedule_max_days" required
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="0" @selected(old('schedule_max_days', $whatsappAgent['schedule_max_days']) == 0)>Somente hoje</option>
+                    <option value="1" @selected(old('schedule_max_days', $whatsappAgent['schedule_max_days']) == 1)>Hoje e amanhã</option>
+                    @for ($d = 2; $d <= 7; $d++)
+                        <option value="{{ $d }}" @selected(old('schedule_max_days', $whatsappAgent['schedule_max_days']) == $d)>Até {{ $d }} dias</option>
+                    @endfor
+                </select>
+            </div>
+        </div>
+        <p class="text-xs text-emerald-800">
+            O bot pergunta se o cliente quer receber *agora* ou em um horário (ex.: *12:30*, *hoje às 18h*).
+            Placeholder na confirmação: <code class="text-xs bg-white/80 px-1 rounded">{scheduled_for}</code>.
+        </p>
+    </div>
+
     <div>
         <label for="pix_key" class="block text-sm font-medium text-gray-700">Chave Pix</label>
         <input type="text" name="pix_key" id="pix_key" value="{{ old('pix_key', $whatsappAgent['pix_key']) }}"
@@ -129,6 +159,7 @@
         'bot_resumed_message' => 'Bot reativado (cliente digitou bot)',
         'extras_message' => '3. Talher / observações',
         'address_message' => '4. Endereço ou retirada',
+        'schedule_message' => '4b. Horário (agora ou agendar)',
         'payment_message' => '5. Forma de pagamento',
         'pix_message' => '5b. Instruções Pix',
         'confirmed_message' => '6. Pedido confirmado',

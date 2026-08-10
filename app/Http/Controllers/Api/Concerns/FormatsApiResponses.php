@@ -25,6 +25,8 @@ trait FormatsApiResponses
             'customer_name' => $order->displayCustomerName(),
             'customer_phone' => $order->customer?->phone ?? $order->customer_phone,
             'notes' => $order->notes,
+            'scheduled_for' => $order->scheduled_for?->toIso8601String(),
+            'scheduled_label' => $order->scheduledLabel(),
             'total' => (float) $order->total,
             'total_formatted' => number_format((float) $order->total, 2, ',', '.'),
             'payment_method' => $order->payment_method,

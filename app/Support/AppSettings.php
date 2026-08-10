@@ -87,6 +87,10 @@ class AppSettings
             'whatsapp_agent.human_handoff_message' => Setting::get('whatsapp_agent', 'human_handoff_message', config('whatsapp_agent.human_handoff_message')),
             'whatsapp_agent.bot_resumed_message' => Setting::get('whatsapp_agent', 'bot_resumed_message', config('whatsapp_agent.bot_resumed_message')),
             'whatsapp_agent.human_pause_minutes' => (int) Setting::get('whatsapp_agent', 'human_pause_minutes', config('whatsapp_agent.human_pause_minutes', 60)),
+            'whatsapp_agent.scheduling_enabled' => Setting::get('whatsapp_agent', 'scheduling_enabled', config('whatsapp_agent.scheduling_enabled', true)),
+            'whatsapp_agent.schedule_min_minutes' => (int) Setting::get('whatsapp_agent', 'schedule_min_minutes', config('whatsapp_agent.schedule_min_minutes', 30)),
+            'whatsapp_agent.schedule_max_days' => (int) Setting::get('whatsapp_agent', 'schedule_max_days', config('whatsapp_agent.schedule_max_days', 1)),
+            'whatsapp_agent.schedule_message' => Setting::get('whatsapp_agent', 'schedule_message', config('whatsapp_agent.schedule_message')),
         ]);
     }
 
@@ -192,6 +196,10 @@ class AppSettings
                 'human_handoff_message' => config('whatsapp_agent.human_handoff_message', ''),
                 'bot_resumed_message' => config('whatsapp_agent.bot_resumed_message', ''),
                 'human_pause_minutes' => config('whatsapp_agent.human_pause_minutes', 60),
+                'scheduling_enabled' => config('whatsapp_agent.scheduling_enabled', true),
+                'schedule_min_minutes' => config('whatsapp_agent.schedule_min_minutes', 30),
+                'schedule_max_days' => config('whatsapp_agent.schedule_max_days', 1),
+                'schedule_message' => config('whatsapp_agent.schedule_message', ''),
             ],
         ];
     }
@@ -308,6 +316,10 @@ class AppSettings
             'human_handoff_message' => config('whatsapp_agent.human_handoff_message'),
             'bot_resumed_message' => config('whatsapp_agent.bot_resumed_message'),
             'human_pause_minutes' => config('whatsapp_agent.human_pause_minutes'),
+            'scheduling_enabled' => config('whatsapp_agent.scheduling_enabled'),
+            'schedule_min_minutes' => config('whatsapp_agent.schedule_min_minutes'),
+            'schedule_max_days' => config('whatsapp_agent.schedule_max_days'),
+            'schedule_message' => config('whatsapp_agent.schedule_message'),
         ];
     }
 

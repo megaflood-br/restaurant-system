@@ -6,12 +6,14 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\WhatsAppMessage;
+use App\Support\OrderSchedule;
 use App\Support\PaymentMethod;
 use App\Support\PhoneNumber;
 use App\Support\ProductSellable;
 use App\Support\ProductVariants;
 use App\Support\WeeklyMenuImages;
 use App\Support\WhatsAppBotPause;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -99,6 +101,7 @@ class ConversationalWhatsAppBotService
             'ordering' => $this->handleOrdering($phone, $text, $customer),
             'extras' => $this->handleExtras($phone, $text, $customer),
             'address' => $this->handleAddress($phone, $text, $customer),
+            'schedule' => $this->handleSchedule($phone, $text, $customer),
             'payment' => $this->handlePayment($phone, $text, $customer),
             'pix_wait' => $this->handlePixWait($phone, $text, $customer, $payload),
             default => $this->handleWelcome($phone, $text, $customer),
@@ -125,6 +128,10 @@ class ConversationalWhatsAppBotService
     {
         $session = $this->getSession($phone);
         $command = mb_strtolower(trim($text));
+
+        if ($this->captureScheduleIntent($phone, $text, $customer, $session)) {
+            return;
+        }
 
         if ($this->matchesIntent($command, ['só isso', 'so isso', 'pronto', 'finalizar', 'continuar', 'fechar', 'acabou', 'só', 'so', 'nao', 'não', 'n'])) {
             if (($session['cart'] ?? []) === []) {
@@ -235,7 +242,7 @@ class ConversationalWhatsAppBotService
                 'distance_km' => null,
             ]));
 
-            $this->sendPaymentSummary($phone, $customer);
+            $this->proceedToSchedule($phone, $customer);
 
             return;
         }
@@ -265,7 +272,90 @@ class ConversationalWhatsAppBotService
             'distance_km' => $quote['distance_km'],
         ]));
 
+        $this->proceedToSchedule($phone, $customer);
+    }
+
+    private function proceedToSchedule(string $phone, ?Customer $customer): void
+    {
+        if (! OrderSchedule::enabled()) {
+            $session = $this->getSession($phone);
+            $this->setSession($phone, array_merge($session, ['state' => 'payment']));
+            $this->sendPaymentSummary($phone, $customer);
+
+            return;
+        }
+
+        $session = $this->getSession($phone);
+
+        if (filled($session['scheduled_label'] ?? null)) {
+            $this->setSession($phone, array_merge($session, ['state' => 'payment']));
+            $this->sendPaymentSummary($phone, $customer);
+
+            return;
+        }
+
+        $this->setSession($phone, array_merge($session, ['state' => 'schedule']));
+        $this->replyText($phone, $this->message('schedule_message'), $customer);
+    }
+
+    private function handleSchedule(string $phone, string $text, ?Customer $customer): void
+    {
+        $resolved = OrderSchedule::resolve($text);
+
+        if ($resolved['error'] !== null) {
+            $this->replyText($phone, $resolved['error'], $customer);
+
+            return;
+        }
+
+        $session = $this->getSession($phone);
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'payment',
+            'scheduled_for' => $resolved['datetime']?->toIso8601String(),
+            'scheduled_label' => $resolved['label'],
+        ]));
+
+        if ($resolved['datetime'] !== null) {
+            $this->replyText($phone, 'Perfeito! Seu pedido ficou agendado para *'.$resolved['label'].'*.', $customer);
+        }
+
         $this->sendPaymentSummary($phone, $customer);
+    }
+
+    /** @param  array<string, mixed>  $session */
+    private function captureScheduleIntent(string $phone, string $text, ?Customer $customer, array $session): bool
+    {
+        if (! OrderSchedule::enabled() || ! OrderSchedule::mentionsScheduling($text)) {
+            return false;
+        }
+
+        $resolved = OrderSchedule::resolve($text);
+
+        if ($resolved['error'] !== null) {
+            return false;
+        }
+
+        $this->setSession($phone, array_merge($session, [
+            'scheduled_for' => $resolved['datetime']?->toIso8601String(),
+            'scheduled_label' => $resolved['label'],
+        ]));
+
+        $this->replyText(
+            $phone,
+            'Horário anotado: *'.$resolved['label'].'*. Continue montando o pedido e digite *pronto* quando terminar.',
+            $customer
+        );
+
+        return true;
+    }
+
+    private function scheduledForFromSession(array $session): ?Carbon
+    {
+        if (! filled($session['scheduled_for'] ?? null)) {
+            return null;
+        }
+
+        return Carbon::parse($session['scheduled_for']);
     }
 
     private function handlePayment(string $phone, string $text, ?Customer $customer): void
@@ -337,6 +427,7 @@ class ConversationalWhatsAppBotService
                 $deliveryFee = (float) ($session['delivery_fee'] ?? 0);
                 $orderType = $session['order_type'] ?? 'takeaway';
                 $notes = $this->buildOrderNotes($session);
+                $scheduledFor = $this->scheduledForFromSession($session);
 
                 $order = Order::create([
                     'order_number' => Order::generateOrderNumber(),
@@ -351,6 +442,7 @@ class ConversationalWhatsAppBotService
                     'customer_phone' => $customer?->phone ?? PhoneNumber::formatDisplay($phone) ?? $phone,
                     'payment_method' => $session['payment_method'] ?? null,
                     'notes' => $notes,
+                    'scheduled_for' => $scheduledFor,
                     'status' => 'pending',
                     'user_id' => null,
                 ]);
@@ -400,6 +492,7 @@ class ConversationalWhatsAppBotService
                 'order_number' => $order->order_number,
                 'total' => $total,
                 'estimated_minutes' => $estimated,
+                'scheduled_for' => OrderSchedule::formatForMessage($order->scheduled_for),
             ]), $customer, $order);
         } catch (\Throwable $exception) {
             Log::error('Conversational WhatsApp order creation failed', ['error' => $exception->getMessage()]);
@@ -782,6 +875,10 @@ class ConversationalWhatsAppBotService
             $lines[] = '*Observações:* '.$session['extras_notes'];
         }
 
+        if (filled($session['scheduled_label'] ?? null)) {
+            $lines[] = '*Horário:* '.ucfirst((string) $session['scheduled_label']);
+        }
+
         $total = $this->cartTotal($cart) + (float) ($session['delivery_fee'] ?? 0);
         $lines[] = '';
         $lines[] = '*Total (com a taxa): R$ '.number_format($total, 2, ',', '.').'*';
@@ -799,6 +896,10 @@ class ConversationalWhatsAppBotService
 
         if (($session['order_type'] ?? '') === 'takeaway') {
             $parts[] = 'Retirada no balcão';
+        }
+
+        if (filled($session['scheduled_label'] ?? null)) {
+            $parts[] = 'Agendado para '.$session['scheduled_label'];
         }
 
         return implode(' | ', $parts);
@@ -1013,6 +1114,7 @@ class ConversationalWhatsAppBotService
             'order_type' => $session['order_type'] ?? null,
             'delivery_fee' => $session['delivery_fee'] ?? null,
             'payment_method' => $session['payment_method'] ?? null,
+            'scheduled_label' => $session['scheduled_label'] ?? null,
         ];
     }
 
@@ -1171,7 +1273,7 @@ class ConversationalWhatsAppBotService
 
         if ($this->matchesIntent($command, ['retirada', 'retirar', 'balcão', 'balcao', 'buscar', 'pegar'])) {
             $this->setSession($phone, array_merge($session, [
-                'state' => 'payment',
+                'state' => OrderSchedule::enabled() ? 'schedule' : 'payment',
                 'order_type' => 'takeaway',
                 'delivery_address' => null,
                 'delivery_fee' => 0,
@@ -1179,11 +1281,7 @@ class ConversationalWhatsAppBotService
                 'distance_km' => null,
             ]));
 
-            return [
-                'ok' => true,
-                'order_type' => 'takeaway',
-                'summary' => $this->buildSummary($this->getSession($phone)),
-            ];
+            return $this->deliveryStepResponse($phone);
         }
 
         $diagnosis = $this->deliveryFeeService->diagnoseAddress(trim($address));
@@ -1199,7 +1297,7 @@ class ConversationalWhatsAppBotService
         }
 
         $this->setSession($phone, array_merge($session, [
-            'state' => 'payment',
+            'state' => OrderSchedule::enabled() ? 'schedule' : 'payment',
             'order_type' => 'delivery',
             'delivery_address' => trim($address),
             'delivery_fee' => $quote['delivery_fee'],
@@ -1207,12 +1305,56 @@ class ConversationalWhatsAppBotService
             'distance_km' => $quote['distance_km'],
         ]));
 
+        $response = $this->deliveryStepResponse($phone);
+        $response['distance_km'] = $quote['distance_km'];
+        $response['delivery_fee'] = $quote['delivery_fee'];
+
+        return $response;
+    }
+
+    /** @return array<string, mixed> */
+    public function toolSetSchedule(string $phone, string $scheduleText, ?string $pushName): array
+    {
+        $resolved = OrderSchedule::resolve($scheduleText);
+
+        if ($resolved['error'] !== null) {
+            return ['ok' => false, 'error' => $resolved['error']];
+        }
+
+        $session = $this->getSession($phone);
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'payment',
+            'scheduled_for' => $resolved['datetime']?->toIso8601String(),
+            'scheduled_label' => $resolved['label'],
+        ]));
+
         return [
             'ok' => true,
-            'order_type' => 'delivery',
-            'distance_km' => $quote['distance_km'],
-            'delivery_fee' => $quote['delivery_fee'],
+            'scheduled_label' => $resolved['label'],
+            'next' => 'payment',
             'summary' => $this->buildSummary($this->getSession($phone)),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function deliveryStepResponse(string $phone): array
+    {
+        $session = $this->getSession($phone);
+
+        if (($session['state'] ?? '') === 'schedule' && ! filled($session['scheduled_label'] ?? null)) {
+            return [
+                'ok' => true,
+                'order_type' => $session['order_type'] ?? 'takeaway',
+                'next' => 'schedule',
+                'message' => $this->message('schedule_message'),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'order_type' => $session['order_type'] ?? 'takeaway',
+            'next' => 'payment',
+            'summary' => $this->buildSummary($session),
         ];
     }
 

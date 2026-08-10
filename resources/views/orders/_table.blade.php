@@ -19,6 +19,9 @@
                 <td class="px-4 py-3">
                     <p class="font-medium text-gray-900">{{ $order->order_number }}</p>
                     <p class="text-xs text-gray-500">{{ $order->created_at->format('d/m/Y H:i') }}</p>
+                    @if ($order->isScheduled())
+                        <p class="text-xs font-medium text-amber-700 mt-0.5">📅 {{ $order->scheduledLabel() }}</p>
+                    @endif
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-700">{{ $typeLabels[$order->type] ?? $order->type }}</td>
                 <td class="px-4 py-3 text-sm text-gray-700">

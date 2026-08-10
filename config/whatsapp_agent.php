@@ -12,7 +12,7 @@ return [
     'address_message' => 'Pra gente calcular a entrega certinha até você, me manda o seu endereço completo aqui, por favor? (Ou se preferir retirar no balcão, é só me avisar!)',
     'payment_message' => "Fechado! Deixa eu te passar o resumo de como ficou:\n\n{summary}\n\nComo você prefere fazer o pagamento? Aceitamos Pix, cartão (na entrega/retirada) ou dinheiro.",
     'pix_message' => "Perfeito! Segue a nossa chave Pix:\n{pix_key}\n\nAssim que fizer o pagamento, é só mandar o comprovante aqui para a gente já disparar o pedido para a cozinha, combinado?",
-    'confirmed_message' => "Comprovante recebido e pedido confirmado com sucesso! 🚀 Já mandei o seu pedido direto pra cozinha.\n\nNúmero: *{order_number}*\nTotal: R$ {total}\nTempo estimado: ~{estimated_minutes} minutos.\n\nQualquer coisa, estou por aqui!",
+    'confirmed_message' => "Comprovante recebido e pedido confirmado com sucesso! 🚀 Já mandei o seu pedido direto pra cozinha.\n\nNúmero: *{order_number}*\nTotal: R$ {total}\nEntrega/pedido: *{scheduled_for}*\nTempo estimado: ~{estimated_minutes} minutos.\n\nQualquer coisa, estou por aqui!",
     'pix_key' => '',
     'estimated_minutes' => 45,
     'menu_image' => null,
@@ -32,4 +32,8 @@ return [
     'human_handoff_message' => 'Certo! Vou chamar um atendente humano para continuar com você. Aguarde um momentinho. 🙋',
     'bot_resumed_message' => 'Voltei! Pode continuar seu pedido comigo. Digite *oi* ou *cardápio*.',
     'human_pause_minutes' => 60,
+    'scheduling_enabled' => true,
+    'schedule_min_minutes' => 30,
+    'schedule_max_days' => 1,
+    'schedule_message' => "Quer receber *agora* ou prefere *agendar*?\n\nResponda *agora* ou informe o horário desejado (ex.: *12:30*, *hoje às 18h*, *amanhã ao meio-dia*).",
 ];

@@ -67,6 +67,13 @@
                     </div>
                 @endif
 
+                @if ($order->scheduled_for)
+                    <div class="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-900">
+                        <strong>Horário agendado:</strong> {{ $order->scheduledLabel() }}
+                        <span class="text-amber-700">({{ $order->scheduled_for->format('d/m/Y H:i') }})</span>
+                    </div>
+                @endif
+
                 <h3 class="text-lg font-semibold text-gray-800 mb-4">Itens</h3>
                 <div class="overflow-x-auto mb-6">
                     <table class="min-w-full divide-y divide-gray-200">

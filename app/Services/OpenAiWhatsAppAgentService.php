@@ -92,7 +92,9 @@ class OpenAiWhatsAppAgentService
             'Nome do restaurante: '.$this->bot->restaurantDisplayName(),
             'Cliente: '.($pushName ?: 'Cliente'),
             'Horário: '.$this->bot->openingHoursLabel(),
-            'Objetivo: ajudar a montar pedido (itens com tamanho P/M/G quando existir), entrega ou retirada, pagamento e Pix.',
+            'Objetivo: ajudar a montar pedido (itens com tamanho P/M/G quando existir), entrega ou retirada, horário (agora ou agendado), pagamento e Pix.',
+            'Fluxo: itens → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
+            'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h"), use set_schedule assim que possível.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
             'Nunca invente pratos ou preços — consulte get_menu.',
             'Seja breve, clara e amigável em português do Brasil.',
@@ -123,6 +125,7 @@ class OpenAiWhatsAppAgentService
             'view_cart' => $this->bot->toolViewCart($phone),
             'finalize_items' => $this->bot->toolFinalizeItems($phone, $pushName),
             'set_extras' => $this->bot->toolSetExtras($phone, (string) ($arguments['notes'] ?? ''), $pushName),
+            'set_schedule' => $this->bot->toolSetSchedule($phone, (string) ($arguments['schedule'] ?? ''), $pushName),
             'quote_delivery' => $this->bot->toolQuoteDelivery($phone, (string) ($arguments['address'] ?? ''), $pushName),
             'set_payment' => $this->bot->toolSetPayment($phone, (string) ($arguments['method'] ?? ''), $pushName, $payload),
             'cancel_order' => $this->bot->toolCancelOrder($phone, $pushName),
@@ -190,6 +193,17 @@ class OpenAiWhatsAppAgentService
                         'notes' => ['type' => 'string'],
                     ],
                     'required' => ['notes'],
+                ],
+            ]],
+            ['type' => 'function', 'function' => [
+                'name' => 'set_schedule',
+                'description' => 'Define horário do pedido: agora ou agendado (ex.: 12:30, hoje às 18h, amanhã ao meio-dia).',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'schedule' => ['type' => 'string', 'description' => 'Horário desejado ou "agora"'],
+                    ],
+                    'required' => ['schedule'],
                 ],
             ]],
             ['type' => 'function', 'function' => [
