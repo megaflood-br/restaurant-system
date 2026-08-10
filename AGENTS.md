@@ -35,6 +35,19 @@ php artisan migrate --seed      # applies new migrations; seeds demo data
 
 After login the admin lands on the dashboard; waiter users are redirected to `/garcom`.
 
+### Timezone
+App timezone defaults to `America/Sao_Paulo` via `APP_TIMEZONE` (`config/app.php`). After changing
+`.env` or `config/app.php` on a server, always run:
+
+```
+php artisan config:clear
+php artisan config:cache
+```
+
+If PHP-FPM / Octane / queue workers are used, restart them too — cached config is the usual reason
+times still look like UTC after an `.env` edit. Verify with:
+`php artisan tinker --execute="echo config('app.timezone').' '.now();"`
+
 ### Lint
 `./vendor/bin/pint` (use `./vendor/bin/pint --test` to check without writing). The committed code
 currently has many pre-existing Pint style findings — a non-clean `--test` result is expected and
