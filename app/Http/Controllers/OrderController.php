@@ -125,7 +125,7 @@ class OrderController extends Controller
 
         $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
 
-        $this->tryPrint($order);
+        $this->tryPrintOnCreate($order);
 
         if (config('printing.auto_print_on_create') && config('printing.driver') === 'browser') {
             return redirect()->route('orders.print', ['order' => $order, 'autoprint' => 1])
@@ -135,10 +135,10 @@ class OrderController extends Controller
         return redirect()->route('orders.show', $order)->with('success', 'Pedido criado com sucesso.');
     }
 
-    private function tryPrint(Order $order): void
+    private function tryPrintOnCreate(Order $order): void
     {
         try {
-            app(OrderPrinterService::class)->dispatchKitchenPrint($order);
+            app(OrderPrinterService::class)->maybePrintOnCreate($order);
         } catch (\Throwable) {
             // Impressão em rede/agente é best-effort.
         }
@@ -183,6 +183,23 @@ class OrderController extends Controller
             $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
         }
 
-        return back()->with('success', 'Status do pedido atualizado.');
+        try {
+            app(OrderPrinterService::class)->maybePrintOnStatusChange(
+                $order->fresh(['items.product', 'customer', 'deliveryArea', 'user']),
+                $previousStatus,
+                $validated['status']
+            );
+        } catch (\Throwable) {
+            // best-effort
+        }
+
+        $message = 'Status do pedido atualizado.';
+        if ($validated['status'] === 'preparing' && $previousStatus !== 'preparing' && config('printing.print_on_preparing')) {
+            $message = config('printing.driver') === 'agent'
+                ? 'Status atualizado para Preparando. Comanda enfileirada para impressão.'
+                : 'Status atualizado para Preparando. Comanda enviada para impressão.';
+        }
+
+        return back()->with('success', $message);
     }
 }

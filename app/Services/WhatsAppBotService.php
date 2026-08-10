@@ -272,7 +272,7 @@ class WhatsAppBotService
             });
 
             try {
-                app(OrderPrinterService::class)->dispatchKitchenPrint($order);
+                app(OrderPrinterService::class)->maybePrintOnCreate($order);
             } catch (\Throwable) {
                 // best-effort
             }

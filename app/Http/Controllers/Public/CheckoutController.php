@@ -140,7 +140,7 @@ class CheckoutController extends Controller
         $cart->clear();
 
         try {
-            $printer->dispatchKitchenPrint($order->fresh(['items.product', 'deliveryArea']));
+            $printer->maybePrintOnCreate($order->fresh(['items.product', 'deliveryArea']));
         } catch (\Throwable) {
             //
         }
