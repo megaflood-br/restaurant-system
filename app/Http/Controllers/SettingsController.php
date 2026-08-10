@@ -6,6 +6,8 @@ use App\Models\Setting;
 use App\Models\WhatsAppMessage;
 use App\Services\OrderPrinterService;
 use App\Support\AppSettings;
+use App\Support\MenuTheme;
+use App\Support\SideOptions;
 use App\Support\WeeklyMenuImages;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -153,7 +155,7 @@ class SettingsController extends Controller
             'loyalty_title' => $validated['loyalty_title'] ?? '',
             'loyalty_text' => $validated['loyalty_text'] ?? '',
             'public_domain' => self::normalizeDomain($validated['public_domain'] ?? ''),
-            'theme_color' => \App\Support\MenuTheme::normalize($validated['theme_color']),
+            'theme_color' => MenuTheme::normalize($validated['theme_color']),
             'cover_image' => $coverPath,
             'logo_image' => $logoPath,
         ]);
@@ -285,6 +287,8 @@ class SettingsController extends Controller
             'welcome_message' => ['nullable', 'string', 'max:4000'],
             'menu_followup_message' => ['nullable', 'string', 'max:2000'],
             'extras_message' => ['nullable', 'string', 'max:2000'],
+            'side_options' => ['nullable', 'string', 'max:2000'],
+            'side_message' => ['nullable', 'string', 'max:2000'],
             'address_message' => ['nullable', 'string', 'max:2000'],
             'payment_message' => ['nullable', 'string', 'max:2000'],
             'pix_message' => ['nullable', 'string', 'max:2000'],
@@ -328,6 +332,8 @@ class SettingsController extends Controller
             'welcome_message' => $validated['welcome_message'] ?? '',
             'menu_followup_message' => $validated['menu_followup_message'] ?? '',
             'extras_message' => $validated['extras_message'] ?? '',
+            'side_options' => json_encode(SideOptions::normalize($validated['side_options'] ?? '')),
+            'side_message' => $validated['side_message'] ?? '',
             'address_message' => $validated['address_message'] ?? '',
             'payment_message' => $validated['payment_message'] ?? '',
             'pix_message' => $validated['pix_message'] ?? '',
