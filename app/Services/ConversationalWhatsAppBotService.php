@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\WhatsAppMessage;
 use App\Support\OrderSchedule;
 use App\Support\PaymentMethod;
@@ -700,7 +701,7 @@ class ConversationalWhatsAppBotService
         return [$query, null];
     }
 
-    private function resolveVariant(Product $product, ?string $hint): ?\App\Models\ProductVariant
+    private function resolveVariant(Product $product, ?string $hint): ?ProductVariant
     {
         if (! $product->hasVariants() || ! $hint) {
             return null;
@@ -849,11 +850,14 @@ class ConversationalWhatsAppBotService
             $distanceKm = $diagnosis['distance_km'];
         }
 
+        $city = trim((string) config('digital_menu.city'));
+        $cityHint = $city !== '' ? $city : 'sua cidade';
+
         return match ($reason) {
             'missing_origin' => 'Ainda não configurei a localização do restaurante para calcular entrega. Por favor, digite *retirada* para buscar no balcão ou fale conosco.',
-            'geocode_failed' => 'Não localizei esse endereço. Envie rua, número, bairro e cidade (ex.: *Rua Machado de Assis, 465, Vila Mariana, São Paulo*) ou digite *retirada*.',
+            'geocode_failed' => 'Não localizei esse endereço em *'.$cityHint.'*. Envie rua, número e bairro (ex.: *Rua Machado de Assis, 465, Vila Mariana*) ou digite *retirada*.',
             'out_of_range' => 'Esse endereço fica a cerca de *'.number_format((float) $distanceKm, 1, ',', '.').' km* do restaurante, fora das faixas de entrega cadastradas. Digite *retirada* ou informe outro endereço.',
-            default => 'Não consegui calcular a entrega para esse endereço. Verifique se está completo (rua, número, bairro, cidade) ou digite *retirada* para buscar no balcão.',
+            default => 'Não consegui calcular a entrega para esse endereço. Verifique se está completo (rua, número e bairro em '.$cityHint.') ou digite *retirada* para buscar no balcão.',
         };
     }
 
@@ -1173,6 +1177,7 @@ class ConversationalWhatsAppBotService
 
             if (! $product) {
                 $errors[] = 'Produto não encontrado: '.($item['product_name'] ?? '?');
+
                 continue;
             }
 
@@ -1181,6 +1186,7 @@ class ConversationalWhatsAppBotService
 
             if ($product->hasVariants() && ! $variant) {
                 $errors[] = "Informe o tamanho (P, M ou G) para {$product->name}.";
+
                 continue;
             }
 

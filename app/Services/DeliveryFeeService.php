@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DeliveryArea;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class DeliveryFeeService
 {
@@ -134,69 +135,140 @@ class DeliveryFeeService
             return null;
         }
 
-        $result = $this->requestGeocode($query);
-
-        if ($result !== null) {
-            return $result;
-        }
-
         $context = $this->geocodeContextSuffix();
+        $restrictToCity = $this->restaurantCity() !== '';
 
+        // Always search inside the restaurant city first (never Brazil-wide).
         if ($context !== '') {
-            return $this->requestGeocode($query.', '.$context);
+            $scoped = $this->requestGeocode($query.', '.$context, $restrictToCity);
+
+            if ($scoped !== null) {
+                return $scoped;
+            }
+
+            // Retry the raw text, still filtered/biased to the restaurant city.
+            if ($restrictToCity) {
+                return $this->requestGeocode($query, true);
+            }
         }
 
-        return null;
+        return $this->requestGeocode($query, false);
     }
 
     private function geocodeContextSuffix(): string
     {
-        $parts = array_filter([
-            config('digital_menu.city'),
-            config('digital_menu.state'),
-        ]);
+        $city = $this->restaurantCity();
+        $state = trim((string) config('digital_menu.state'));
 
-        if ($parts !== []) {
-            return implode(', ', $parts);
+        if ($city !== '') {
+            return implode(', ', array_filter([$city, $state !== '' ? $state : null, 'Brasil']));
         }
 
-        $restaurantAddress = trim((string) config('general.address'));
+        return trim((string) config('general.address'));
+    }
 
-        return $restaurantAddress;
+    private function restaurantCity(): string
+    {
+        return trim((string) config('digital_menu.city'));
     }
 
     /** @return array{lat: float, lng: float}|null */
-    private function requestGeocode(string $query): ?array
+    private function requestGeocode(string $query, bool $restrictToCity): ?array
     {
         try {
+            $params = [
+                'q' => $query,
+                'format' => 'json',
+                'limit' => 5,
+                'countrycodes' => 'br',
+                'addressdetails' => 1,
+            ];
+
+            $originLat = config('general.delivery_origin_lat');
+            $originLng = config('general.delivery_origin_lng');
+
+            if (filled($originLat) && filled($originLng)) {
+                $lat = (float) $originLat;
+                $lng = (float) $originLng;
+                // ~30 km box around the restaurant to keep results local.
+                $delta = 0.3;
+                $params['viewbox'] = implode(',', [
+                    $lng - $delta,
+                    $lat + $delta,
+                    $lng + $delta,
+                    $lat - $delta,
+                ]);
+                $params['bounded'] = 1;
+            }
+
             $response = Http::timeout(8)
                 ->withHeaders(['User-Agent' => config('app.name', 'Restaurant System').'/1.0'])
-                ->get('https://nominatim.openstreetmap.org/search', [
-                    'q' => $query,
-                    'format' => 'json',
-                    'limit' => 1,
-                    'countrycodes' => 'br',
-                ]);
+                ->get('https://nominatim.openstreetmap.org/search', $params);
 
             if (! $response->successful()) {
                 return null;
             }
 
-            $result = $response->json()[0] ?? null;
+            $results = $response->json();
 
-            if (! $result) {
+            if (! is_array($results) || $results === []) {
                 return null;
             }
 
-            return [
-                'lat' => (float) $result['lat'],
-                'lng' => (float) $result['lon'],
-            ];
+            $expectedCity = $this->normalizePlaceName($this->restaurantCity());
+
+            foreach ($results as $result) {
+                if (! is_array($result) || ! isset($result['lat'], $result['lon'])) {
+                    continue;
+                }
+
+                if ($restrictToCity && $expectedCity !== '' && ! $this->resultMatchesCity($result, $expectedCity)) {
+                    continue;
+                }
+
+                return [
+                    'lat' => (float) $result['lat'],
+                    'lng' => (float) $result['lon'],
+                ];
+            }
+
+            return null;
         } catch (\Throwable $exception) {
             Log::warning('Geocoding failed', ['address' => $query, 'error' => $exception->getMessage()]);
 
             return null;
         }
+    }
+
+    private function resultMatchesCity(array $result, string $expectedCity): bool
+    {
+        $address = is_array($result['address'] ?? null) ? $result['address'] : [];
+
+        $candidates = array_filter([
+            $address['city'] ?? null,
+            $address['town'] ?? null,
+            $address['municipality'] ?? null,
+            $address['city_district'] ?? null,
+            $address['county'] ?? null,
+            $result['display_name'] ?? null,
+        ], fn ($value) => filled($value));
+
+        foreach ($candidates as $candidate) {
+            $normalized = $this->normalizePlaceName((string) $candidate);
+
+            if ($normalized === $expectedCity || str_contains($normalized, $expectedCity)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizePlaceName(string $name): string
+    {
+        $ascii = Str::lower(Str::ascii(trim($name)));
+
+        return preg_replace('/[^a-z0-9]+/', '', $ascii) ?? '';
     }
 
     private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
