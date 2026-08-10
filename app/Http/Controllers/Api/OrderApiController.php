@@ -178,7 +178,7 @@ class OrderApiController extends Controller
 
         $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
 
-        if ($request->boolean('print_kitchen', true)) {
+        if ($request->boolean('print_kitchen', (bool) config('printing.auto_print_on_create'))) {
             try {
                 $printer->dispatchKitchenPrint($order->fresh(['items.product', 'deliveryArea']));
             } catch (\Throwable) {
@@ -287,6 +287,16 @@ class OrderApiController extends Controller
 
         if ($validated['status'] === 'cancelled' && $previousStatus !== 'cancelled') {
             $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
+        }
+
+        try {
+            app(OrderPrinterService::class)->maybePrintOnStatusChange(
+                $order->fresh(['items.product', 'customer', 'deliveryArea', 'user']),
+                $previousStatus,
+                $validated['status']
+            );
+        } catch (\Throwable) {
+            //
         }
 
         return response()->json([

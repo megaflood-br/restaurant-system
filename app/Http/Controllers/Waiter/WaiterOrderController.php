@@ -195,7 +195,7 @@ class WaiterOrderController extends Controller
         $cart->setComandaNumber($comandaNumber);
 
         try {
-            $printer->dispatchKitchenPrint($order->fresh(['items.product', 'user']));
+            $printer->maybePrintOnCreate($order->fresh(['items.product', 'user']));
         } catch (\Throwable) {
             //
         }
@@ -208,7 +208,7 @@ class WaiterOrderController extends Controller
         $returnUrl = session('order_return_url');
 
         if ($request->wantsJson()) {
-            if (config('printing.enabled') && config('printing.driver') === 'browser') {
+            if (config('printing.enabled') && config('printing.driver') === 'browser' && config('printing.auto_print_on_create')) {
                 if ($returnUrl) {
                     return response()->json([
                         'message' => 'Pedido enviado.',
@@ -232,7 +232,7 @@ class WaiterOrderController extends Controller
             ]);
         }
 
-        if (config('printing.enabled') && config('printing.driver') === 'browser') {
+        if (config('printing.enabled') && config('printing.driver') === 'browser' && config('printing.auto_print_on_create')) {
             if ($returnUrl) {
                 return redirect()->route('waiter.autoprint', [
                     'order' => $order,

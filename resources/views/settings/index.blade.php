@@ -272,6 +272,12 @@
                             </div>
 
                             <div class="flex items-center gap-2">
+                                <input type="checkbox" name="print_on_preparing" id="print_on_preparing" value="1" @checked(old('print_on_preparing', $printing['print_on_preparing'] ?? true)) class="rounded border-gray-300 text-indigo-600">
+                                <label for="print_on_preparing" class="text-sm text-gray-700">Imprimir ao mudar status para <strong>Preparando</strong></label>
+                            </div>
+                            <p class="text-xs text-gray-500 -mt-2">Recomendado no início: deixe a 1ª opção desmarcada e a 2ª marcada. O pedido fica Pendente; ao mudar para Preparando, a comanda imprime.</p>
+
+                            <div class="flex items-center gap-2">
                                 <input type="checkbox" name="kitchen_hide_prices" id="kitchen_hide_prices" value="1" @checked(old('kitchen_hide_prices', $printing['kitchen_hide_prices'])) class="rounded border-gray-300 text-indigo-600">
                                 <label for="kitchen_hide_prices" class="text-sm text-gray-700">Ocultar preços na via cozinha</label>
                             </div>
@@ -286,7 +292,7 @@
                                         <li>No PC do restaurante (com PHP instalado), rode:</li>
                                     </ol>
                                     <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-[11px] leading-relaxed">php scripts/print-agent.php --url={{ url('/') }} --token=SEU_TOKEN --printer=192.168.1.100 --port=9100</pre>
-                                    <p class="mt-1">Deixe essa janela aberta. Pedidos (WhatsApp, cardápio, painel) entram na fila e o agente imprime sozinho.</p>
+                                    <p class="mt-1">Deixe essa janela aberta. Com “imprimir ao Preparando”, a comanda só entra na fila quando você mudar o status.</p>
                                     <p class="mt-2"><strong>Rede IP direta:</strong> IP <code class="bg-amber-100 px-1 rounded">192.168.1.100</code>, porta <code class="bg-amber-100 px-1 rounded">9100</code>, largura <code class="bg-amber-100 px-1 rounded">48</code> (80mm). Só funciona se o servidor alcançar esse IP.</p>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

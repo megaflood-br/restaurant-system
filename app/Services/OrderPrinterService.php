@@ -27,6 +27,40 @@ class OrderPrinterService
             && in_array(config('printing.driver'), ['network', 'agent'], true);
     }
 
+    public function shouldPrintOnCreate(): bool
+    {
+        return (bool) config('printing.enabled')
+            && (bool) config('printing.auto_print_on_create');
+    }
+
+    public function shouldPrintOnPreparing(): bool
+    {
+        return (bool) config('printing.enabled')
+            && (bool) config('printing.print_on_preparing', true);
+    }
+
+    public function maybePrintOnCreate(Order $order): bool
+    {
+        if (! $this->shouldPrintOnCreate()) {
+            return false;
+        }
+
+        return $this->dispatchKitchenPrint($order);
+    }
+
+    public function maybePrintOnStatusChange(Order $order, string $previousStatus, string $newStatus): bool
+    {
+        if (! $this->shouldPrintOnPreparing()) {
+            return false;
+        }
+
+        if ($newStatus !== 'preparing' || $previousStatus === 'preparing') {
+            return false;
+        }
+
+        return $this->dispatchKitchenPrint($order);
+    }
+
     public function dispatchKitchenPrint(Order $order): bool
     {
         if (! $this->usesServerSidePrint()) {
