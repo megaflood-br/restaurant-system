@@ -95,6 +95,7 @@ class OpenAiWhatsAppAgentService
             'Agora no restaurante: '.now()->timezone(config('app.timezone'))->format('d/m/Y H:i').' ('.config('app.timezone').')',
             'Objetivo: ajudar a montar pedido (itens com tamanho P/M/G quando existir), entrega ou retirada, horário (agora ou agendado), pagamento e Pix.',
             'Fluxo: itens → acompanhamento (set_side: fritas/legumes) → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
+            'Se o cliente já tiver endereço cadastrado, após set_extras a ferramenta devolve a confirmação. Se o cliente disser sim/mesmo, chame quote_delivery com "sim". Se disser não/outro, peça o endereço novo e depois quote_delivery.',
             'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h"), use set_schedule assim que possível.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
             'Nunca invente pratos ou preços — consulte get_menu.',
@@ -105,6 +106,7 @@ class OpenAiWhatsAppAgentService
             'Na primeira saudação, também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
             'Seja breve, clara e amigável em português do Brasil.',
             'Estado atual da sessão: '.json_encode($session, JSON_UNESCAPED_UNICODE),
+            'Endereço cadastrado do cliente: '.($this->bot->savedAddressForPhone($phone, $pushName) ?: 'nenhum'),
             'Cardápio resumido (uso interno): '.json_encode($menu, JSON_UNESCAPED_UNICODE),
             'Acompanhamentos disponíveis: '.json_encode(SideOptions::all(), JSON_UNESCAPED_UNICODE),
         ]);
@@ -227,11 +229,11 @@ class OpenAiWhatsAppAgentService
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'quote_delivery',
-                'description' => 'Calcula taxa de entrega ou registra retirada no balcão.',
+                'description' => 'Calcula taxa de entrega, confirma endereço salvo (sim/mesmo), pede endereço novo, ou registra retirada no balcão.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'address' => ['type' => 'string', 'description' => 'Endereço completo ou palavra retirada/balcão'],
+                        'address' => ['type' => 'string', 'description' => 'Endereço completo, "sim"/"mesmo" para usar o cadastrado, ou palavra retirada/balcão'],
                     ],
                     'required' => ['address'],
                 ],

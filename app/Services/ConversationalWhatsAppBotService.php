@@ -261,8 +261,35 @@ class ConversationalWhatsAppBotService
         $session = $this->getSession($phone);
 
         $this->setSession($phone, array_merge($session, [
-            'state' => 'address',
             'extras_notes' => trim($text),
+        ]));
+
+        $this->askForAddress($phone, $customer);
+    }
+
+    private function askForAddress(string $phone, ?Customer $customer): void
+    {
+        $session = $this->getSession($phone);
+        $saved = $this->savedDeliveryAddress($customer);
+
+        if ($saved !== null) {
+            $this->setSession($phone, array_merge($session, [
+                'state' => 'address',
+                'saved_address' => $saved,
+                'saved_address_prompt' => true,
+            ]));
+
+            $this->replyText($phone, $this->render($this->message('address_confirm_message'), [
+                'address' => $saved,
+            ]), $customer);
+
+            return;
+        }
+
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'address',
+            'saved_address' => null,
+            'saved_address_prompt' => false,
         ]));
 
         $this->replyText($phone, $this->message('address_message'), $customer);
@@ -281,6 +308,7 @@ class ConversationalWhatsAppBotService
                 'delivery_fee' => 0,
                 'delivery_area_id' => null,
                 'distance_km' => null,
+                'saved_address_prompt' => false,
             ]));
 
             $this->proceedToSchedule($phone, $customer);
@@ -288,10 +316,31 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        $quote = $this->deliveryFeeService->quoteForAddress(trim($text));
+        if (($session['saved_address_prompt'] ?? false) === true) {
+            if ($this->confirmsSavedAddress($command)) {
+                $text = (string) ($session['saved_address'] ?? '');
+            } elseif ($this->declinesSavedAddress($command)) {
+                $this->setSession($phone, array_merge($session, [
+                    'saved_address_prompt' => false,
+                ]));
+                $this->replyText($phone, $this->message('address_message'), $customer);
+
+                return;
+            }
+        }
+
+        $address = trim($text);
+
+        if ($address === '') {
+            $this->replyText($phone, $this->message('address_message'), $customer);
+
+            return;
+        }
+
+        $quote = $this->deliveryFeeService->quoteForAddress($address);
 
         if ($quote === null) {
-            $this->replyText($phone, $this->deliveryFailureMessage(trim($text)), $customer);
+            $this->replyText($phone, $this->deliveryFailureMessage($address), $customer);
 
             return;
         }
@@ -307,13 +356,70 @@ class ConversationalWhatsAppBotService
         $this->setSession($phone, array_merge($session, [
             'state' => 'payment',
             'order_type' => 'delivery',
-            'delivery_address' => trim($text),
+            'delivery_address' => $address,
             'delivery_fee' => $quote['delivery_fee'],
             'delivery_area_id' => $quote['delivery_area_id'],
             'distance_km' => $quote['distance_km'],
+            'saved_address_prompt' => false,
         ]));
 
         $this->proceedToSchedule($phone, $customer);
+    }
+
+    private function savedDeliveryAddress(?Customer $customer): ?string
+    {
+        if (! $customer) {
+            return null;
+        }
+
+        $formatted = $this->formatCustomerAddress($customer);
+
+        if ($formatted !== null) {
+            return $formatted;
+        }
+
+        $lastDelivery = $customer->orders()
+            ->where('type', 'delivery')
+            ->whereNotNull('delivery_address')
+            ->where('delivery_address', '!=', '')
+            ->latest()
+            ->value('delivery_address');
+
+        return filled($lastDelivery) ? trim((string) $lastDelivery) : null;
+    }
+
+    private function formatCustomerAddress(Customer $customer): ?string
+    {
+        $parts = array_values(array_filter([
+            trim((string) ($customer->address ?? '')),
+            trim((string) ($customer->neighborhood ?? '')),
+            trim((string) ($customer->city ?? '')),
+            trim((string) ($customer->state ?? '')),
+            trim((string) ($customer->zip_code ?? '')),
+        ], fn (string $part) => $part !== ''));
+
+        if ($parts === [] || trim((string) ($customer->address ?? '')) === '') {
+            return null;
+        }
+
+        return implode(', ', $parts);
+    }
+
+    private function confirmsSavedAddress(string $command): bool
+    {
+        return $this->matchesIntent($command, [
+            'sim', 's', 'ss', 'yes', 'ok', 'okay', 'pode', 'pode ser', 'isso', 'isso mesmo',
+            'mesmo', 'esse', 'esse mesmo', 'este', 'este mesmo', 'confirmar', 'confirmo',
+            'mesmo endereço', 'mesmo endereco', 'o mesmo',
+        ]) || (bool) preg_match('/^(sim|isso|mesmo|esse|este)(\s|,|!|\.|$)/u', $command);
+    }
+
+    private function declinesSavedAddress(string $command): bool
+    {
+        return $this->matchesIntent($command, [
+            'nao', 'não', 'n', 'no', 'outro', 'outra', 'mudar', 'trocar', 'novo', 'nova',
+            'diferente', 'alterar', 'outro endereço', 'outro endereco', 'endereço novo', 'endereco novo',
+        ]) || (bool) preg_match('/^(nao|não|outro|mudar|trocar|novo)/u', $command);
     }
 
     private function proceedToSchedule(string $phone, ?Customer $customer): void
@@ -1203,7 +1309,14 @@ class ConversationalWhatsAppBotService
             'delivery_fee' => $session['delivery_fee'] ?? null,
             'payment_method' => $session['payment_method'] ?? null,
             'scheduled_label' => $session['scheduled_label'] ?? null,
+            'saved_address' => $session['saved_address'] ?? null,
+            'saved_address_prompt' => (bool) ($session['saved_address_prompt'] ?? false),
         ];
+    }
+
+    public function savedAddressForPhone(string $phone, ?string $pushName = null): ?string
+    {
+        return $this->savedDeliveryAddress($this->resolveCustomer($phone, $pushName));
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -1386,11 +1499,32 @@ class ConversationalWhatsAppBotService
     public function toolSetExtras(string $phone, string $notes, ?string $pushName): array
     {
         $session = $this->getSession($phone);
+        $customer = $this->resolveCustomer($phone, $pushName);
+        $saved = $this->savedDeliveryAddress($customer);
 
-        $this->setSession($phone, array_merge($session, [
-            'state' => 'address',
+        $payload = [
             'extras_notes' => trim($notes),
-        ]));
+            'state' => 'address',
+        ];
+
+        if ($saved !== null) {
+            $payload['saved_address'] = $saved;
+            $payload['saved_address_prompt'] = true;
+            $this->setSession($phone, array_merge($session, $payload));
+
+            return [
+                'ok' => true,
+                'next' => 'address',
+                'saved_address' => $saved,
+                'message' => $this->render($this->message('address_confirm_message'), [
+                    'address' => $saved,
+                ]),
+            ];
+        }
+
+        $payload['saved_address'] = null;
+        $payload['saved_address_prompt'] = false;
+        $this->setSession($phone, array_merge($session, $payload));
 
         return ['ok' => true, 'next' => 'address', 'message' => $this->message('address_message')];
     }
@@ -1410,9 +1544,35 @@ class ConversationalWhatsAppBotService
                 'delivery_fee' => 0,
                 'delivery_area_id' => null,
                 'distance_km' => null,
+                'saved_address_prompt' => false,
             ]));
 
             return $this->deliveryStepResponse($phone);
+        }
+
+        if (($session['saved_address_prompt'] ?? false) === true) {
+            if ($this->confirmsSavedAddress($command)) {
+                $address = (string) ($session['saved_address'] ?? '');
+            } elseif ($this->declinesSavedAddress($command)) {
+                $this->setSession($phone, array_merge($session, [
+                    'saved_address_prompt' => false,
+                ]));
+
+                return [
+                    'ok' => true,
+                    'next' => 'address',
+                    'ask_new_address' => true,
+                    'message' => $this->message('address_message'),
+                ];
+            }
+        }
+
+        if (($session['saved_address_prompt'] ?? false) !== true && $this->confirmsSavedAddress($command)) {
+            $saved = $this->savedDeliveryAddress($customer);
+
+            if ($saved !== null) {
+                $address = $saved;
+            }
         }
 
         $diagnosis = $this->deliveryFeeService->diagnoseAddress(trim($address));
@@ -1434,6 +1594,7 @@ class ConversationalWhatsAppBotService
             'delivery_fee' => $quote['delivery_fee'],
             'delivery_area_id' => $quote['delivery_area_id'],
             'distance_km' => $quote['distance_km'],
+            'saved_address_prompt' => false,
         ]));
 
         $response = $this->deliveryStepResponse($phone);

@@ -12,6 +12,7 @@ return [
     'side_options' => ['Batata frita', 'Legumes'],
     'side_message' => "Qual acompanhamento você prefere?\n\n{options}\n\nResponda com o *número* ou o *nome* (ex.: *1* ou *fritas*).",
     'address_message' => 'Pra gente calcular a entrega certinha até você, me manda o seu endereço completo aqui, por favor? (Ou se preferir retirar no balcão, é só me avisar!)',
+    'address_confirm_message' => "Vi que você já tem este endereço cadastrado:\n*{address}*\n\nÉ para entregar nesse mesmo? Responda *sim*, *não* (outro endereço) ou *retirada*.",
     'payment_message' => "Fechado! Deixa eu te passar o resumo de como ficou:\n\n{summary}\n\nComo você prefere fazer o pagamento? Aceitamos Pix, cartão (na entrega/retirada) ou dinheiro.",
     'pix_message' => "Perfeito! Segue a nossa chave Pix:\n{pix_key}\n\nAssim que fizer o pagamento, é só mandar o comprovante aqui para a gente já disparar o pedido para a cozinha, combinado?",
     'confirmed_message' => "Comprovante recebido e pedido confirmado com sucesso! 🚀 Já mandei o seu pedido direto pra cozinha.\n\nNúmero: *{order_number}*\nTotal: R$ {total}\nEntrega/pedido: *{scheduled_for}*\nTempo estimado: ~{estimated_minutes} minutos.\n\nQualquer coisa, estou por aqui!",
