@@ -89,32 +89,32 @@ O pedido aparece em **Pedidos** no painel admin.
 
 ## Impressão de comandas
 
+Configure em **Configurações → Impressão** (não depende de variáveis `PRINTING_*` no `.env`).
+
 ### Modo navegador (padrão)
 
-Funciona com qualquer impressora instalada no Windows (incluindo térmica 80mm):
-
-```env
-PRINTING_ENABLED=true
-PRINTING_DRIVER=browser
-PRINTING_AUTO_ON_CREATE=true
-```
-
-Ao criar um pedido, abre automaticamente a tela de impressão. Também disponível em **Pedidos → Imprimir**.
+Funciona com qualquer impressora instalada no Windows (incluindo térmica 80mm).
+Ao criar um pedido (com autoimpressão ligada), abre a tela de impressão do navegador.
+Também disponível em **Pedidos → Imprimir**.
 
 Configure a impressora térmica como **padrão** no Windows e selecione-a no diálogo de impressão.
 
-### Modo rede (impressora térmica IP)
+### Modo rede (impressora térmica IP / ESC/POS)
 
-Para impressoras ESC/POS na rede (porta 9100):
+Para impressoras na rede local (porta raw `9100`, protocolo EPSON ESC/POS):
 
-```env
-PRINTING_DRIVER=network
-PRINTING_NETWORK_HOST=192.168.0.100
-PRINTING_NETWORK_PORT=9100
-```
+1. Modo: **Rede IP**
+2. IP: o do relatório da impressora (ex.: `192.168.1.100`)
+3. Porta: `9100`
+4. Largura: `48` para bobina 80mm (ou `32` para 58mm)
+5. Salve e clique em **Testar impressora de rede**
 
-A comanda é enviada automaticamente ao criar pedido (painel ou WhatsApp).
+**Importante:** o servidor PHP precisa alcançar o IP da impressora. Se o painel roda na
+nuvem/VPS e a impressora só existe no Wi‑Fi do restaurante, a conexão falha — use o modo
+**Navegador** ou hospede o sistema na mesma rede da impressora.
 
+A comanda de cozinha é enviada automaticamente ao criar pedido (painel ou WhatsApp) quando
+o modo rede está ativo.
 ## Stack
 
 - Laravel 13

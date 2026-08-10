@@ -265,14 +265,18 @@ class SettingsController extends Controller
     {
         AppSettings::loadIntoConfig();
 
+        if (config('printing.driver') !== 'network') {
+            return back()->with('error', 'Para testar a impressora térmica por IP, escolha o modo "Rede IP", salve e tente de novo. (Ou use o modo Navegador e imprima pelo Windows.)');
+        }
+
         if (! config('printing.network.host')) {
-            return back()->with('error', 'Informe o IP da impressora antes de testar.');
+            return back()->with('error', 'Informe o IP da impressora (ex.: 192.168.1.100), porta 9100, salve e teste novamente.');
         }
 
         try {
             $printer->printTestPage();
 
-            return back()->with('success', 'Teste enviado para a impressora com sucesso.');
+            return back()->with('success', 'Teste enviado para a impressora com sucesso. Confira se saiu o cupom "TESTE DE IMPRESSAO".');
         } catch (\Throwable $exception) {
             return back()->with('error', 'Falha no teste: '.$exception->getMessage());
         }

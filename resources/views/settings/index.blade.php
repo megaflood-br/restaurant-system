@@ -259,6 +259,10 @@
                                     <option value="browser" @selected(old('driver', $printing['driver']) === 'browser')>Navegador (qualquer impressora Windows)</option>
                                     <option value="network" @selected(old('driver', $printing['driver']) === 'network')>Rede IP (impressora térmica ESC/POS)</option>
                                 </select>
+                                <p class="mt-1 text-xs text-gray-500">
+                                    <strong>Rede IP</strong> só funciona se o <em>servidor</em> do sistema (onde roda o PHP) alcançar o IP da impressora.
+                                    Se o painel está na nuvem e a impressora só no Wi‑Fi do restaurante, use <strong>Navegador</strong>.
+                                </p>
                             </div>
 
                             <div class="flex items-center gap-2">
@@ -272,11 +276,21 @@
                             </div>
 
                             <div class="border-t border-gray-200 pt-6">
-                                <h3 class="text-sm font-semibold text-gray-800 mb-4">Impressora de rede</h3>
+                                <h3 class="text-sm font-semibold text-gray-800 mb-2">Impressora de rede (ESC/POS)</h3>
+                                <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1">
+                                    <p>Para impressoras 80mm na rede (ex.: modelo 80‑VI‑UL):</p>
+                                    <ul class="list-disc list-inside space-y-0.5">
+                                        <li>Modo: <strong>Rede IP</strong></li>
+                                        <li>IP: o do relatório da impressora (ex.: <code class="bg-amber-100 px-1 rounded">192.168.1.100</code>)</li>
+                                        <li>Porta: <code class="bg-amber-100 px-1 rounded">9100</code></li>
+                                        <li>Largura: <code class="bg-amber-100 px-1 rounded">48</code> caracteres (bobina 80mm)</li>
+                                    </ul>
+                                    <p>Salve e use <strong>Testar impressora de rede</strong>. Se der timeout, o servidor não está na mesma rede da impressora.</p>
+                                </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div class="md:col-span-2">
                                         <label for="network_host" class="block text-sm font-medium text-gray-700">IP da impressora</label>
-                                        <input type="text" name="network_host" id="network_host" value="{{ old('network_host', $printing['network_host']) }}" placeholder="192.168.0.100"
+                                        <input type="text" name="network_host" id="network_host" value="{{ old('network_host', $printing['network_host']) }}" placeholder="192.168.1.100"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                     </div>
                                     <div>
@@ -293,7 +307,7 @@
                                         <label for="paper_width" class="block text-sm font-medium text-gray-700">Largura do papel (caracteres)</label>
                                         <input type="number" name="paper_width" id="paper_width" min="24" max="48" value="{{ old('paper_width', $printing['paper_width']) }}"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                        <p class="mt-1 text-xs text-gray-500">Padrão: 32 para bobina 58mm, 48 para 80mm.</p>
+                                        <p class="mt-1 text-xs text-gray-500">32 ≈ bobina 58mm · 48 ≈ bobina 80mm (sua impressora).</p>
                                     </div>
                                 </div>
                             </div>

@@ -33,16 +33,24 @@ class OrderPrinterService
     public function printTestPage(): bool
     {
         if (! $this->isNetworkConfigured()) {
-            throw new RuntimeException('Impressora de rede não configurada.');
+            throw new RuntimeException(
+                'Impressora de rede não configurada. Em Configurações → Impressão, escolha o modo "Rede IP", informe o IP e salve.'
+            );
         }
 
-        $width = config('printing.paper_width', 32);
+        $width = (int) config('printing.paper_width', 32);
+        $host = (string) config('printing.network.host');
+        $port = (int) config('printing.network.port', 9100);
+
         $text = implode("\n", [
             str_repeat('=', $width),
             $this->center('TESTE DE IMPRESSAO', $width),
-            $this->center(config('printing.restaurant_name'), $width),
-            now()->format('d/m/Y H:i:s'),
+            $this->center((string) config('printing.restaurant_name'), $width),
+            $this->center("{$host}:{$port}", $width),
+            now()->timezone(config('app.timezone'))->format('d/m/Y H:i:s'),
             str_repeat('=', $width),
+            $this->center('Se voce leu isto, OK!', $width),
+            '',
         ]);
 
         return $this->sendToNetworkPrinter($text);
@@ -50,13 +58,13 @@ class OrderPrinterService
 
     public function buildReceiptText(Order $order, string $template = 'kitchen'): string
     {
-        $width = config('printing.paper_width', 32);
+        $width = (int) config('printing.paper_width', 32);
         $lines = [];
         $typeLabels = ['dine_in' => 'Salao', 'delivery' => 'Delivery', 'takeaway' => 'Retirada'];
         $hidePrices = $template === 'kitchen' && config('printing.kitchen_hide_prices', true);
 
         $lines[] = str_repeat('=', $width);
-        $lines[] = $this->center(config('printing.restaurant_name'), $width);
+        $lines[] = $this->center((string) config('printing.restaurant_name'), $width);
         $lines[] = $template === 'kitchen' ? $this->center('*** COZINHA ***', $width) : $this->center('*** CLIENTE ***', $width);
         $lines[] = str_repeat('=', $width);
         $lines[] = 'Pedido: '.$order->order_number;
@@ -129,11 +137,11 @@ class OrderPrinterService
 
     public function buildComandaBillText(array $bill): string
     {
-        $width = config('printing.paper_width', 32);
+        $width = (int) config('printing.paper_width', 32);
         $lines = [];
 
         $lines[] = str_repeat('=', $width);
-        $lines[] = $this->center(config('printing.restaurant_name'), $width);
+        $lines[] = $this->center((string) config('printing.restaurant_name'), $width);
         $lines[] = $this->center('*** CONTA FECHADA ***', $width);
         $lines[] = str_repeat('=', $width);
         $lines[] = 'Comanda: '.($bill['comanda_number'] ?? '-');
@@ -162,28 +170,61 @@ class OrderPrinterService
         return implode("\n", array_map([$this, 'sanitizeLine'], $lines));
     }
 
+    public function connectionFailureMessage(string $host, int $port, int $errno, string $errstr): string
+    {
+        $detail = trim($errstr) !== '' ? $errstr : "erro {$errno}";
+
+        return "Nao foi possivel conectar a impressora em {$host}:{$port} ({$detail}). "
+            .'O servidor do sistema precisa alcancar esse IP na rede local. '
+            .'Se o painel roda na nuvem/VPS e a impressora so existe no Wi-Fi do restaurante (ex.: 192.168.1.100), '
+            .'use o modo Navegador ou hospede o sistema na mesma rede da impressora.';
+    }
+
     private function sendToNetworkPrinter(string $text): bool
     {
-        $host = config('printing.network.host');
-        $port = config('printing.network.port', 9100);
-        $timeout = config('printing.network.timeout', 5);
+        $host = trim((string) config('printing.network.host'));
+        $port = (int) config('printing.network.port', 9100);
+        $timeout = (int) config('printing.network.timeout', 5);
+
+        if ($host === '') {
+            throw new RuntimeException('IP da impressora nao configurado.');
+        }
 
         $socket = @fsockopen($host, $port, $errno, $errstr, $timeout);
 
         if (! $socket) {
             Log::error('Printer connection failed', compact('host', 'port', 'errno', 'errstr'));
 
-            throw new RuntimeException("Nao foi possivel conectar a impressora em {$host}:{$port}");
+            throw new RuntimeException($this->connectionFailureMessage($host, $port, (int) $errno, (string) $errstr));
         }
 
-        $payload = "\x1B\x40"; // Initialize
-        $payload .= "\x1B\x61\x01"; // Center align for header section - we'll send line by line instead
-        $payload .= "\x1B\x61\x00"; // Left align
-        $payload .= $text."\n\n\n";
-        $payload .= "\x1D\x56\x00"; // Cut paper
+        stream_set_timeout($socket, max(1, $timeout));
 
-        fwrite($socket, $payload);
+        // ESC/POS raw payload for EPSON-compatible 80mm printers (e.g. 80-VI-UL).
+        $payload = "\x1B\x40"; // Initialize
+        $payload .= "\x1B\x74\x10"; // Code page 16 (WPC1252 / common on these units)
+        $payload .= "\x1B\x61\x00"; // Left align
+        $payload .= str_replace(["\r\n", "\r"], "\n", $text);
+        if (! str_ends_with($payload, "\n")) {
+            $payload .= "\n";
+        }
+        $payload .= "\n\n\n";
+        $payload .= "\x1D\x56\x41\x03"; // Partial cut with feed (GS V A n)
+
+        $written = @fwrite($socket, $payload);
+        $meta = stream_get_meta_data($socket);
         fclose($socket);
+
+        if ($written === false || $written === 0 || ($meta['timed_out'] ?? false)) {
+            Log::error('Printer write failed', [
+                'host' => $host,
+                'port' => $port,
+                'written' => $written,
+                'timed_out' => $meta['timed_out'] ?? false,
+            ]);
+
+            throw new RuntimeException("Conectou em {$host}:{$port}, mas falhou ao enviar os dados para impressao.");
+        }
 
         return true;
     }
