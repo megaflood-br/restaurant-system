@@ -94,9 +94,11 @@ class OpenAiWhatsAppAgentService
             'Nome do restaurante: '.$this->bot->restaurantDisplayName(),
             'Cliente: '.($pushName ?: 'Cliente'),
             'Horário de funcionamento: '.$this->bot->openingHoursLabel(),
+            'Status agora: '.json_encode($this->bot->openingHoursSnapshot(), JSON_UNESCAPED_UNICODE),
             'Agora no restaurante: '.now()->timezone(config('app.timezone'))->format('d/m/Y H:i').' ('.config('app.timezone').')',
             'Objetivo: ajudar a montar pedido (itens com tamanho P/M/G quando existir), entrega ou retirada, horário (agora ou agendado), pagamento e Pix.',
             'Fluxo: itens → acompanhamento (set_side: fritas/legumes) → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
+            'Se o restaurante estiver fechado (is_open=false), NÃO inicie pedido nem chame ferramentas de carrinho: informe que está fechado e diga quando abre (next_open_day + opening).',
             'Se o cliente já tiver endereço cadastrado, após set_extras a ferramenta devolve a confirmação. Se o cliente disser sim/mesmo, chame quote_delivery com "sim". Se disser não/outro, peça o endereço novo e depois quote_delivery.',
             'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h"), use set_schedule assim que possível.',
             'Nunca invente pratos, preços ou tamanhos (P/M/G).',
@@ -107,7 +109,7 @@ class OpenAiWhatsAppAgentService
             'NÃO liste o cardápio completo em texto (nomes e preços). A resposta ao pedido de cardápio é a imagem do dia.',
             'get_menu serve apenas para montar/confirmar itens do pedido, nunca para exibir o cardápio ao cliente.',
             'Após finalizar os itens (finalize_items), se houver opções de acompanhamento, chame set_side antes de set_extras.',
-            'Na primeira saudação, também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
+            'Na primeira saudação (somente se estiver aberto), também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
             'Seja breve, clara e amigável em português do Brasil.',
             'Estado atual da sessão: '.json_encode($session, JSON_UNESCAPED_UNICODE),
             'Endereço cadastrado do cliente: '.($this->bot->savedAddressForPhone($phone, $pushName) ?: 'nenhum'),
@@ -132,7 +134,7 @@ class OpenAiWhatsAppAgentService
     {
         return match ($name) {
             'get_menu' => ['ok' => true, 'menu' => $this->bot->menuSnapshot()],
-            'get_opening_hours' => ['ok' => true, 'hours' => $this->bot->openingHoursLabel()],
+            'get_opening_hours' => ['ok' => true, 'hours' => $this->bot->openingHoursSnapshot()],
             'send_menu_image' => $this->bot->toolSendMenuImage($phone, $pushName),
             'add_to_cart' => $this->bot->toolAddToCart($phone, $arguments, $pushName, $payload['user_text'] ?? null),
             'view_cart' => $this->bot->toolViewCart($phone),
@@ -158,7 +160,7 @@ class OpenAiWhatsAppAgentService
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'get_opening_hours',
-                'description' => 'Retorna horário de funcionamento.',
+                'description' => 'Retorna horário de funcionamento e se o restaurante está aberto agora (is_open, next_open_day).',
                 'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [

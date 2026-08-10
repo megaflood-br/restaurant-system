@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\WhatsAppMessage;
 use App\Support\OrderSchedule;
+use App\Support\OpeningHours;
 use App\Support\PaymentMethod;
 use App\Support\PhoneNumber;
 use App\Support\ProductSellable;
@@ -80,6 +81,12 @@ class ConversationalWhatsAppBotService
 
         if (($session['state'] ?? '') === 'pix_wait') {
             $this->handlePixWait($phone, $text, $customer, $payload);
+
+            return;
+        }
+
+        if ($this->shouldRefuseOrdersWhileClosed($session)) {
+            $this->replyClosed($phone, $customer);
 
             return;
         }
@@ -1140,10 +1147,50 @@ class ConversationalWhatsAppBotService
             return null;
         }
 
-        $opening = (string) (config('general.opening_time') ?: config('digital_menu.opening_time', '09:00'));
-        $closing = (string) (config('general.closing_time') ?: config('digital_menu.closing_time', '22:00'));
+        $status = OpeningHours::forWhatsApp();
 
-        return 'Funcionamos de *'.$this->formatTimeForWhatsApp($opening).'* às *'.$this->formatTimeForWhatsApp($closing)."*.\n\nMe diga o que deseja pedir (ex.: *strogonoff P*) ou digite *pronto* quando terminar.";
+        if (! $status['is_open']) {
+            return $this->closedMessageText();
+        }
+
+        return 'Estamos *abertos* agora. Funcionamos de *'.$status['opening_label'].'* às *'.$status['closing_label']."*.\n\nMe diga o que deseja pedir (ex.: *strogonoff P*) ou digite *pronto* quando terminar.";
+    }
+
+    private function shouldRefuseOrdersWhileClosed(array $session): bool
+    {
+        if (OpeningHours::isOpenForWhatsApp()) {
+            return false;
+        }
+
+        $state = (string) ($session['state'] ?? '');
+
+        if (in_array($state, ['side', 'extras', 'address', 'schedule', 'payment', 'pix_wait'], true)) {
+            return false;
+        }
+
+        if ($state === 'ordering' && ($session['cart'] ?? []) !== []) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function replyClosed(string $phone, ?Customer $customer): void
+    {
+        $this->clearSession($phone);
+        WhatsAppBotPause::forgetAiHistory($phone);
+        $this->replyText($phone, $this->closedMessageText(), $customer);
+    }
+
+    private function closedMessageText(): string
+    {
+        $status = OpeningHours::forWhatsApp();
+
+        return $this->render($this->message('closed_message'), [
+            'opening' => $status['opening_label'],
+            'closing' => $status['closing_label'],
+            'next_open_day' => $status['next_open_day_label'],
+        ]);
     }
 
     private function formatTimeForWhatsApp(string $time): string
@@ -1422,10 +1469,25 @@ class ConversationalWhatsAppBotService
 
     public function openingHoursLabel(): string
     {
-        $opening = (string) (config('general.opening_time') ?: config('digital_menu.opening_time', '09:00'));
-        $closing = (string) (config('general.closing_time') ?: config('digital_menu.closing_time', '22:00'));
+        $status = OpeningHours::forWhatsApp();
 
-        return $this->formatTimeForWhatsApp($opening).' às '.$this->formatTimeForWhatsApp($closing);
+        return $status['opening_label'].' às '.$status['closing_label'];
+    }
+
+    /** @return array<string, mixed> */
+    public function openingHoursSnapshot(): array
+    {
+        $status = OpeningHours::forWhatsApp();
+
+        return [
+            'is_open' => $status['is_open'],
+            'opening' => $status['opening_label'],
+            'closing' => $status['closing_label'],
+            'next_open_day' => $status['next_open_day_label'],
+            'label' => $status['label'],
+            'detail' => $status['detail'],
+            'hours_label' => $status['opening_label'].' às '.$status['closing_label'],
+        ];
     }
 
     /** @return array<string, mixed> */

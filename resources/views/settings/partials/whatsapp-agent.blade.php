@@ -154,6 +154,7 @@
 
     @foreach ([
         'welcome_message' => '1. Boas-vindas',
+        'closed_message' => '1c. Fora do horário (fechado)',
         'menu_followup_message' => '1b. Após enviar cardápio',
         'human_handoff_message' => 'Atendente humano (cliente pediu)',
         'bot_resumed_message' => 'Bot reativado (cliente digitou bot)',
@@ -169,12 +170,15 @@
         <div>
             <label for="{{ $field }}" class="block text-sm font-medium text-gray-700">{{ $label }}</label>
             <textarea name="{{ $field }}" id="{{ $field }}" rows="4"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old($field, $whatsappAgent[$field]) }}</textarea>
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old($field, $whatsappAgent[$field] ?? '') }}</textarea>
             @if ($field === 'side_message')
                 <p class="mt-1 text-xs text-gray-500">Placeholder: <code class="bg-gray-100 px-1 rounded">{options}</code>. Deixe as opções abaixo vazias para pular esta etapa.</p>
             @endif
             @if ($field === 'address_confirm_message')
                 <p class="mt-1 text-xs text-gray-500">Usado quando o cliente já tem endereço. Placeholder: <code class="bg-gray-100 px-1 rounded">{address}</code>.</p>
+            @endif
+            @if ($field === 'closed_message')
+                <p class="mt-1 text-xs text-gray-500">Placeholders: <code class="bg-gray-100 px-1 rounded">{opening}</code>, <code class="bg-gray-100 px-1 rounded">{closing}</code>, <code class="bg-gray-100 px-1 rounded">{next_open_day}</code> (hoje/amanhã), <code class="bg-gray-100 px-1 rounded">{restaurant_name}</code>.</p>
             @endif
         </div>
     @endforeach

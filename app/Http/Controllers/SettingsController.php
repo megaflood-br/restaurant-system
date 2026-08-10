@@ -285,6 +285,7 @@ class SettingsController extends Controller
         $rules = [
             'restaurant_name' => ['nullable', 'string', 'max:255'],
             'welcome_message' => ['nullable', 'string', 'max:4000'],
+            'closed_message' => ['nullable', 'string', 'max:4000'],
             'menu_followup_message' => ['nullable', 'string', 'max:2000'],
             'extras_message' => ['nullable', 'string', 'max:2000'],
             'side_options' => ['nullable', 'string', 'max:2000'],
@@ -331,6 +332,7 @@ class SettingsController extends Controller
             'forward_to_n8n' => $request->boolean('forward_to_n8n'),
             'restaurant_name' => $validated['restaurant_name'] ?? '',
             'welcome_message' => $validated['welcome_message'] ?? '',
+            'closed_message' => $validated['closed_message'] ?? '',
             'menu_followup_message' => $validated['menu_followup_message'] ?? '',
             'extras_message' => $validated['extras_message'] ?? '',
             'side_options' => json_encode(SideOptions::normalize($validated['side_options'] ?? '')),
