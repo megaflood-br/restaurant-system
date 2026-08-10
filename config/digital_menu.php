@@ -17,5 +17,5 @@ return [
     'cover_image' => null,
     'logo_image' => null,
     'public_domain' => env('DIGITAL_MENU_PUBLIC_DOMAIN'),
-    'theme_color' => env('DIGITAL_MENU_THEME_COLOR', 'orange'),
+    'theme_color' => env('DIGITAL_MENU_THEME_COLOR', '#f97316'),
 ];

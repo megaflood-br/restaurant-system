@@ -103,21 +103,43 @@
                                 </div>
                             </div>
 
-                            <div>
+                            @php($themeColor = \App\Support\MenuTheme::normalize(old('theme_color', $digitalMenu['theme_color'] ?? \App\Support\MenuTheme::DEFAULT)))
+                            <div x-data="{
+                                color: @js($themeColor),
+                                syncFromPicker() { this.color = this.$refs.picker.value; },
+                                syncFromText() {
+                                    let v = this.color.trim();
+                                    if (!v.startsWith('#')) v = '#' + v;
+                                    if (/^#[0-9a-fA-F]{6}$/.test(v) || /^#[0-9a-fA-F]{3}$/.test(v)) {
+                                        this.color = v.length === 4
+                                            ? '#' + v[1]+v[1] + v[2]+v[2] + v[3]+v[3]
+                                            : v.toLowerCase();
+                                        this.$refs.picker.value = this.color;
+                                    }
+                                }
+                            }">
                                 <label class="block text-sm font-medium text-gray-700 mb-3">Cor do tema</label>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                    @foreach (\App\Support\MenuTheme::labels() as $key => $label)
-                                        @php($palette = \App\Support\MenuTheme::palette($key))
-                                        <label class="relative flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition
-                                            {{ old('theme_color', $digitalMenu['theme_color'] ?? 'orange') === $key ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-gray-300' }}">
-                                            <input type="radio" name="theme_color" value="{{ $key }}" class="sr-only"
-                                                @checked(old('theme_color', $digitalMenu['theme_color'] ?? 'orange') === $key)>
-                                            <span class="h-8 w-8 rounded-full shrink-0 border border-white shadow"
-                                                style="background: linear-gradient(135deg, {{ $palette['400'] }}, {{ $palette['600'] }});"></span>
-                                            <span class="text-sm font-medium text-gray-800">{{ $label }}</span>
-                                        </label>
-                                    @endforeach
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <input type="color" x-ref="picker" name="theme_color" x-model="color"
+                                        @input="syncFromPicker()"
+                                        class="h-14 w-14 rounded-xl border border-gray-300 cursor-pointer p-1 bg-white shadow-sm">
+                                    <div class="flex-1 min-w-[180px]">
+                                        <label for="theme_color_hex" class="block text-xs text-gray-500 mb-1">Código hexadecimal</label>
+                                        <input type="text" id="theme_color_hex" x-model="color"
+                                            @input="syncFromText()" @change="syncFromText()" @blur="syncFromText()"
+                                            pattern="^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-sm uppercase">
+                                    </div>
+                                    <div class="rounded-xl border border-gray-200 p-3 min-w-[140px]">
+                                        <p class="text-xs text-gray-500 mb-2">Prévia</p>
+                                        <div class="h-8 rounded-lg shadow-inner" :style="`background: linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, black))`"></div>
+                                        <button type="button" class="mt-2 w-full rounded-lg text-white text-xs font-semibold py-2 transition"
+                                            :style="`background-color: ${color}`">
+                                            Botão exemplo
+                                        </button>
+                                    </div>
                                 </div>
+                                <p class="mt-2 text-xs text-gray-500">Escolha qualquer cor — botões, preços e destaques do cardápio seguirão essa paleta.</p>
                             </div>
 
                             <div>

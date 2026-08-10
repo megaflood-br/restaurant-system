@@ -16,7 +16,7 @@ return new class extends Migration
             DB::table('settings')->insert([
                 'group' => 'digital_menu',
                 'key' => 'theme_color',
-                'value' => 'orange',
+                'value' => '#f97316',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

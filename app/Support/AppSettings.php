@@ -161,7 +161,7 @@ class AppSettings
                 'cover_image' => null,
                 'logo_image' => null,
                 'public_domain' => config('digital_menu.public_domain', ''),
-                'theme_color' => config('digital_menu.theme_color', 'orange'),
+                'theme_color' => config('digital_menu.theme_color', '#f97316'),
             ],
             'whatsapp_agent' => [
                 'enabled' => config('whatsapp_agent.enabled', false),
@@ -264,7 +264,7 @@ class AppSettings
             'public_domain' => config('digital_menu.public_domain'),
             'public_url' => DigitalMenu::publicUrl('/'),
             'theme_color' => config('digital_menu.theme_color'),
-            'theme_label' => MenuTheme::labels()[MenuTheme::normalize(config('digital_menu.theme_color'))] ?? 'Laranja',
+            'theme_label' => strtoupper(config('digital_menu.theme_color')),
         ];
     }
 

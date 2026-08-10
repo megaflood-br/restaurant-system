@@ -18,7 +18,7 @@ class DigitalMenu
             'is_open' => $status['is_open'],
             'status_label' => $status['label'],
             'status_detail' => $status['detail'],
-            'theme_color' => $data['theme_color'] ?? config('digital_menu.theme_color', 'orange'),
+            'theme_color' => $data['theme_color'] ?? config('digital_menu.theme_color', '#f97316'),
             'theme_palette' => MenuTheme::palette($data['theme_color'] ?? null),
         ]);
     }

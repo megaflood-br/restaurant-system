@@ -111,7 +111,7 @@ class SettingsController extends Controller
             'loyalty_title' => ['nullable', 'string', 'max:255'],
             'loyalty_text' => ['nullable', 'string', 'max:2000'],
             'public_domain' => ['nullable', 'string', 'max:255'],
-            'theme_color' => ['required', 'in:'.implode(',', array_keys(\App\Support\MenuTheme::labels()))],
+            'theme_color' => ['required', 'regex:/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/'],
             'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'logo_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_cover' => ['sometimes', 'boolean'],

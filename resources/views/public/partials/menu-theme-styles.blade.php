@@ -1,4 +1,4 @@
-@php($palette = \App\Support\MenuTheme::palette(config('digital_menu.theme_color', 'orange')))
+@php($palette = \App\Support\MenuTheme::palette(config('digital_menu.theme_color')))
 <style>
     :root {
         --menu-400: {{ $palette['400'] }};
