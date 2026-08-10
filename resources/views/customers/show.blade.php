@@ -12,6 +12,14 @@
                 <a href="{{ route('customers.edit', $customer) }}" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700">
                     Editar
                 </a>
+                <form method="POST" action="{{ route('customers.destroy', $customer) }}"
+                    onsubmit="return confirm('Excluir o cliente {{ $customer->name }}? Pedidos vinculados serão mantidos sem o vínculo do cliente.');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700">
+                        Excluir
+                    </button>
+                </form>
             </div>
         </div>
     </x-slot>

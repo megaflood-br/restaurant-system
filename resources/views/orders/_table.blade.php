@@ -38,9 +38,15 @@
                 <td class="px-4 py-3 text-sm text-gray-700">{{ $order->user?->name ?? '—' }}</td>
                 <td class="px-4 py-3 text-sm font-medium text-gray-900">R$ {{ number_format($order->total, 2, ',', '.') }}</td>
                 <td class="px-4 py-3"><x-order-status-badge :status="$order->status" /></td>
-                <td class="px-4 py-3 text-right space-x-2">
+                <td class="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                     <a href="{{ route('orders.show', $order) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Detalhes</a>
                     <a href="{{ route('orders.print', $order) }}" target="_blank" class="text-gray-600 hover:text-gray-800 text-sm">Imprimir</a>
+                    <form method="POST" action="{{ route('orders.destroy', $order) }}" class="inline"
+                        onsubmit="return confirm('Excluir o pedido {{ $order->order_number }}? Esta ação não pode ser desfeita.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="text-red-600 hover:text-red-800 text-sm">Excluir</button>
+                    </form>
                 </td>
             </tr>
         @empty
