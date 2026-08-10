@@ -144,9 +144,16 @@ class ConversationalWhatsAppBotService
                 return;
             }
 
-            $this->setSession($phone, array_merge($session, ['state' => 'ordering']));
+            $this->setSession($phone, array_merge($session, [
+                'state' => 'ordering',
+                'pending_variant' => null,
+            ]));
             $this->askSideOrExtras($phone, $customer);
 
+            return;
+        }
+
+        if ($this->completePendingVariantFromText($phone, $text, $customer)) {
             return;
         }
 
@@ -169,9 +176,17 @@ class ConversationalWhatsAppBotService
         foreach ($parsed as $item) {
             if ($item['needs_variant'] ?? false) {
                 $sizes = $item['available_sizes'] ?? 'P, M ou G';
+                $this->setSession($phone, array_merge($session, [
+                    'state' => 'ordering',
+                    'pending_variant' => [
+                        'product_id' => $item['product_id'],
+                        'quantity' => $item['quantity'],
+                        'product_name' => $item['product_name'] ?? $item['name'],
+                    ],
+                ]));
                 $this->replyText(
                     $phone,
-                    "O *{$item['product_name']}* tem tamanhos {$sizes}. Qual você prefere? Ex.: *{$item['product_name']} P*",
+                    "O *{$item['product_name']}* tem tamanhos {$sizes}. Qual você prefere? Responda *P*, *M* ou *G*.",
                     $customer
                 );
 
@@ -208,6 +223,7 @@ class ConversationalWhatsAppBotService
         $this->setSession($phone, [
             'state' => 'ordering',
             'cart' => $cart,
+            'pending_variant' => null,
         ]);
 
         $addedLines = collect($parsed)
@@ -217,6 +233,80 @@ class ConversationalWhatsAppBotService
         $this->replyText($phone, $this->render($this->message('order_added_message'), [
             'items' => $addedLines.' 🍽️',
         ]), $customer);
+    }
+
+    private function completePendingVariantFromText(string $phone, string $text, ?Customer $customer): bool
+    {
+        $session = $this->getSession($phone);
+        $pending = $session['pending_variant'] ?? null;
+
+        if (! is_array($pending) || empty($pending['product_id'])) {
+            return false;
+        }
+
+        $size = $this->parseSizeToken($text) ?? $this->extractVariantHint(mb_strtolower(trim($text)))[1];
+
+        if ($size === null) {
+            return false;
+        }
+
+        $product = Product::query()
+            ->with(['variants' => fn ($query) => $query->where('is_available', true)->orderBy('sort_order')])
+            ->find($pending['product_id']);
+
+        if (! $product) {
+            $this->setSession($phone, array_merge($session, ['pending_variant' => null]));
+
+            return false;
+        }
+
+        $variant = $this->resolveVariant($product, $size);
+
+        if (! $variant) {
+            $this->replyText(
+                $phone,
+                "Tamanho inválido para *{$product->name}*. Escolha {$this->variantSizeList($product)}.",
+                $customer
+            );
+
+            return true;
+        }
+
+        $quantity = max(1, (int) ($pending['quantity'] ?? 1));
+        $cart = $session['cart'] ?? [];
+        $cartKey = $product->id.'|'.$variant->id;
+        $found = false;
+
+        foreach ($cart as &$cartItem) {
+            $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
+
+            if ($existingKey === $cartKey) {
+                $cartItem['quantity'] += $quantity;
+                $found = true;
+                break;
+            }
+        }
+        unset($cartItem);
+
+        if (! $found) {
+            $cart[] = [
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => $quantity,
+            ];
+        }
+
+        $this->setSession($phone, [
+            'state' => 'ordering',
+            'cart' => $cart,
+            'pending_variant' => null,
+        ]);
+
+        $this->replyText($phone, $this->render($this->message('order_added_message'), [
+            'items' => "{$quantity}x {$product->name} ({$variant->label}) 🍽️",
+        ]), $customer);
+
+        return true;
     }
 
     private function askSideOrExtras(string $phone, ?Customer $customer): void
@@ -855,11 +945,21 @@ class ConversationalWhatsAppBotService
     /** @return array{0: string, 1: ?string} */
     private function extractVariantHint(string $query): array
     {
+        $query = trim($query);
+
+        if ($query === '') {
+            return ['', null];
+        }
+
+        if (($standalone = $this->parseSizeToken($query)) !== null) {
+            return ['', $standalone];
+        }
+
         $patterns = [
-            '/\s+(pequeno|pequena|p)\s*$/iu' => 'P',
-            '/\s+(m[ée]dio|m[ée]dia|m)\s*$/iu' => 'M',
-            '/\s+(grande|g)\s*$/iu' => 'G',
-            '/\s+tamanho\s+(p|m|g|pequeno|medio|médio|grande)\s*$/iu' => null,
+            '/(?:^|\s)(pequeno|pequena|p)\s*$/iu' => 'P',
+            '/(?:^|\s)(m[ée]dio|m[ée]dia|m)\s*$/iu' => 'M',
+            '/(?:^|\s)(grande|g)\s*$/iu' => 'G',
+            '/(?:^|\s)tamanho\s+(p|m|g|pequeno|pequena|medio|média|media|médio|grande)\s*$/iu' => null,
         ];
 
         foreach ($patterns as $pattern => $defaultLabel) {
@@ -869,8 +969,8 @@ class ConversationalWhatsAppBotService
 
             $matched = mb_strtolower(trim($matches[count($matches) - 1]));
             $label = $defaultLabel ?? match ($matched) {
-                'p', 'pequeno' => 'P',
-                'm', 'medio', 'médio' => 'M',
+                'p', 'pequeno', 'pequena' => 'P',
+                'm', 'medio', 'médio', 'media', 'média' => 'M',
                 'g', 'grande' => 'G',
                 default => mb_strtoupper($matched),
             };
@@ -881,6 +981,37 @@ class ConversationalWhatsAppBotService
         }
 
         return [$query, null];
+    }
+
+    private function parseSizeToken(string $text): ?string
+    {
+        $normalized = mb_strtolower(trim($text));
+
+        return match (true) {
+            (bool) preg_match('/^(p|pequeno|pequena)$/u', $normalized) => 'P',
+            (bool) preg_match('/^(m|medio|m[ée]dio|media|m[ée]dia)$/u', $normalized) => 'M',
+            (bool) preg_match('/^(g|grande)$/u', $normalized) => 'G',
+            default => null,
+        };
+    }
+
+    private function messageMentionsVariant(?string $text, string $label): bool
+    {
+        $text = mb_strtolower(trim((string) $text));
+        $label = mb_strtoupper(trim($label));
+
+        if ($text === '' || $label === '') {
+            return false;
+        }
+
+        $patterns = match ($label) {
+            'P' => '/(?:^|[^a-z0-9])(p|pequeno|pequena)(?:[^a-z0-9]|$)/u',
+            'M' => '/(?:^|[^a-z0-9])(m|medio|m[ée]dio|media|m[ée]dia)(?:[^a-z0-9]|$)/u',
+            'G' => '/(?:^|[^a-z0-9])(g|grande)(?:[^a-z0-9]|$)/u',
+            default => '/(?:^|[^a-z0-9])'.preg_quote(mb_strtolower($label), '/').'(?:[^a-z0-9]|$)/u',
+        };
+
+        return preg_match($patterns, $text) === 1;
     }
 
     private function resolveVariant(Product $product, ?string $hint): ?ProductVariant
@@ -1358,12 +1489,25 @@ class ConversationalWhatsAppBotService
 
     /** @param  array<string, mixed>  $arguments */
     /** @return array<string, mixed> */
-    public function toolAddToCart(string $phone, array $arguments, ?string $pushName): array
+    public function toolAddToCart(string $phone, array $arguments, ?string $pushName, ?string $userText = null): array
     {
         $session = $this->getSession($phone);
         $cart = $session['cart'] ?? [];
         $added = [];
         $errors = [];
+        $needsVariant = [];
+        $userText = trim((string) $userText);
+
+        if ($userText !== '' && $this->completePendingVariantFromText($phone, $userText, $this->resolveCustomer($phone, $pushName))) {
+            $session = $this->getSession($phone);
+
+            return [
+                'ok' => true,
+                'added' => ['tamanho confirmado'],
+                'errors' => [],
+                'cart' => $this->simplifiedCart($session['cart'] ?? []),
+            ];
+        }
 
         foreach ($arguments['items'] ?? [] as $item) {
             if (! is_array($item)) {
@@ -1378,11 +1522,36 @@ class ConversationalWhatsAppBotService
                 continue;
             }
 
-            $variantLabel = isset($item['variant_label']) ? mb_strtoupper(trim((string) $item['variant_label'])) : null;
-            $variant = $this->resolveVariant($product, $variantLabel);
+            $openaiLabel = isset($item['variant_label']) ? mb_strtoupper(trim((string) $item['variant_label'])) : null;
+            [, $hintFromName] = $this->extractVariantHint(mb_strtolower(trim((string) ($item['product_name'] ?? ''))));
+            [, $hintFromUser] = $this->extractVariantHint(mb_strtolower($userText));
+            $sizeOnly = $this->parseSizeToken($userText);
+
+            $hint = $hintFromName ?? $hintFromUser ?? $sizeOnly;
+
+            if ($hint === null && $openaiLabel && $this->messageMentionsVariant($userText, $openaiLabel)) {
+                $hint = $openaiLabel;
+            }
+
+            $variant = $this->resolveVariant($product, $hint);
 
             if ($product->hasVariants() && ! $variant) {
-                $errors[] = "Informe o tamanho (P, M ou G) para {$product->name}.";
+                $sizes = $this->variantSizeList($product);
+                $ask = "O *{$product->name}* tem tamanhos {$sizes}. Qual você prefere? Responda *P*, *M* ou *G*.";
+                $errors[] = $ask;
+                $needsVariant[] = [
+                    'product_name' => $product->name,
+                    'available_sizes' => $sizes,
+                    'message' => $ask,
+                ];
+                $this->setSession($phone, array_merge($this->getSession($phone), [
+                    'state' => 'ordering',
+                    'pending_variant' => [
+                        'product_id' => $product->id,
+                        'quantity' => max(1, (int) ($item['quantity'] ?? 1)),
+                        'product_name' => $product->name,
+                    ],
+                ]));
 
                 continue;
             }
@@ -1414,15 +1583,20 @@ class ConversationalWhatsAppBotService
             $added[] = "{$quantity}x {$name}";
         }
 
-        $this->setSession($phone, array_merge($session, [
+        $this->setSession($phone, array_merge($this->getSession($phone), [
             'state' => 'ordering',
             'cart' => $cart,
+            'pending_variant' => $needsVariant !== []
+                ? ($this->getSession($phone)['pending_variant'] ?? null)
+                : null,
         ]));
 
         return [
             'ok' => $errors === [],
             'added' => $added,
             'errors' => $errors,
+            'needs_variant' => $needsVariant,
+            'ask_customer' => $needsVariant[0]['message'] ?? null,
             'cart' => $this->simplifiedCart($cart),
         ];
     }

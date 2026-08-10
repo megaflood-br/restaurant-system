@@ -60,7 +60,9 @@ class OpenAiWhatsAppAgentService
                     $arguments = json_decode((string) data_get($toolCall, 'function.arguments', '{}'), true);
                     $arguments = is_array($arguments) ? $arguments : [];
 
-                    $result = $this->executeTool($phone, $pushName, $payload, $name, $arguments);
+                    $result = $this->executeTool($phone, $pushName, array_merge($payload, [
+                        'user_text' => $text,
+                    ]), $name, $arguments);
 
                     $messages[] = [
                         'role' => 'tool',
@@ -97,6 +99,8 @@ class OpenAiWhatsAppAgentService
             'Fluxo: itens → acompanhamento (set_side: fritas/legumes) → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
             'Se o cliente já tiver endereço cadastrado, após set_extras a ferramenta devolve a confirmação. Se o cliente disser sim/mesmo, chame quote_delivery com "sim". Se disser não/outro, peça o endereço novo e depois quote_delivery.',
             'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h"), use set_schedule assim que possível.',
+            'Nunca invente pratos, preços ou tamanhos (P/M/G).',
+            'Se o produto tiver variações e o cliente NÃO disse o tamanho, NÃO chame add_to_cart com P/M/G inventado: pergunte o tamanho e só então adicione.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
             'Nunca invente pratos ou preços — consulte get_menu.',
             'Quando o cliente pedir cardápio/menu (ex.: "cardápio", "cardápio de hoje", "manda o menu"), chame OBRIGATORIAMENTE send_menu_image.',
@@ -130,7 +134,7 @@ class OpenAiWhatsAppAgentService
             'get_menu' => ['ok' => true, 'menu' => $this->bot->menuSnapshot()],
             'get_opening_hours' => ['ok' => true, 'hours' => $this->bot->openingHoursLabel()],
             'send_menu_image' => $this->bot->toolSendMenuImage($phone, $pushName),
-            'add_to_cart' => $this->bot->toolAddToCart($phone, $arguments, $pushName),
+            'add_to_cart' => $this->bot->toolAddToCart($phone, $arguments, $pushName, $payload['user_text'] ?? null),
             'view_cart' => $this->bot->toolViewCart($phone),
             'finalize_items' => $this->bot->toolFinalizeItems($phone, $pushName),
             'set_side' => $this->bot->toolSetSide($phone, (string) ($arguments['side'] ?? ''), $pushName),
@@ -164,7 +168,7 @@ class OpenAiWhatsAppAgentService
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'add_to_cart',
-                'description' => 'Adiciona itens ao pedido.',
+                'description' => 'Adiciona itens ao pedido. Se o produto tiver tamanhos P/M/G e o cliente não informou o tamanho, NÃO invente: omita variant_label (a ferramenta pedirá o tamanho).',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
@@ -174,7 +178,7 @@ class OpenAiWhatsAppAgentService
                                 'type' => 'object',
                                 'properties' => [
                                     'product_name' => ['type' => 'string'],
-                                    'variant_label' => ['type' => 'string', 'description' => 'P, M ou G quando o produto tiver tamanhos'],
+                                    'variant_label' => ['type' => 'string', 'description' => 'Somente se o cliente pediu explicitamente P, M ou G'],
                                     'quantity' => ['type' => 'integer'],
                                 ],
                                 'required' => ['product_name', 'quantity'],
