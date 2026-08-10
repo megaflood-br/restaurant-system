@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\WhatsAppMessage;
 use App\Support\PaymentMethod;
 use App\Support\PhoneNumber;
+use App\Support\ProductSellable;
+use App\Support\ProductVariants;
 use App\Support\WeeklyMenuImages;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -105,18 +107,42 @@ class ConversationalWhatsAppBotService
         $parsed = $this->parseProductsFromText($text);
 
         if ($parsed === []) {
-            $this->replyText($phone, 'Não encontrei esse item no cardápio. Confira a imagem do cardápio ou me diga o nome do prato. Quando terminar, digite *pronto*.', $customer);
+            $faqAnswer = $this->tryAnswerFaq($text);
+
+            if ($faqAnswer !== null) {
+                $this->replyText($phone, $faqAnswer, $customer);
+
+                return;
+            }
+
+            $this->replyText($phone, 'Não encontrei esse item no cardápio. Confira a imagem do cardápio ou me diga o nome do prato (ex.: *strogonoff P*). Quando terminar, digite *pronto*.', $customer);
 
             return;
+        }
+
+        foreach ($parsed as $item) {
+            if ($item['needs_variant'] ?? false) {
+                $sizes = $item['available_sizes'] ?? 'P, M ou G';
+                $this->replyText(
+                    $phone,
+                    "O *{$item['product_name']}* tem tamanhos {$sizes}. Qual você prefere? Ex.: *{$item['product_name']} P*",
+                    $customer
+                );
+
+                return;
+            }
         }
 
         $cart = $session['cart'] ?? [];
 
         foreach ($parsed as $item) {
+            $cartKey = $item['product_id'].'|'.($item['variant_id'] ?? 0);
             $found = false;
 
             foreach ($cart as &$cartItem) {
-                if ($cartItem['product_id'] === $item['product_id']) {
+                $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
+
+                if ($existingKey === $cartKey) {
                     $cartItem['quantity'] += $item['quantity'];
                     $found = true;
                     break;
@@ -127,6 +153,7 @@ class ConversationalWhatsAppBotService
             if (! $found) {
                 $cart[] = [
                     'product_id' => $item['product_id'],
+                    'variant_id' => $item['variant_id'] ?? null,
                     'quantity' => $item['quantity'],
                 ];
             }
@@ -297,17 +324,14 @@ class ConversationalWhatsAppBotService
 
                 foreach ($cart as $item) {
                     $product = Product::findOrFail($item['product_id']);
-                    $subtotal = $product->price * $item['quantity'];
+                    $attrs = ProductSellable::orderItemAttributes(
+                        $product,
+                        (int) $item['quantity'],
+                        isset($item['variant_id']) ? (int) $item['variant_id'] : null,
+                    );
 
-                    $order->items()->create([
-                        'product_id' => $product->id,
-                        'product_name' => $product->name,
-                        'quantity' => $item['quantity'],
-                        'unit_price' => $product->price,
-                        'subtotal' => $subtotal,
-                    ]);
-
-                    $itemsTotal += $subtotal;
+                    $order->items()->create($attrs);
+                    $itemsTotal += (float) $attrs['subtotal'];
                 }
 
                 $order->update(['total' => $itemsTotal + $deliveryFee]);
@@ -410,7 +434,7 @@ class ConversationalWhatsAppBotService
         ]), $customer, $order);
     }
 
-    /** @return array<int, array{product_id: int, quantity: int, name: string}> */
+    /** @return array<int, array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string}> */
     private function parseProductsFromText(string $text): array
     {
         $text = trim($text);
@@ -429,7 +453,6 @@ class ConversationalWhatsAppBotService
                 continue;
             }
 
-            $segment = preg_replace('/^(me\s+(vê|ve|manda|quero|gostaria\s+de)\s+)/iu', '', $segment) ?? $segment;
             $quantity = 1;
             $productQuery = $segment;
 
@@ -438,14 +461,10 @@ class ConversationalWhatsAppBotService
                 $productQuery = trim($matches[2]);
             }
 
-            $product = $this->matchProduct($productQuery);
+            $parsedItem = $this->parseProductSegment($productQuery, $quantity);
 
-            if ($product) {
-                $items[] = [
-                    'product_id' => $product->id,
-                    'quantity' => $quantity,
-                    'name' => $product->name,
-                ];
+            if ($parsedItem !== null) {
+                $items[] = $parsedItem;
             }
         }
 
@@ -453,58 +472,245 @@ class ConversationalWhatsAppBotService
             return $items;
         }
 
-        foreach ($this->menuProducts()->sortByDesc(fn (Product $product) => mb_strlen($product->name)) as $product) {
-            if (mb_stripos($text, $product->name) === false) {
-                continue;
-            }
+        $parsedItem = $this->parseProductSegment($text, 1);
 
-            $quantity = 1;
-            $pattern = '/(\d+)\s*[xX×]?\s*'.preg_quote($product->name, '/').'/iu';
+        return $parsedItem !== null ? [$parsedItem] : [];
+    }
 
-            if (preg_match($pattern, $text, $matches)) {
-                $quantity = max(1, (int) $matches[1]);
-            }
+    /** @return array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string}|null */
+    private function parseProductSegment(string $segment, int $quantity): ?array
+    {
+        $segment = $this->normalizeOrderSegment($segment);
 
-            $items[] = [
+        if ($segment === '') {
+            return null;
+        }
+
+        [$productQuery, $variantHint] = $this->extractVariantHint($segment);
+        $product = $this->matchProduct($productQuery !== '' ? $productQuery : $segment);
+
+        if (! $product) {
+            return null;
+        }
+
+        $variant = $this->resolveVariant($product, $variantHint);
+
+        if ($product->hasVariants() && ! $variant) {
+            return [
                 'product_id' => $product->id,
+                'variant_id' => null,
                 'quantity' => $quantity,
                 'name' => $product->name,
+                'needs_variant' => true,
+                'product_name' => $product->name,
+                'available_sizes' => $this->variantSizeList($product),
             ];
         }
 
-        return $items;
+        $name = $variant
+            ? $product->name.' ('.$variant->label.')'
+            : $product->name;
+
+        return [
+            'product_id' => $product->id,
+            'variant_id' => $variant?->id,
+            'quantity' => $quantity,
+            'name' => $name,
+        ];
+    }
+
+    private function normalizeOrderSegment(string $segment): string
+    {
+        $segment = mb_strtolower(trim($segment));
+
+        $patterns = [
+            '/^(me\s+)?(vê|ve|vei|manda|quero|gostaria\s+de|preciso\s+de|pode\s+ser|vou\s+querer|vou\s+de|desejo)\s+/iu',
+            '/^(um|uma|uns|umas)\s+/iu',
+            '/^(de|do|da|dos|das)\s+/iu',
+        ];
+
+        do {
+            $previous = $segment;
+
+            foreach ($patterns as $pattern) {
+                $segment = preg_replace($pattern, '', $segment) ?? $segment;
+                $segment = trim($segment);
+            }
+        } while ($segment !== $previous && $segment !== '');
+
+        return trim($segment);
+    }
+
+    /** @return array{0: string, 1: ?string} */
+    private function extractVariantHint(string $query): array
+    {
+        $patterns = [
+            '/\s+(pequeno|pequena|p)\s*$/iu' => 'P',
+            '/\s+(m[ée]dio|m[ée]dia|m)\s*$/iu' => 'M',
+            '/\s+(grande|g)\s*$/iu' => 'G',
+            '/\s+tamanho\s+(p|m|g|pequeno|medio|médio|grande)\s*$/iu' => null,
+        ];
+
+        foreach ($patterns as $pattern => $defaultLabel) {
+            if (! preg_match($pattern, $query, $matches)) {
+                continue;
+            }
+
+            $matched = mb_strtolower(trim($matches[count($matches) - 1]));
+            $label = $defaultLabel ?? match ($matched) {
+                'p', 'pequeno' => 'P',
+                'm', 'medio', 'médio' => 'M',
+                'g', 'grande' => 'G',
+                default => mb_strtoupper($matched),
+            };
+
+            $query = trim(preg_replace($pattern, '', $query) ?? $query);
+
+            return [$query, $label];
+        }
+
+        return [$query, null];
+    }
+
+    private function resolveVariant(Product $product, ?string $hint): ?\App\Models\ProductVariant
+    {
+        if (! $product->hasVariants() || ! $hint) {
+            return null;
+        }
+
+        $product->loadMissing(['variants' => fn ($query) => $query->where('is_available', true)->orderBy('sort_order')]);
+        $hint = mb_strtoupper(trim($hint));
+
+        return $product->variants->first(function ($variant) use ($hint) {
+            $label = mb_strtoupper(trim($variant->label));
+
+            return $label === $hint || str_starts_with($label, $hint);
+        });
+    }
+
+    private function variantSizeList(Product $product): string
+    {
+        $product->loadMissing(['variants' => fn ($query) => $query->where('is_available', true)->orderBy('sort_order')]);
+
+        $labels = $product->variants->pluck('label')->filter()->all();
+
+        if ($labels === []) {
+            return 'P, M ou G';
+        }
+
+        if (count($labels) === 1) {
+            return (string) $labels[0];
+        }
+
+        $last = array_pop($labels);
+
+        return implode(', ', $labels).' ou '.$last;
     }
 
     private function matchProduct(string $query): ?Product
     {
-        $query = mb_strtolower(trim($query));
+        $query = $this->normalizeOrderSegment($query);
 
         if ($query === '') {
             return null;
         }
 
         $products = $this->menuProducts();
+        $queryTokens = $this->significantTokens($query);
         $best = null;
-        $bestLength = 0;
+        $bestScore = 0;
 
         foreach ($products as $product) {
-            $name = mb_strtolower($product->name);
+            $score = $this->productMatchScore($query, $queryTokens, $product);
 
-            if ($name === $query) {
-                return $product;
+            if ($score > $bestScore) {
+                $best = $product;
+                $bestScore = $score;
             }
+        }
 
-            if (mb_stripos($query, $name) !== false || mb_stripos($name, $query) !== false) {
-                $length = mb_strlen($name);
+        return $bestScore >= 50 ? $best : null;
+    }
 
-                if ($length > $bestLength) {
-                    $best = $product;
-                    $bestLength = $length;
+    /** @param  array<int, string>  $queryTokens */
+    private function productMatchScore(string $query, array $queryTokens, Product $product): int
+    {
+        $name = mb_strtolower($product->name);
+
+        if ($name === $query) {
+            return 1000;
+        }
+
+        if (mb_stripos($query, $name) !== false || mb_stripos($name, $query) !== false) {
+            return 900;
+        }
+
+        if ($queryTokens === []) {
+            return 0;
+        }
+
+        $nameTokens = $this->significantTokens($product->name);
+        $matched = 0;
+
+        foreach ($queryTokens as $queryToken) {
+            foreach ($nameTokens as $nameToken) {
+                if ($queryToken === $nameToken
+                    || mb_stripos($nameToken, $queryToken) !== false
+                    || mb_stripos($queryToken, $nameToken) !== false) {
+                    $matched++;
+                    break;
                 }
             }
         }
 
-        return $best;
+        if ($matched === 0) {
+            return 0;
+        }
+
+        $queryCoverage = $matched / count($queryTokens);
+        $nameCoverage = $matched / max(count($nameTokens), 1);
+
+        return (int) round(($queryCoverage * 0.7 + $nameCoverage * 0.3) * 100);
+    }
+
+    /** @return array<int, string> */
+    private function significantTokens(string $text): array
+    {
+        $text = mb_strtolower($text);
+        $text = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? $text;
+        $parts = preg_split('/\s+/u', trim($text)) ?: [];
+        $stopWords = ['de', 'da', 'do', 'dos', 'das', 'com', 'e', 'um', 'uma', 'uns', 'umas', 'ao', 'na', 'no', 'para', 'por'];
+
+        return array_values(array_filter($parts, function (string $token) use ($stopWords) {
+            if ($token === '' || in_array($token, $stopWords, true)) {
+                return false;
+            }
+
+            return mb_strlen($token) >= 3;
+        }));
+    }
+
+    private function tryAnswerFaq(string $text): ?string
+    {
+        $normalized = mb_strtolower(trim($text));
+
+        if (! preg_match('/(hor[aá]rio|que horas|abre|aberto|funciona|fechado|fecha|atende)/u', $normalized)) {
+            return null;
+        }
+
+        $opening = (string) (config('general.opening_time') ?: config('digital_menu.opening_time', '09:00'));
+        $closing = (string) (config('general.closing_time') ?: config('digital_menu.closing_time', '22:00'));
+
+        return 'Funcionamos de *'.$this->formatTimeForWhatsApp($opening).'* às *'.$this->formatTimeForWhatsApp($closing)."*.\n\nMe diga o que deseja pedir (ex.: *strogonoff P*) ou digite *pronto* quando terminar.";
+    }
+
+    private function formatTimeForWhatsApp(string $time): string
+    {
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $time, $matches)) {
+            return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+        }
+
+        return $time;
     }
 
     private function buildSummary(array $session): string
@@ -549,7 +755,13 @@ class ConversationalWhatsAppBotService
 
     private function cartSummary(array $cart, bool $detailed = false): string
     {
-        $products = Product::whereIn('id', collect($cart)->pluck('product_id'))->get()->keyBy('id');
+        $products = Product::query()
+            ->when(ProductVariants::enabled(), fn ($query) => $query->with([
+                'variants' => fn ($variantQuery) => $variantQuery->where('is_available', true)->orderBy('sort_order'),
+            ]))
+            ->whereIn('id', collect($cart)->pluck('product_id'))
+            ->get()
+            ->keyBy('id');
         $lines = [];
 
         foreach ($cart as $item) {
@@ -559,13 +771,14 @@ class ConversationalWhatsAppBotService
                 continue;
             }
 
-            $subtotal = $product->price * $item['quantity'];
+            $resolved = ProductSellable::resolve($product, $item['variant_id'] ?? null);
+            $subtotal = $resolved['price'] * $item['quantity'];
 
             if ($detailed) {
-                $price = number_format((float) $product->price, 2, ',', '.');
-                $lines[] = "• {$item['quantity']}x {$product->name} — R$ {$price} = R$ ".number_format($subtotal, 2, ',', '.');
+                $price = number_format($resolved['price'], 2, ',', '.');
+                $lines[] = "• {$item['quantity']}x {$resolved['name']} — R$ {$price} = R$ ".number_format($subtotal, 2, ',', '.');
             } else {
-                $lines[] = "• {$item['quantity']}x {$product->name}";
+                $lines[] = "• {$item['quantity']}x {$resolved['name']}";
             }
         }
 
@@ -574,15 +787,24 @@ class ConversationalWhatsAppBotService
 
     private function cartTotal(array $cart): float
     {
-        $products = Product::whereIn('id', collect($cart)->pluck('product_id'))->get()->keyBy('id');
+        $products = Product::query()
+            ->when(ProductVariants::enabled(), fn ($query) => $query->with([
+                'variants' => fn ($variantQuery) => $variantQuery->where('is_available', true)->orderBy('sort_order'),
+            ]))
+            ->whereIn('id', collect($cart)->pluck('product_id'))
+            ->get()
+            ->keyBy('id');
         $total = 0;
 
         foreach ($cart as $item) {
             $product = $products->get($item['product_id']);
 
-            if ($product) {
-                $total += $product->price * $item['quantity'];
+            if (! $product) {
+                continue;
             }
+
+            $resolved = ProductSellable::resolve($product, $item['variant_id'] ?? null);
+            $total += $resolved['price'] * $item['quantity'];
         }
 
         return $total;
@@ -590,7 +812,11 @@ class ConversationalWhatsAppBotService
 
     private function menuProducts(): Collection
     {
-        return Product::with('category')
+        return Product::query()
+            ->with('category')
+            ->when(ProductVariants::enabled(), fn ($query) => $query->with([
+                'variants' => fn ($variantQuery) => $variantQuery->where('is_available', true)->orderBy('sort_order'),
+            ]))
             ->where('is_available', true)
             ->whereHas('category', fn ($query) => $query->where('is_active', true))
             ->get()
