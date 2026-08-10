@@ -8,6 +8,7 @@
     <title>{{ $menuTitle }} — Cardápio</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
+    @include('public.partials.menu-theme-styles')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @include('partials.ngrok-skip-warning')
     <style>
@@ -54,7 +55,7 @@
         <div class="fixed bottom-0 inset-x-0 z-50 p-4 bg-gradient-to-t from-gray-50 via-gray-50/95 to-transparent">
             <div class="max-w-lg mx-auto">
                 <a href="{{ route('public.cart') }}"
-                   class="flex items-center justify-between w-full rounded-2xl bg-orange-500 hover:bg-orange-600 text-white px-5 py-4 shadow-lg shadow-orange-500/30 transition">
+                   class="flex items-center justify-between w-full rounded-2xl bg-[var(--menu-500)] hover:bg-[var(--menu-600)] text-white px-5 py-4 shadow-lg transition">
                     <div class="flex items-center gap-3">
                         <span class="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-bold">{{ $cartCount }}</span>
                         <span class="font-semibold">Ver carrinho</span>

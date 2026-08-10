@@ -45,7 +45,7 @@
             </div>
             <div class="border-t border-gray-100 pt-2 flex justify-between font-bold">
                 <span>Total</span>
-                <span class="text-orange-600" x-text="formatMoney(grandTotal)">R$ {{ number_format($subtotal, 2, ',', '.') }}</span>
+                <span class="menu-text" x-text="formatMoney(grandTotal)">R$ {{ number_format($subtotal, 2, ',', '.') }}</span>
             </div>
         </div>
 
@@ -60,8 +60,7 @@
                             <input type="radio" name="type" value="{{ $value }}" x-model="type" class="sr-only peer"
                                 @if($value === 'delivery' && $deliveryAreas->isEmpty()) disabled @endif>
                             <span @class([
-                                'block text-center rounded-xl border-2 px-3 py-3 text-sm font-semibold transition',
-                                'border-gray-200 peer-checked:border-orange-500 peer-checked:bg-orange-50 peer-checked:text-orange-700',
+                                'menu-type-option block text-center rounded-xl border-2 px-3 py-3 text-sm font-semibold transition border-gray-200',
                                 'opacity-40 cursor-not-allowed' => $value === 'delivery' && $deliveryAreas->isEmpty(),
                             ])>
                                 {{ $label }}
@@ -81,7 +80,7 @@
                     :disabled="type !== 'dine_in'"
                     value="{{ old('comanda_number', $comandaNumber) }}"
                     placeholder="Ex: 042"
-                    class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
+                    class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm menu-focus focus:ring-1">
                 <p class="mt-1 text-xs text-gray-500">Informe o número da comanda que você recebeu na entrada.</p>
             </div>
 
@@ -91,7 +90,7 @@
                     <select name="delivery_area_id" id="delivery_area_id" x-model="deliveryAreaId"
                         :required="type === 'delivery'"
                         :disabled="type !== 'delivery'"
-                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
+                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm menu-focus focus:ring-1">
                         <option value="">Selecione seu bairro</option>
                         @foreach ($deliveryAreas as $area)
                             <option value="{{ $area->id }}" @selected(old('delivery_area_id') == $area->id)>
@@ -107,7 +106,7 @@
                         placeholder="Rua, número, complemento"
                         :required="type === 'delivery'"
                         :disabled="type !== 'delivery'"
-                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
+                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm menu-focus focus:ring-1">
                 </div>
             </div>
 
@@ -117,21 +116,21 @@
                     <input type="text" name="customer_name" id="customer_name" value="{{ old('customer_name') }}"
                         :required="type !== 'dine_in'"
                         :disabled="type === 'dine_in'"
-                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
+                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm menu-focus focus:ring-1">
                 </div>
                 <div>
                     <label for="customer_phone" class="block text-sm font-medium text-gray-700">WhatsApp / Telefone *</label>
                     <input type="tel" name="customer_phone" id="customer_phone" value="{{ old('customer_phone') }}" placeholder="(11) 99999-9999"
                         :required="type !== 'dine_in'"
                         :disabled="type === 'dine_in'"
-                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
+                        class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm menu-focus focus:ring-1">
                 </div>
             </div>
 
             <div>
                 <label for="notes" class="block text-sm font-medium text-gray-700">Observações do pedido</label>
                 <textarea name="notes" id="notes" rows="2" placeholder="Alguma observação geral?"
-                    class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">{{ old('notes') }}</textarea>
+                    class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm menu-focus focus:ring-1">{{ old('notes') }}</textarea>
             </div>
 
             @if ($errors->any())
@@ -142,7 +141,7 @@
                 </div>
             @endif
 
-            <button type="submit" class="w-full rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 text-lg shadow-lg shadow-orange-500/30 transition">
+            <button type="submit" class="w-full rounded-2xl menu-bg menu-bg-hover text-white font-bold py-4 text-lg menu-shadow transition">
                 Confirmar pedido
             </button>
         </form>

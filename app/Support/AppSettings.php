@@ -61,6 +61,8 @@ class AppSettings
             'digital_menu.loyalty_text' => Setting::get('digital_menu', 'loyalty_text', config('digital_menu.loyalty_text')),
             'digital_menu.cover_image' => Setting::get('digital_menu', 'cover_image', config('digital_menu.cover_image')),
             'digital_menu.logo_image' => Setting::get('digital_menu', 'logo_image', config('digital_menu.logo_image')),
+            'digital_menu.public_domain' => Setting::get('digital_menu', 'public_domain', config('digital_menu.public_domain')),
+            'digital_menu.theme_color' => Setting::get('digital_menu', 'theme_color', config('digital_menu.theme_color')),
 
             'whatsapp_agent.enabled' => Setting::get('whatsapp_agent', 'enabled', config('whatsapp_agent.enabled')),
             'whatsapp_agent.use_builtin_bot' => Setting::get('whatsapp_agent', 'use_builtin_bot', config('whatsapp_agent.use_builtin_bot')),
@@ -158,6 +160,8 @@ class AppSettings
                 'loyalty_text' => 'A cada R$ 1,00 em compras você ganha 1 ponto que pode ser trocado por recompensas.',
                 'cover_image' => null,
                 'logo_image' => null,
+                'public_domain' => config('digital_menu.public_domain', ''),
+                'theme_color' => config('digital_menu.theme_color', 'orange'),
             ],
             'whatsapp_agent' => [
                 'enabled' => config('whatsapp_agent.enabled', false),
@@ -257,6 +261,10 @@ class AppSettings
             'logo_image' => config('digital_menu.logo_image'),
             'cover_url' => DigitalMenu::assetUrl(config('digital_menu.cover_image')),
             'logo_url' => DigitalMenu::assetUrl(config('digital_menu.logo_image')),
+            'public_domain' => config('digital_menu.public_domain'),
+            'public_url' => DigitalMenu::publicUrl('/'),
+            'theme_color' => config('digital_menu.theme_color'),
+            'theme_label' => MenuTheme::labels()[MenuTheme::normalize(config('digital_menu.theme_color'))] ?? 'Laranja',
         ];
     }
 

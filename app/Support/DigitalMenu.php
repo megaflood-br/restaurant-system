@@ -18,6 +18,8 @@ class DigitalMenu
             'is_open' => $status['is_open'],
             'status_label' => $status['label'],
             'status_detail' => $status['detail'],
+            'theme_color' => $data['theme_color'] ?? config('digital_menu.theme_color', 'orange'),
+            'theme_palette' => MenuTheme::palette($data['theme_color'] ?? null),
         ]);
     }
 
@@ -61,6 +63,24 @@ class DigitalMenu
         }
 
         return Storage::disk('public')->url($path);
+    }
+
+    public static function publicUrl(string $path = '/'): string
+    {
+        $domain = config('digital_menu.public_domain');
+
+        if (filled($domain)) {
+            $path = '/'.ltrim($path, '/');
+
+            return 'https://'.$domain.($path === '/' ? '' : $path);
+        }
+
+        return url('/cardapio'.($path === '/' ? '' : $path));
+    }
+
+    public static function usesDedicatedDomain(): bool
+    {
+        return filled(config('digital_menu.public_domain'));
     }
 
     private static function formatTime(string $time): string

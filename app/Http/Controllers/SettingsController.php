@@ -110,6 +110,8 @@ class SettingsController extends Controller
             'delivery_fee' => ['required', 'numeric', 'min:0'],
             'loyalty_title' => ['nullable', 'string', 'max:255'],
             'loyalty_text' => ['nullable', 'string', 'max:2000'],
+            'public_domain' => ['nullable', 'string', 'max:255'],
+            'theme_color' => ['required', 'in:'.implode(',', array_keys(\App\Support\MenuTheme::labels()))],
             'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'logo_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_cover' => ['sometimes', 'boolean'],
@@ -149,6 +151,8 @@ class SettingsController extends Controller
             'loyalty_enabled' => $request->boolean('loyalty_enabled'),
             'loyalty_title' => $validated['loyalty_title'] ?? '',
             'loyalty_text' => $validated['loyalty_text'] ?? '',
+            'public_domain' => self::normalizeDomain($validated['public_domain'] ?? ''),
+            'theme_color' => \App\Support\MenuTheme::normalize($validated['theme_color']),
             'cover_image' => $coverPath,
             'logo_image' => $logoPath,
         ]);
@@ -164,6 +168,17 @@ class SettingsController extends Controller
         if ($path && Storage::disk('public')->exists($path)) {
             Storage::disk('public')->delete($path);
         }
+    }
+
+    private static function normalizeDomain(?string $domain): string
+    {
+        if (! filled($domain)) {
+            return '';
+        }
+
+        $domain = preg_replace('#^https?://#', '', trim($domain));
+
+        return rtrim((string) $domain, '/');
     }
 
     public function updatePrinting(Request $request): RedirectResponse

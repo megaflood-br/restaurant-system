@@ -12,7 +12,7 @@
                 @foreach ($categories as $category)
                     <button type="button"
                         @click="activeCategory = '{{ $category->id }}'; document.getElementById('cat-{{ $category->id }}')?.scrollIntoView({ behavior: 'smooth', block: 'start' })"
-                        :class="activeCategory === '{{ $category->id }}' ? 'bg-orange-500 text-white' : 'bg-white text-gray-700 border border-gray-200'"
+                        :class="activeCategory === '{{ $category->id }}' ? 'menu-tab-active' : 'bg-white text-gray-700 border border-gray-200'"
                         class="shrink-0 rounded-full px-4 py-2 text-sm font-medium transition">
                         {{ $category->name }}
                     </button>
@@ -48,9 +48,9 @@
                                         @endif
                                     </div>
                                     <div class="flex items-center justify-between mt-2 gap-2">
-                                        <span class="text-orange-600 font-bold">R$ {{ number_format($product->price, 2, ',', '.') }}</span>
+                                        <span class="menu-text font-bold">R$ {{ number_format($product->price, 2, ',', '.') }}</span>
                                         <button type="button" @click="open = true"
-                                            class="rounded-full bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-4 py-2 transition">
+                                            class="rounded-full menu-bg menu-bg-hover text-white text-xs font-semibold px-4 py-2 transition">
                                             Adicionar
                                         </button>
                                     </div>
@@ -70,7 +70,7 @@
                                                 @if ($product->description)
                                                     <p class="text-sm text-gray-500 mt-1">{{ $product->description }}</p>
                                                 @endif
-                                                <p class="text-orange-600 font-bold text-lg mt-2">R$ {{ number_format($product->price, 2, ',', '.') }}</p>
+                                                <p class="menu-text font-bold text-lg mt-2">R$ {{ number_format($product->price, 2, ',', '.') }}</p>
                                             </div>
 
                                             <form method="POST" action="{{ route('public.cart.add') }}" class="space-y-4"
@@ -102,7 +102,7 @@
                                                         class="w-full rounded-lg border-gray-300 text-sm">
                                                 </div>
 
-                                                <button type="submit" class="w-full rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 transition">
+                                                <button type="submit" class="w-full rounded-xl menu-bg menu-bg-hover text-white font-semibold py-3 transition">
                                                     Adicionar — R$ {{ number_format($product->price, 2, ',', '.') }}
                                                 </button>
                                             </form>

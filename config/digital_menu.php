@@ -16,4 +16,6 @@ return [
     'loyalty_text' => 'A cada R$ 1,00 em compras você ganha 1 ponto que pode ser trocado por recompensas.',
     'cover_image' => null,
     'logo_image' => null,
+    'public_domain' => env('DIGITAL_MENU_PUBLIC_DOMAIN'),
+    'theme_color' => env('DIGITAL_MENU_THEME_COLOR', 'orange'),
 ];

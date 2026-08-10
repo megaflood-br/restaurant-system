@@ -16,7 +16,7 @@
                     @if ($item['notes'])
                         <p class="text-xs text-gray-500">{{ $item['notes'] }}</p>
                     @endif
-                    <p class="text-orange-600 font-bold mt-1">R$ {{ number_format($item['subtotal'], 2, ',', '.') }}</p>
+                    <p class="menu-text font-bold mt-1">R$ {{ number_format($item['subtotal'], 2, ',', '.') }}</p>
 
                     <div class="flex items-center gap-2 mt-2">
                         <form method="POST" action="{{ route('public.cart.update') }}" class="flex items-center gap-2">
@@ -51,11 +51,11 @@
 
         <div class="bg-white rounded-2xl border border-gray-100 p-4 flex justify-between items-center">
             <span class="font-semibold text-gray-700">Total</span>
-            <span class="text-xl font-bold text-orange-600">R$ {{ number_format($total, 2, ',', '.') }}</span>
+            <span class="text-xl font-bold menu-text">R$ {{ number_format($total, 2, ',', '.') }}</span>
         </div>
 
         <a href="{{ route('public.checkout') }}"
-            class="block w-full text-center rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 shadow-lg shadow-orange-500/30 transition">
+            class="block w-full text-center rounded-2xl menu-bg menu-bg-hover text-white font-semibold py-4 menu-shadow transition">
             Finalizar pedido
         </a>
 

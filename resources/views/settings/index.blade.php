@@ -69,7 +69,7 @@
 
                     @elseif ($tab === 'digital_menu')
                         <p class="text-sm text-gray-600 mb-6">
-                            Personalize a aparência do <a href="{{ route('public.menu') }}" target="_blank" class="text-indigo-600 hover:underline">cardápio digital</a>: capa, logo, horários e informações exibidas no topo.
+                            Personalize a aparência do <a href="{{ $digitalMenu['public_url'] ?? route('public.menu') }}" target="_blank" class="text-indigo-600 hover:underline">cardápio digital</a>: capa, logo, horários e informações exibidas no topo.
                         </p>
 
                         <form method="POST" action="{{ route('settings.digital-menu.update') }}" enctype="multipart/form-data" class="space-y-6">
@@ -101,6 +101,31 @@
                                         class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-indigo-50 file:text-indigo-700">
                                     <p class="mt-1 text-xs text-gray-500">Formato quadrado. Aparece circular no cardápio.</p>
                                 </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-3">Cor do tema</label>
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    @foreach (\App\Support\MenuTheme::labels() as $key => $label)
+                                        @php($palette = \App\Support\MenuTheme::palette($key))
+                                        <label class="relative flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition
+                                            {{ old('theme_color', $digitalMenu['theme_color'] ?? 'orange') === $key ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-gray-300' }}">
+                                            <input type="radio" name="theme_color" value="{{ $key }}" class="sr-only"
+                                                @checked(old('theme_color', $digitalMenu['theme_color'] ?? 'orange') === $key)>
+                                            <span class="h-8 w-8 rounded-full shrink-0 border border-white shadow"
+                                                style="background: linear-gradient(135deg, {{ $palette['400'] }}, {{ $palette['600'] }});"></span>
+                                            <span class="text-sm font-medium text-gray-800">{{ $label }}</span>
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="public_domain" class="block text-sm font-medium text-gray-700">Domínio público do cardápio</label>
+                                <input type="text" name="public_domain" id="public_domain" value="{{ old('public_domain', $digitalMenu['public_domain']) }}"
+                                    placeholder="bellabistro.com.br"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <p class="mt-1 text-xs text-gray-500">Sem https:// — o cardápio abre na raiz deste domínio. O painel admin continua em <code class="bg-gray-100 px-1 rounded">app.bellabistro.com.br</code>.</p>
                             </div>
 
                             <div>

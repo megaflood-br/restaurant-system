@@ -16,7 +16,7 @@
         <div class="bg-white rounded-2xl border border-gray-100 p-6 text-left space-y-4 mb-6">
             <div class="text-center border-b border-gray-100 pb-4">
                 <p class="text-sm text-gray-500">Número do pedido</p>
-                <p class="text-2xl font-bold text-orange-600">{{ $order->order_number }}</p>
+                <p class="text-2xl font-bold menu-text">{{ $order->order_number }}</p>
             </div>
 
             @php
@@ -66,12 +66,12 @@
 
             <div class="border-t border-gray-100 pt-4 flex justify-between font-bold">
                 <span>Total</span>
-                <span class="text-orange-600">R$ {{ number_format($order->total, 2, ',', '.') }}</span>
+                <span class="menu-text">R$ {{ number_format($order->total, 2, ',', '.') }}</span>
             </div>
         </div>
 
         <a href="{{ route('public.menu') }}"
-            class="inline-block w-full rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 transition">
+            class="inline-block w-full rounded-2xl menu-bg menu-bg-hover text-white font-semibold py-4 transition">
             Fazer novo pedido
         </a>
     </div>

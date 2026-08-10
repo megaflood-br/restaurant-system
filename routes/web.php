@@ -21,9 +21,7 @@ use App\Http\Controllers\Waiter\WaiterOrderController;
 use App\Http\Controllers\WhatsAppController;
 use Illuminate\Support\Facades\Route;
 
-Route::redirect('/', '/cardapio');
-
-Route::prefix('cardapio')->name('public.')->group(function () {
+$publicMenuRoutes = function (): void {
     Route::get('/', [MenuController::class, 'index'])->name('menu');
     Route::get('/carrinho', [MenuController::class, 'cart'])->name('cart');
     Route::post('/carrinho', [MenuController::class, 'add'])->name('cart.add');
@@ -32,7 +30,30 @@ Route::prefix('cardapio')->name('public.')->group(function () {
     Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout');
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
     Route::get('/pedido-confirmado', [CheckoutController::class, 'success'])->name('checkout.success');
-});
+};
+
+$publicDomain = config('digital_menu.public_domain');
+
+if (filled($publicDomain)) {
+    Route::domain($publicDomain)->name('public.')->group($publicMenuRoutes);
+
+    Route::get('/cardapio/{path?}', function (?string $path = null) {
+        $target = \App\Support\DigitalMenu::publicUrl($path ? '/'.$path : '/');
+
+        return redirect()->away($target, 301);
+    })->where('path', '.*');
+
+    Route::get('/', function () {
+        if (auth()->check()) {
+            return redirect(auth()->user()->homeRoute());
+        }
+
+        return redirect()->route('login');
+    });
+} else {
+    Route::redirect('/', '/cardapio');
+    Route::prefix('cardapio')->name('public.')->group($publicMenuRoutes);
+}
 
 Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
     Route::prefix('garcom')->name('waiter.')->middleware('waiter.cart')->group(function () {
