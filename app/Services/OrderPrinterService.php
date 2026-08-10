@@ -168,8 +168,16 @@ class OrderPrinterService
                 if ($order->deliveryArea) {
                     $lines[] = 'Bairro: '.$order->deliveryArea->name;
                 }
-                if ($order->delivery_address) {
-                    $lines[] = 'Endereco: '.$order->delivery_address;
+
+                $address = $this->deliveryAddressForPrint($order);
+                $lines[] = str_repeat('-', $width);
+                $lines[] = $this->center('*** ENTREGA ***', $width);
+                if ($address !== '') {
+                    foreach ($this->wrapLabelledText('Endereco', $address, $width) as $line) {
+                        $lines[] = $line;
+                    }
+                } else {
+                    $lines[] = 'Endereco: (nao informado)';
                 }
             }
         }
@@ -307,6 +315,84 @@ class OrderPrinterService
         }
 
         return true;
+    }
+
+    public function deliveryAddressForPrint(Order $order): string
+    {
+        if (filled($order->delivery_address)) {
+            return trim((string) $order->delivery_address);
+        }
+
+        $order->loadMissing('customer');
+        $customer = $order->customer;
+
+        if (! $customer) {
+            return '';
+        }
+
+        $parts = array_filter([
+            $customer->address,
+            $customer->neighborhood,
+            $customer->city,
+            $customer->state,
+            $customer->zip_code,
+        ], fn ($part) => filled($part));
+
+        return implode(', ', $parts);
+    }
+
+    /** @return list<string> */
+    public function wrapLabelledText(string $label, string $text, int $width): array
+    {
+        $prefix = $label.': ';
+        $text = trim($text);
+
+        if ($text === '') {
+            return [$prefix.'-'];
+        }
+
+        $firstWidth = max(8, $width - strlen($this->sanitizeLine($prefix)));
+        $chunks = $this->wrapText($text, $firstWidth, max(8, $width));
+        $lines = [];
+
+        foreach ($chunks as $index => $chunk) {
+            $lines[] = $index === 0 ? $prefix.$chunk : $chunk;
+        }
+
+        return $lines;
+    }
+
+    /** @return list<string> */
+    private function wrapText(string $text, int $firstWidth, int $width): array
+    {
+        $text = preg_replace('/\s+/', ' ', trim($text)) ?? trim($text);
+        $words = explode(' ', $text);
+        $lines = [];
+        $current = '';
+        $limit = $firstWidth;
+
+        foreach ($words as $word) {
+            $candidate = $current === '' ? $word : $current.' '.$word;
+
+            if (strlen($this->sanitizeLine($candidate)) <= $limit) {
+                $current = $candidate;
+
+                continue;
+            }
+
+            if ($current !== '') {
+                $lines[] = $current;
+            }
+
+            $current = $word;
+            $limit = $width;
+        }
+
+        if ($current !== '') {
+            $lines[] = $current;
+        }
+
+        return $lines !== [] ? $lines : [$text];
     }
 
     private function center(string $text, int $width): string

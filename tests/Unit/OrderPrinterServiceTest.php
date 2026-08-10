@@ -92,4 +92,113 @@ class OrderPrinterServiceTest extends TestCase
         $this->assertStringContainsString('Strogonoff', $text);
         $this->assertStringContainsString(str_repeat('=', 48), $text);
     }
+
+    public function test_delivery_receipt_includes_address(): void
+    {
+        config([
+            'printing.paper_width' => 48,
+            'printing.restaurant_name' => 'Bella Bistro',
+            'printing.kitchen_hide_prices' => true,
+        ]);
+
+        $category = Category::create([
+            'name' => 'Pratos',
+            'description' => 'Teste',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Strogonoff',
+            'description' => 'Teste',
+            'price' => 25,
+            'is_available' => true,
+        ]);
+
+        $order = Order::create([
+            'order_number' => 'PED-DELIV-1',
+            'type' => 'delivery',
+            'status' => 'pending',
+            'customer_name' => 'Carlos',
+            'customer_phone' => '11999999999',
+            'delivery_address' => 'Rua das Flores, 100, Centro, Sao Paulo, SP',
+            'delivery_fee' => 8,
+            'total' => 33,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'product_name' => 'Strogonoff',
+            'quantity' => 1,
+            'unit_price' => 25,
+            'subtotal' => 25,
+        ]);
+
+        $text = app(OrderPrinterService::class)->buildReceiptText($order->fresh('items'), 'kitchen');
+
+        $this->assertStringContainsString('Delivery', $text);
+        $this->assertStringContainsString('ENTREGA', $text);
+        $this->assertStringContainsString('Endereco:', $text);
+        $this->assertStringContainsString('Rua das Flores', $text);
+    }
+
+    public function test_delivery_receipt_falls_back_to_customer_address(): void
+    {
+        config([
+            'printing.paper_width' => 32,
+            'printing.restaurant_name' => 'Bella Bistro',
+            'printing.kitchen_hide_prices' => true,
+        ]);
+
+        $customer = \App\Models\Customer::create([
+            'name' => 'Carlos',
+            'phone' => '11988887777',
+            'address' => 'Av Paulista, 1000',
+            'neighborhood' => 'Bela Vista',
+            'city' => 'Sao Paulo',
+            'state' => 'SP',
+            'is_active' => true,
+        ]);
+
+        $category = Category::create([
+            'name' => 'Pratos',
+            'description' => 'Teste',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Bife',
+            'description' => 'Teste',
+            'price' => 20,
+            'is_available' => true,
+        ]);
+
+        $order = Order::create([
+            'order_number' => 'PED-DELIV-2',
+            'type' => 'delivery',
+            'status' => 'pending',
+            'customer_id' => $customer->id,
+            'customer_name' => 'Carlos',
+            'customer_phone' => '11988887777',
+            'delivery_address' => null,
+            'delivery_fee' => 8,
+            'total' => 28,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'product_name' => 'Bife',
+            'quantity' => 1,
+            'unit_price' => 20,
+            'subtotal' => 20,
+        ]);
+
+        $text = app(OrderPrinterService::class)->buildReceiptText($order->fresh(['items', 'customer']), 'kitchen');
+
+        $this->assertStringContainsString('Av Paulista', $text);
+        $this->assertStringContainsString('Bela Vista', $text);
+    }
 }

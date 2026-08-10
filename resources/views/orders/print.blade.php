@@ -86,9 +86,20 @@
                 @if ($order->deliveryArea)
                     <div><strong>Bairro:</strong> {{ $order->deliveryArea->name }}</div>
                 @endif
-                @if ($order->delivery_address)
-                    <div><strong>Endereço:</strong> {{ $order->delivery_address }}</div>
-                @endif
+                @php
+                    $printAddress = filled($order->delivery_address)
+                        ? $order->delivery_address
+                        : trim(collect([
+                            $order->customer?->address,
+                            $order->customer?->neighborhood,
+                            $order->customer?->city,
+                            $order->customer?->state,
+                            $order->customer?->zip_code,
+                        ])->filter()->implode(', '));
+                @endphp
+                <div class="divider"></div>
+                <div class="center bold">*** ENTREGA ***</div>
+                <div class="large"><strong>Endereço:</strong> {{ $printAddress !== '' ? $printAddress : '(não informado)' }}</div>
             @endif
         @endif
 
