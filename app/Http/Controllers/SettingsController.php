@@ -189,7 +189,7 @@ class SettingsController extends Controller
         $validated = $request->validate([
             'enabled' => ['boolean'],
             'restaurant_name' => ['required', 'string', 'max:255'],
-            'driver' => ['required', 'in:browser,network'],
+            'driver' => ['required', 'in:browser,network,agent'],
             'auto_print_on_create' => ['boolean'],
             'network_host' => ['nullable', 'string', 'max:255'],
             'network_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
@@ -265,16 +265,20 @@ class SettingsController extends Controller
     {
         AppSettings::loadIntoConfig();
 
-        if (config('printing.driver') !== 'network') {
-            return back()->with('error', 'Para testar a impressora térmica por IP, escolha o modo "Rede IP", salve e tente de novo. (Ou use o modo Navegador e imprima pelo Windows.)');
+        if (! in_array(config('printing.driver'), ['network', 'agent'], true)) {
+            return back()->with('error', 'Para testar, escolha o modo "Rede IP" ou "Agente local", salve e tente de novo. (Ou use o modo Navegador e imprima pelo Windows.)');
         }
 
-        if (! config('printing.network.host')) {
+        if (config('printing.driver') === 'network' && ! config('printing.network.host')) {
             return back()->with('error', 'Informe o IP da impressora (ex.: 192.168.1.100), porta 9100, salve e teste novamente.');
         }
 
         try {
             $printer->printTestPage();
+
+            if (config('printing.driver') === 'agent') {
+                return back()->with('success', 'Teste enfileirado. Com o agente local rodando no PC do restaurante, o cupom deve sair em instantes.');
+            }
 
             return back()->with('success', 'Teste enviado para a impressora com sucesso. Confira se saiu o cupom "TESTE DE IMPRESSAO".');
         } catch (\Throwable $exception) {

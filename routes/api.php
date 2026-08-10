@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\EvolutionWebhookController;
 use App\Http\Controllers\Api\IntegrationDocsController;
 use App\Http\Controllers\Api\MenuApiController;
 use App\Http\Controllers\Api\OrderApiController;
+use App\Http\Controllers\Api\PrintJobApiController;
 use App\Http\Controllers\Api\WhatsAppApiController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +33,11 @@ Route::prefix('v1')->middleware('integration.api')->name('api.v1.')->group(funct
 
     Route::get('comandas', [ComandaApiController::class, 'index'])->name('comandas.index');
     Route::get('comandas/{comanda}', [ComandaApiController::class, 'show'])->name('comandas.show');
+
+    Route::get('print-jobs/pending', [PrintJobApiController::class, 'pending'])->name('print-jobs.pending');
+    Route::post('print-jobs/claim', [PrintJobApiController::class, 'claim'])->name('print-jobs.claim');
+    Route::post('print-jobs/{printJob}/complete', [PrintJobApiController::class, 'complete'])->name('print-jobs.complete');
+    Route::post('print-jobs/{printJob}/fail', [PrintJobApiController::class, 'fail'])->name('print-jobs.fail');
 
     Route::get('whatsapp/connection', [WhatsAppApiController::class, 'connection'])->name('whatsapp.connection');
     Route::get('whatsapp/messages', [WhatsAppApiController::class, 'messages'])->name('whatsapp.messages.index');

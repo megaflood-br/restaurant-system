@@ -125,11 +125,11 @@
                         Imprimir comanda
                     </a>
 
-                    @if (config('printing.driver') === 'network' && config('printing.network.host'))
+                    @if (in_array(config('printing.driver'), ['network', 'agent'], true) && (config('printing.driver') === 'agent' || config('printing.network.host')))
                         <form method="POST" action="{{ route('orders.print.network', $order) }}">
                             @csrf
                             <button type="submit" class="inline-flex items-center px-4 py-2 bg-yellow-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-yellow-700">
-                                Imprimir na rede
+                                {{ config('printing.driver') === 'agent' ? 'Enfileirar impressão' : 'Imprimir na rede' }}
                             </button>
                         </form>
                     @endif

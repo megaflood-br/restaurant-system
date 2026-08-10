@@ -137,14 +137,10 @@ class OrderController extends Controller
 
     private function tryPrint(Order $order): void
     {
-        if (! config('printing.enabled') || config('printing.driver') !== 'network') {
-            return;
-        }
-
         try {
-            app(OrderPrinterService::class)->printOrder($order, 'kitchen');
+            app(OrderPrinterService::class)->dispatchKitchenPrint($order);
         } catch (\Throwable) {
-            // Impressão em rede é best-effort.
+            // Impressão em rede/agente é best-effort.
         }
     }
 

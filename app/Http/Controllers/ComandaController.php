@@ -63,12 +63,10 @@ class ComandaController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        if (config('printing.enabled') && config('printing.driver') === 'network') {
-            try {
-                $printer->printComandaBill($bill);
-            } catch (\Throwable) {
-                //
-            }
+        try {
+            $printer->dispatchComandaBill($bill);
+        } catch (\Throwable) {
+            //
         }
 
         return redirect()->route('comandas.index')

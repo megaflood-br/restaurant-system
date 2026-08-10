@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Models\PrintJob;
 use App\Support\PaymentMethod;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -15,45 +16,127 @@ class OrderPrinterService
             && filled(config('printing.network.host'));
     }
 
-    public function printOrder(Order $order, string $template = 'kitchen'): bool
+    public function usesAgentQueue(): bool
     {
-        if (! config('printing.enabled')) {
+        return config('printing.driver') === 'agent';
+    }
+
+    public function usesServerSidePrint(): bool
+    {
+        return (bool) config('printing.enabled')
+            && in_array(config('printing.driver'), ['network', 'agent'], true);
+    }
+
+    public function dispatchKitchenPrint(Order $order): bool
+    {
+        if (! $this->usesServerSidePrint()) {
             return false;
         }
 
         $order->loadMissing('items.product', 'customer', 'deliveryArea', 'user');
+        $text = $this->buildReceiptText($order, 'kitchen');
 
-        if ($this->isNetworkConfigured()) {
-            return $this->sendToNetworkPrinter($this->buildReceiptText($order, $template));
+        if ($this->usesAgentQueue()) {
+            $this->enqueueJob('kitchen', $text, $order->id);
+
+            return true;
         }
 
-        return false;
+        return $this->sendToNetworkPrinter($text);
+    }
+
+    public function dispatchComandaBill(array $bill): bool
+    {
+        if (! $this->usesServerSidePrint()) {
+            return false;
+        }
+
+        $text = $this->buildComandaBillText($bill);
+
+        if ($this->usesAgentQueue()) {
+            $this->enqueueJob('comanda_bill', $text, null);
+
+            return true;
+        }
+
+        return $this->sendToNetworkPrinter($text);
+    }
+
+    /** @deprecated Prefer dispatchKitchenPrint() */
+    public function printOrder(Order $order, string $template = 'kitchen'): bool
+    {
+        if ($template !== 'kitchen') {
+            if (! $this->usesServerSidePrint()) {
+                return false;
+            }
+
+            $order->loadMissing('items.product', 'customer', 'deliveryArea', 'user');
+            $text = $this->buildReceiptText($order, $template);
+
+            if ($this->usesAgentQueue()) {
+                $this->enqueueJob($template, $text, $order->id);
+
+                return true;
+            }
+
+            return $this->sendToNetworkPrinter($text);
+        }
+
+        return $this->dispatchKitchenPrint($order);
+    }
+
+    /** @deprecated Prefer dispatchComandaBill() */
+    public function printComandaBill(array $bill): bool
+    {
+        return $this->dispatchComandaBill($bill);
     }
 
     public function printTestPage(): bool
     {
-        if (! $this->isNetworkConfigured()) {
+        if (! $this->usesServerSidePrint()) {
             throw new RuntimeException(
-                'Impressora de rede não configurada. Em Configurações → Impressão, escolha o modo "Rede IP", informe o IP e salve.'
+                'Escolha o modo "Rede IP" ou "Agente local", salve e tente de novo.'
             );
         }
 
         $width = (int) config('printing.paper_width', 32);
-        $host = (string) config('printing.network.host');
+        $host = (string) (config('printing.network.host') ?: 'agente-local');
         $port = (int) config('printing.network.port', 9100);
 
         $text = implode("\n", [
             str_repeat('=', $width),
             $this->center('TESTE DE IMPRESSAO', $width),
             $this->center((string) config('printing.restaurant_name'), $width),
-            $this->center("{$host}:{$port}", $width),
+            $this->center($this->usesAgentQueue() ? 'via agente local' : "{$host}:{$port}", $width),
             now()->timezone(config('app.timezone'))->format('d/m/Y H:i:s'),
             str_repeat('=', $width),
             $this->center('Se voce leu isto, OK!', $width),
             '',
         ]);
 
+        if ($this->usesAgentQueue()) {
+            $this->enqueueJob('test', $text, null);
+
+            return true;
+        }
+
+        if (! $this->isNetworkConfigured()) {
+            throw new RuntimeException(
+                'Impressora de rede não configurada. Informe o IP da impressora, salve e teste novamente.'
+            );
+        }
+
         return $this->sendToNetworkPrinter($text);
+    }
+
+    public function enqueueJob(string $type, string $payload, ?int $orderId = null): PrintJob
+    {
+        return PrintJob::create([
+            'type' => $type,
+            'order_id' => $orderId,
+            'payload' => $payload,
+            'status' => PrintJob::STATUS_PENDING,
+        ]);
     }
 
     public function buildReceiptText(Order $order, string $template = 'kitchen'): string
@@ -126,15 +209,6 @@ class OrderPrinterService
         return implode("\n", array_map([$this, 'sanitizeLine'], $lines));
     }
 
-    public function printComandaBill(array $bill): bool
-    {
-        if (! config('printing.enabled') || ! $this->isNetworkConfigured()) {
-            return false;
-        }
-
-        return $this->sendToNetworkPrinter($this->buildComandaBillText($bill));
-    }
-
     public function buildComandaBillText(array $bill): string
     {
         $width = (int) config('printing.paper_width', 32);
@@ -177,7 +251,23 @@ class OrderPrinterService
         return "Nao foi possivel conectar a impressora em {$host}:{$port} ({$detail}). "
             .'O servidor do sistema precisa alcancar esse IP na rede local. '
             .'Se o painel roda na nuvem/VPS e a impressora so existe no Wi-Fi do restaurante (ex.: 192.168.1.100), '
-            .'use o modo Navegador ou hospede o sistema na mesma rede da impressora.';
+            .'use o modo Agente local (recomendado) ou Navegador.';
+    }
+
+    /** Build raw ESC/POS bytes for an agent or direct socket send. */
+    public function buildEscPosPayload(string $text): string
+    {
+        $payload = "\x1B\x40";
+        $payload .= "\x1B\x74\x10";
+        $payload .= "\x1B\x61\x00";
+        $payload .= str_replace(["\r\n", "\r"], "\n", $text);
+        if (! str_ends_with($payload, "\n")) {
+            $payload .= "\n";
+        }
+        $payload .= "\n\n\n";
+        $payload .= "\x1D\x56\x41\x03";
+
+        return $payload;
     }
 
     private function sendToNetworkPrinter(string $text): bool
@@ -200,17 +290,7 @@ class OrderPrinterService
 
         stream_set_timeout($socket, max(1, $timeout));
 
-        // ESC/POS raw payload for EPSON-compatible 80mm printers (e.g. 80-VI-UL).
-        $payload = "\x1B\x40"; // Initialize
-        $payload .= "\x1B\x74\x10"; // Code page 16 (WPC1252 / common on these units)
-        $payload .= "\x1B\x61\x00"; // Left align
-        $payload .= str_replace(["\r\n", "\r"], "\n", $text);
-        if (! str_ends_with($payload, "\n")) {
-            $payload .= "\n";
-        }
-        $payload .= "\n\n\n";
-        $payload .= "\x1D\x56\x41\x03"; // Partial cut with feed (GS V A n)
-
+        $payload = $this->buildEscPosPayload($text);
         $written = @fwrite($socket, $payload);
         $meta = stream_get_meta_data($socket);
         fclose($socket);

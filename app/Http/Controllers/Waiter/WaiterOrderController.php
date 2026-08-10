@@ -194,12 +194,10 @@ class WaiterOrderController extends Controller
         $cart->clearItems();
         $cart->setComandaNumber($comandaNumber);
 
-        if (config('printing.enabled') && config('printing.driver') === 'network') {
-            try {
-                $printer->printOrder($order->fresh(['items.product', 'user']), 'kitchen');
-            } catch (\Throwable) {
-                //
-            }
+        try {
+            $printer->dispatchKitchenPrint($order->fresh(['items.product', 'user']));
+        } catch (\Throwable) {
+            //
         }
 
         session([

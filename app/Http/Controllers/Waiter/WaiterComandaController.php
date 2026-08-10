@@ -76,9 +76,9 @@ class WaiterComandaController extends Controller
             'waiter_closed_bill' => $bill,
         ]);
 
-        if (config('printing.enabled') && config('printing.driver') === 'network') {
+        if (config('printing.enabled') && in_array(config('printing.driver'), ['network', 'agent'], true)) {
             try {
-                $printer->printComandaBill($bill);
+                $printer->dispatchComandaBill($bill);
             } catch (\Throwable) {
                 //
             }

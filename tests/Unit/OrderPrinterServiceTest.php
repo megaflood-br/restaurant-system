@@ -21,6 +21,7 @@ class OrderPrinterServiceTest extends TestCase
 
         $this->assertStringContainsString('192.168.1.100:9100', $message);
         $this->assertStringContainsString('nuvem/VPS', $message);
+        $this->assertStringContainsString('Agente local', $message);
         $this->assertStringContainsString('Navegador', $message);
     }
 

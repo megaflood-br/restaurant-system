@@ -180,9 +180,7 @@ class OrderApiController extends Controller
 
         if ($request->boolean('print_kitchen', true)) {
             try {
-                if (config('printing.enabled') && config('printing.driver') === 'network') {
-                    $printer->printOrder($order->fresh(['items.product', 'deliveryArea']), 'kitchen');
-                }
+                $printer->dispatchKitchenPrint($order->fresh(['items.product', 'deliveryArea']));
             } catch (\Throwable) {
                 //
             }

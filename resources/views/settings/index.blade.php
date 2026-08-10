@@ -257,11 +257,12 @@
                                 <label for="driver" class="block text-sm font-medium text-gray-700">Modo de impressão</label>
                                 <select name="driver" id="driver" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                     <option value="browser" @selected(old('driver', $printing['driver']) === 'browser')>Navegador (qualquer impressora Windows)</option>
-                                    <option value="network" @selected(old('driver', $printing['driver']) === 'network')>Rede IP (impressora térmica ESC/POS)</option>
+                                    <option value="agent" @selected(old('driver', $printing['driver']) === 'agent')>Agente local (recomendado com painel na nuvem)</option>
+                                    <option value="network" @selected(old('driver', $printing['driver']) === 'network')>Rede IP direta (só se o servidor alcança a impressora)</option>
                                 </select>
                                 <p class="mt-1 text-xs text-gray-500">
-                                    <strong>Rede IP</strong> só funciona se o <em>servidor</em> do sistema (onde roda o PHP) alcançar o IP da impressora.
-                                    Se o painel está na nuvem e a impressora só no Wi‑Fi do restaurante, use <strong>Navegador</strong>.
+                                    Com o painel na nuvem, use <strong>Agente local</strong>: um script no PC do restaurante busca os cupons e imprime em {{ $printing['network_host'] ?: '192.168.1.100' }}:9100.
+                                    <strong>Rede IP</strong> só funciona se o servidor PHP estiver na mesma rede da impressora.
                                 </p>
                             </div>
 
@@ -278,14 +279,15 @@
                             <div class="border-t border-gray-200 pt-6">
                                 <h3 class="text-sm font-semibold text-gray-800 mb-2">Impressora de rede (ESC/POS)</h3>
                                 <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1">
-                                    <p>Para impressoras 80mm na rede (ex.: modelo 80‑VI‑UL):</p>
-                                    <ul class="list-disc list-inside space-y-0.5">
-                                        <li>Modo: <strong>Rede IP</strong></li>
-                                        <li>IP: o do relatório da impressora (ex.: <code class="bg-amber-100 px-1 rounded">192.168.1.100</code>)</li>
-                                        <li>Porta: <code class="bg-amber-100 px-1 rounded">9100</code></li>
-                                        <li>Largura: <code class="bg-amber-100 px-1 rounded">48</code> caracteres (bobina 80mm)</li>
-                                    </ul>
-                                    <p>Salve e use <strong>Testar impressora de rede</strong>. Se der timeout, o servidor não está na mesma rede da impressora.</p>
+                                    <p><strong>Agente local (nuvem + impressora no Wi‑Fi):</strong></p>
+                                    <ol class="list-decimal list-inside space-y-0.5">
+                                        <li>Escolha o modo <strong>Agente local</strong> e salve.</li>
+                                        <li>Copie o <strong>token da API</strong> em Configurações → Integração.</li>
+                                        <li>No PC do restaurante (com PHP instalado), rode:</li>
+                                    </ol>
+                                    <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-[11px] leading-relaxed">php scripts/print-agent.php --url={{ url('/') }} --token=SEU_TOKEN --printer=192.168.1.100 --port=9100</pre>
+                                    <p class="mt-1">Deixe essa janela aberta. Pedidos (WhatsApp, cardápio, painel) entram na fila e o agente imprime sozinho.</p>
+                                    <p class="mt-2"><strong>Rede IP direta:</strong> IP <code class="bg-amber-100 px-1 rounded">192.168.1.100</code>, porta <code class="bg-amber-100 px-1 rounded">9100</code>, largura <code class="bg-amber-100 px-1 rounded">48</code> (80mm). Só funciona se o servidor alcançar esse IP.</p>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div class="md:col-span-2">

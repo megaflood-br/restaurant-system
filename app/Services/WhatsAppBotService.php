@@ -271,12 +271,10 @@ class WhatsAppBotService
                 return $order->fresh('items.product');
             });
 
-            if (config('printing.enabled') && config('printing.driver') === 'network') {
-                try {
-                    app(OrderPrinterService::class)->printOrder($order, 'kitchen');
-                } catch (\Throwable) {
-                    // best-effort
-                }
+            try {
+                app(OrderPrinterService::class)->dispatchKitchenPrint($order);
+            } catch (\Throwable) {
+                // best-effort
             }
 
             $this->clearSession($phone);

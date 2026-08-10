@@ -91,30 +91,37 @@ O pedido aparece em **Pedidos** no painel admin.
 
 Configure em **Configurações → Impressão** (não depende de variáveis `PRINTING_*` no `.env`).
 
-### Modo navegador (padrão)
+### Modo agente local (recomendado com painel na nuvem)
+
+O servidor enfileira o cupom; um script no **PC do restaurante** (mesma rede da impressora) busca e imprime em `192.168.1.100:9100`.
+
+1. Modo: **Agente local**
+2. Largura: `48` (bobina 80mm)
+3. Copie o token em **Configurações → Integração**
+4. No PC do restaurante, com PHP instalado:
+
+```bash
+php scripts/print-agent.php --url=https://app.bellabistro.com.br --token=SEU_TOKEN --printer=192.168.1.100 --port=9100
+```
+
+Deixe o processo rodando. Pedidos do WhatsApp, cardápio e painel imprimem automaticamente.
+
+### Modo navegador
 
 Funciona com qualquer impressora instalada no Windows (incluindo térmica 80mm).
 Ao criar um pedido (com autoimpressão ligada), abre a tela de impressão do navegador.
 Também disponível em **Pedidos → Imprimir**.
 
-Configure a impressora térmica como **padrão** no Windows e selecione-a no diálogo de impressão.
+### Modo rede IP direta
 
-### Modo rede (impressora térmica IP / ESC/POS)
-
-Para impressoras na rede local (porta raw `9100`, protocolo EPSON ESC/POS):
+Só use se o **servidor PHP** alcançar o IP da impressora (mesmo LAN / VPN):
 
 1. Modo: **Rede IP**
-2. IP: o do relatório da impressora (ex.: `192.168.1.100`)
-3. Porta: `9100`
-4. Largura: `48` para bobina 80mm (ou `32` para 58mm)
-5. Salve e clique em **Testar impressora de rede**
+2. IP / porta: `192.168.1.100` / `9100`
+3. Largura: `48`
+4. **Testar impressora de rede**
 
-**Importante:** o servidor PHP precisa alcançar o IP da impressora. Se o painel roda na
-nuvem/VPS e a impressora só existe no Wi‑Fi do restaurante, a conexão falha — use o modo
-**Navegador** ou hospede o sistema na mesma rede da impressora.
-
-A comanda de cozinha é enviada automaticamente ao criar pedido (painel ou WhatsApp) quando
-o modo rede está ativo.
+Se o painel está na VPS e a impressora só no Wi‑Fi do restaurante, a conexão falha — use **Agente local**.
 ## Stack
 
 - Laravel 13
