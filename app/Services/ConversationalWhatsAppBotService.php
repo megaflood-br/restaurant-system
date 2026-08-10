@@ -52,6 +52,21 @@ class ConversationalWhatsAppBotService
         }
 
         $session = $this->getSession($phone);
+
+        if (($session['state'] ?? '') === 'pix_wait') {
+            $this->handlePixWait($phone, $text, $customer, $payload);
+
+            return;
+        }
+
+        if (config('whatsapp_agent.use_openai')) {
+            $handled = app(OpenAiWhatsAppAgentService::class)->handle($phone, $text, $pushName, $payload);
+
+            if ($handled) {
+                return;
+            }
+        }
+
         $state = $session['state'] ?? 'welcome';
 
         if ($state === 'welcome' || $this->matchesIntent($command, ['oi', 'olá', 'ola', 'help', 'inicio', 'início', 'bom dia', 'boa tarde', 'boa noite'])) {
@@ -926,5 +941,318 @@ class ConversationalWhatsAppBotService
         }
 
         return false;
+    }
+
+    public function replyToCustomer(string $phone, string $message, ?string $pushName = null): void
+    {
+        $this->replyText($phone, $message, $this->resolveCustomer($phone, $pushName));
+    }
+
+    public function normalizedPhoneKey(string $phone): string
+    {
+        return PhoneNumber::normalize($phone) ?? $phone;
+    }
+
+    public function restaurantDisplayName(): string
+    {
+        return $this->restaurantName();
+    }
+
+    public function openingHoursLabel(): string
+    {
+        $opening = (string) (config('general.opening_time') ?: config('digital_menu.opening_time', '09:00'));
+        $closing = (string) (config('general.closing_time') ?: config('digital_menu.closing_time', '22:00'));
+
+        return $this->formatTimeForWhatsApp($opening).' às '.$this->formatTimeForWhatsApp($closing);
+    }
+
+    /** @return array<string, mixed> */
+    public function sessionSnapshot(string $phone): array
+    {
+        $session = $this->getSession($phone);
+
+        return [
+            'state' => $session['state'] ?? 'welcome',
+            'cart' => $this->simplifiedCart($session['cart'] ?? []),
+            'order_type' => $session['order_type'] ?? null,
+            'delivery_fee' => $session['delivery_fee'] ?? null,
+            'payment_method' => $session['payment_method'] ?? null,
+        ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function menuSnapshot(): array
+    {
+        return $this->menuProducts()->map(function (Product $product) {
+            $entry = [
+                'id' => $product->id,
+                'name' => $product->name,
+                'category' => $product->category->name,
+                'price' => (float) $product->displayPrice(),
+                'price_label' => $product->priceLabel(),
+                'has_variants' => $product->hasVariants(),
+            ];
+
+            if ($product->hasVariants()) {
+                $entry['variants'] = $product->variants->map(fn ($variant) => [
+                    'label' => $variant->label,
+                    'price' => (float) $variant->price,
+                ])->values()->all();
+            }
+
+            return $entry;
+        })->values()->all();
+    }
+
+    /** @return array<string, mixed> */
+    public function toolSendMenuImage(string $phone, ?string $pushName): array
+    {
+        $customer = $this->resolveCustomer($phone, $pushName);
+        $this->sendMenuImage($phone, $customer, sendFollowup: false);
+        $this->setSession($phone, array_merge($this->getSession($phone), [
+            'state' => 'ordering',
+            'cart' => $this->getSession($phone)['cart'] ?? [],
+        ]));
+
+        return ['ok' => true, 'sent' => $this->menuImageUrl() !== null];
+    }
+
+    /** @param  array<string, mixed>  $arguments */
+    /** @return array<string, mixed> */
+    public function toolAddToCart(string $phone, array $arguments, ?string $pushName): array
+    {
+        $session = $this->getSession($phone);
+        $cart = $session['cart'] ?? [];
+        $added = [];
+        $errors = [];
+
+        foreach ($arguments['items'] ?? [] as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $product = $this->matchProduct((string) ($item['product_name'] ?? ''));
+
+            if (! $product) {
+                $errors[] = 'Produto não encontrado: '.($item['product_name'] ?? '?');
+                continue;
+            }
+
+            $variantLabel = isset($item['variant_label']) ? mb_strtoupper(trim((string) $item['variant_label'])) : null;
+            $variant = $this->resolveVariant($product, $variantLabel);
+
+            if ($product->hasVariants() && ! $variant) {
+                $errors[] = "Informe o tamanho (P, M ou G) para {$product->name}.";
+                continue;
+            }
+
+            $quantity = max(1, (int) ($item['quantity'] ?? 1));
+            $cartKey = $product->id.'|'.($variant?->id ?? 0);
+            $found = false;
+
+            foreach ($cart as &$cartItem) {
+                $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
+
+                if ($existingKey === $cartKey) {
+                    $cartItem['quantity'] += $quantity;
+                    $found = true;
+                    break;
+                }
+            }
+            unset($cartItem);
+
+            if (! $found) {
+                $cart[] = [
+                    'product_id' => $product->id,
+                    'variant_id' => $variant?->id,
+                    'quantity' => $quantity,
+                ];
+            }
+
+            $name = $variant ? $product->name.' ('.$variant->label.')' : $product->name;
+            $added[] = "{$quantity}x {$name}";
+        }
+
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'ordering',
+            'cart' => $cart,
+        ]));
+
+        return [
+            'ok' => $errors === [],
+            'added' => $added,
+            'errors' => $errors,
+            'cart' => $this->simplifiedCart($cart),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function toolViewCart(string $phone): array
+    {
+        $session = $this->getSession($phone);
+        $cart = $session['cart'] ?? [];
+
+        return [
+            'ok' => true,
+            'cart' => $this->simplifiedCart($cart),
+            'total' => $this->cartTotal($cart),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function toolFinalizeItems(string $phone, ?string $pushName): array
+    {
+        $session = $this->getSession($phone);
+
+        if (($session['cart'] ?? []) === []) {
+            return ['ok' => false, 'error' => 'Carrinho vazio.'];
+        }
+
+        $this->setSession($phone, array_merge($session, ['state' => 'extras']));
+
+        return ['ok' => true, 'next' => 'extras', 'message' => $this->message('extras_message')];
+    }
+
+    /** @return array<string, mixed> */
+    public function toolSetExtras(string $phone, string $notes, ?string $pushName): array
+    {
+        $session = $this->getSession($phone);
+
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'address',
+            'extras_notes' => trim($notes),
+        ]));
+
+        return ['ok' => true, 'next' => 'address', 'message' => $this->message('address_message')];
+    }
+
+    /** @return array<string, mixed> */
+    public function toolQuoteDelivery(string $phone, string $address, ?string $pushName): array
+    {
+        $session = $this->getSession($phone);
+        $customer = $this->resolveCustomer($phone, $pushName);
+        $command = mb_strtolower(trim($address));
+
+        if ($this->matchesIntent($command, ['retirada', 'retirar', 'balcão', 'balcao', 'buscar', 'pegar'])) {
+            $this->setSession($phone, array_merge($session, [
+                'state' => 'payment',
+                'order_type' => 'takeaway',
+                'delivery_address' => null,
+                'delivery_fee' => 0,
+                'delivery_area_id' => null,
+                'distance_km' => null,
+            ]));
+
+            return [
+                'ok' => true,
+                'order_type' => 'takeaway',
+                'summary' => $this->buildSummary($this->getSession($phone)),
+            ];
+        }
+
+        $quote = $this->deliveryFeeService->quoteForAddress(trim($address));
+
+        if ($quote === null) {
+            return ['ok' => false, 'error' => 'Endereço inválido ou fora da área de entrega.'];
+        }
+
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'payment',
+            'order_type' => 'delivery',
+            'delivery_address' => trim($address),
+            'delivery_fee' => $quote['delivery_fee'],
+            'delivery_area_id' => $quote['delivery_area_id'],
+            'distance_km' => $quote['distance_km'],
+        ]));
+
+        return [
+            'ok' => true,
+            'order_type' => 'delivery',
+            'distance_km' => $quote['distance_km'],
+            'delivery_fee' => $quote['delivery_fee'],
+            'summary' => $this->buildSummary($this->getSession($phone)),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function toolSetPayment(string $phone, string $methodText, ?string $pushName, array $payload = []): array
+    {
+        $method = PaymentMethod::normalize($methodText);
+
+        if ($method === null) {
+            return ['ok' => false, 'error' => 'Forma de pagamento não reconhecida.'];
+        }
+
+        $session = $this->getSession($phone);
+        $customer = $this->resolveCustomer($phone, $pushName);
+        $session['payment_method'] = $method;
+
+        if ($method === 'pix') {
+            $pixKey = config('whatsapp_agent.pix_key');
+
+            if (! filled($pixKey)) {
+                return ['ok' => false, 'error' => 'Chave Pix não configurada no sistema.'];
+            }
+
+            $this->setSession($phone, array_merge($session, ['state' => 'pix_wait']));
+
+            return [
+                'ok' => true,
+                'awaiting_pix_proof' => true,
+                'pix_key' => $pixKey,
+                'pix_message' => $this->render($this->message('pix_message'), ['pix_key' => $pixKey]),
+            ];
+        }
+
+        $this->setSession($phone, $session);
+        $this->createOrder($phone, $customer, $session);
+
+        return ['ok' => true, 'order_created' => true];
+    }
+
+    /** @return array<string, mixed> */
+    public function toolCancelOrder(string $phone, ?string $pushName): array
+    {
+        $this->clearSession($phone);
+        Cache::forget('whatsapp_ai_history:'.($this->normalizedPhoneKey($phone)));
+
+        return ['ok' => true, 'message' => $this->message('cancel_message')];
+    }
+
+    /** @param  array<int, array<string, mixed>>  $cart */
+    /** @return array<int, array<string, mixed>> */
+    private function simplifiedCart(array $cart): array
+    {
+        if ($cart === []) {
+            return [];
+        }
+
+        $products = Product::query()
+            ->when(ProductVariants::enabled(), fn ($query) => $query->with([
+                'variants' => fn ($variantQuery) => $variantQuery->where('is_available', true)->orderBy('sort_order'),
+            ]))
+            ->whereIn('id', collect($cart)->pluck('product_id'))
+            ->get()
+            ->keyBy('id');
+
+        $lines = [];
+
+        foreach ($cart as $item) {
+            $product = $products->get($item['product_id']);
+
+            if (! $product) {
+                continue;
+            }
+
+            $resolved = ProductSellable::resolve($product, $item['variant_id'] ?? null);
+            $lines[] = [
+                'name' => $resolved['name'],
+                'quantity' => (int) $item['quantity'],
+                'unit_price' => $resolved['price'],
+                'subtotal' => $resolved['price'] * (int) $item['quantity'],
+            ];
+        }
+
+        return $lines;
     }
 }

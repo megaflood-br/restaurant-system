@@ -17,6 +17,16 @@
             Usar bot integrado (conversa automática)
         </label>
         <label class="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" name="use_openai" value="1" @checked(old('use_openai', $whatsappAgent['use_openai'])) class="rounded border-gray-300 text-indigo-600"
+                @disabled(! $whatsappAgent['openai_configured'])>
+            Usar OpenAI para entender mensagens (recomendado)
+        </label>
+        @if (! $whatsappAgent['openai_configured'])
+            <p class="text-xs text-amber-700">Defina <code>OPENAI_ENABLED=true</code> e <code>OPENAI_API_KEY</code> no .env do servidor.</p>
+        @else
+            <p class="text-xs text-gray-500">Modelo: {{ config('openai.model', 'gpt-4o-mini') }}. Se a OpenAI falhar, o bot usa o parser antigo como fallback.</p>
+        @endif
+        <label class="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" name="forward_to_n8n" value="1" @checked(old('forward_to_n8n', $whatsappAgent['forward_to_n8n'])) class="rounded border-gray-300 text-indigo-600">
             Encaminhar mensagens recebidas para o n8n (opcional)
         </label>
@@ -32,6 +42,9 @@
             Webhook na Evolution: <code class="break-all">{{ url('/api/webhooks/evolution') }}</code>
             — evento <strong>MESSAGES_UPSERT</strong>. Com <em>Webhook by Events</em> ligado, também funciona
             <code class="break-all">{{ url('/api/webhooks/evolution/messages-upsert') }}</code>.
+        </p>
+        <p class="text-xs text-indigo-800">
+            Com OpenAI ativa, desmarque <strong>Encaminhar para n8n</strong> abaixo para evitar dois bots respondendo ao mesmo tempo.
         </p>
     </div>
 

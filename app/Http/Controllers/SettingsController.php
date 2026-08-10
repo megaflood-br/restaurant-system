@@ -315,6 +315,7 @@ class SettingsController extends Controller
         Setting::setMany('whatsapp_agent', [
             'enabled' => $request->boolean('enabled'),
             'use_builtin_bot' => $request->boolean('use_builtin_bot'),
+            'use_openai' => $request->boolean('use_openai'),
             'forward_to_n8n' => $request->boolean('forward_to_n8n'),
             'restaurant_name' => $validated['restaurant_name'] ?? '',
             'welcome_message' => $validated['welcome_message'] ?? '',

@@ -3,6 +3,7 @@
 return [
     'enabled' => false,
     'use_builtin_bot' => true,
+    'use_openai' => false,
     'forward_to_n8n' => true,
     'restaurant_name' => '',
     'welcome_message' => "Olá! Seja muito bem-vindo(a) ao {restaurant_name}! 🍽️ Que bom ter você por aqui hoje.\n\nPara você dar aquela conferida nos nossos pratos fresquinhos, segue o cardápio de hoje:",

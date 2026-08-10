@@ -66,6 +66,7 @@ class AppSettings
 
             'whatsapp_agent.enabled' => Setting::get('whatsapp_agent', 'enabled', config('whatsapp_agent.enabled')),
             'whatsapp_agent.use_builtin_bot' => Setting::get('whatsapp_agent', 'use_builtin_bot', config('whatsapp_agent.use_builtin_bot')),
+            'whatsapp_agent.use_openai' => Setting::get('whatsapp_agent', 'use_openai', config('whatsapp_agent.use_openai')),
             'whatsapp_agent.forward_to_n8n' => Setting::get('whatsapp_agent', 'forward_to_n8n', config('whatsapp_agent.forward_to_n8n', config('integration.forward_inbound_to_n8n'))),
             'whatsapp_agent.restaurant_name' => Setting::get('whatsapp_agent', 'restaurant_name', config('whatsapp_agent.restaurant_name')),
             'whatsapp_agent.welcome_message' => Setting::get('whatsapp_agent', 'welcome_message', config('whatsapp_agent.welcome_message')),
@@ -167,6 +168,7 @@ class AppSettings
             'whatsapp_agent' => [
                 'enabled' => config('whatsapp_agent.enabled', false),
                 'use_builtin_bot' => config('whatsapp_agent.use_builtin_bot', true),
+                'use_openai' => config('whatsapp_agent.use_openai', false),
                 'forward_to_n8n' => config('whatsapp_agent.forward_to_n8n', config('integration.forward_inbound_to_n8n', true)),
                 'restaurant_name' => config('whatsapp_agent.restaurant_name', ''),
                 'welcome_message' => config('whatsapp_agent.welcome_message', ''),
@@ -275,6 +277,8 @@ class AppSettings
         return [
             'enabled' => config('whatsapp_agent.enabled'),
             'use_builtin_bot' => config('whatsapp_agent.use_builtin_bot'),
+            'use_openai' => config('whatsapp_agent.use_openai'),
+            'openai_configured' => filled(config('openai.api_key')) && config('openai.enabled'),
             'forward_to_n8n' => config('whatsapp_agent.forward_to_n8n'),
             'restaurant_name' => config('whatsapp_agent.restaurant_name'),
             'welcome_message' => config('whatsapp_agent.welcome_message'),
