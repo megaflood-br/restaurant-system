@@ -69,10 +69,15 @@ class WhatsAppSavedAddressTest extends TestCase
 
         $this->assertTrue($result['ok']);
         $this->assertSame(8.0, $result['delivery_fee']);
+        $this->assertTrue($result['already_sent_to_customer'] ?? false);
+        $this->assertContains($result['next'], ['schedule', 'payment']);
+        $this->assertArrayNotHasKey('pix_key', $result);
 
         $snapshot = $bot->sessionSnapshot('5511888777666');
         $this->assertSame('delivery', $snapshot['order_type']);
         $this->assertFalse($snapshot['saved_address_prompt']);
+        $this->assertContains($snapshot['state'], ['schedule', 'payment']);
+        $this->assertNull($snapshot['payment_method']);
     }
 
     public function test_declining_saved_address_asks_for_a_new_one(): void
