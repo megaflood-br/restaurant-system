@@ -9,6 +9,7 @@ use App\Models\DeliveryArea;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\WhatsAppMessage;
+use App\Services\CashFlowService;
 use App\Services\EvolutionApiService;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
@@ -287,6 +288,14 @@ class OrderApiController extends Controller
 
         if ($validated['status'] === 'cancelled' && $previousStatus !== 'cancelled') {
             $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
+        }
+
+        if ($validated['status'] === 'delivered' && $previousStatus !== 'delivered') {
+            try {
+                app(CashFlowService::class)->recordOrderSale($order->fresh());
+            } catch (\Throwable) {
+                //
+            }
         }
 
         try {

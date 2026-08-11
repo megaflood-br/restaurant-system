@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use App\Services\CashFlowService;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
 use App\Support\ProductSellable;
@@ -181,6 +182,17 @@ class OrderController extends Controller
 
         if ($validated['status'] === 'cancelled' && $previousStatus !== 'cancelled') {
             $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
+        }
+
+        if ($validated['status'] === 'delivered' && $previousStatus !== 'delivered') {
+            try {
+                app(CashFlowService::class)->recordOrderSale(
+                    $order->fresh(),
+                    $request->user()->id
+                );
+            } catch (\Throwable) {
+                // best-effort
+            }
         }
 
         try {

@@ -57,7 +57,9 @@
                         </x-nav-dropdown-link>
                     </x-nav-dropdown>
 
-
+                    <x-nav-link :href="route('financeiro.index')" :active="request()->routeIs('financeiro.*')">
+                        Financeiro
+                    </x-nav-link>
 
                     <x-nav-link :href="route('settings.index')" :active="request()->routeIs('settings.*') || request()->routeIs('whatsapp.*')">
                         Configurações
@@ -157,7 +159,9 @@
                 Categorias de estoque
             </x-responsive-nav-link>
 
-
+            <x-responsive-nav-link :href="route('financeiro.index')" :active="request()->routeIs('financeiro.*')">
+                Financeiro
+            </x-responsive-nav-link>
 
             <x-responsive-nav-link :href="route('settings.index')" :active="request()->routeIs('settings.*') || request()->routeIs('whatsapp.*')">
                 Configurações
