@@ -294,7 +294,7 @@
                                     <p class="mt-1"><a class="underline font-medium" href="https://github.com/megaflood-br/restaurant-system/tree/main/print-agent" target="_blank" rel="noopener">github.com/.../print-agent</a></p>
                                     <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-[11px] leading-relaxed">1. Copie config.example.ini → config.ini (cole o token)
 2. Duplo clique em iniciar.bat
-   (precisa ter PHP no Windows)</pre>
+   (PowerShell do Windows — sem instalar PHP)</pre>
                                     <p class="mt-1">Ou baixe o atalho <code class="bg-amber-100 px-1 rounded">baixar-agente.bat</code> — ele coloca os arquivos na Área de Trabalho.</p>
                                     <p class="mt-1">Deixe a janela aberta. Com “imprimir ao Preparando”, a comanda só entra na fila quando você mudar o status.</p>
                                     <p class="mt-2"><strong>Rede IP direta:</strong> IP <code class="bg-amber-100 px-1 rounded">192.168.1.100</code>, porta <code class="bg-amber-100 px-1 rounded">9100</code>, largura <code class="bg-amber-100 px-1 rounded">48</code> (80mm). Só funciona se o servidor alcançar esse IP.</p>

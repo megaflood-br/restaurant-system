@@ -99,12 +99,10 @@ em `192.168.1.100:9100`. **Não precisa clonar o sistema Laravel.**
 1. Modo: **Agente local** (+ largura `48` para bobina 80mm)
 2. Token em **Configurações → Integração**
 3. No PC do restaurante, baixe só a pasta [`print-agent/`](print-agent/):
-   - `print-agent.php`, `iniciar.bat`, `config.example.ini`, `LEIA-ME.txt`
+   - **Não precisa de PHP** — usa PowerShell do Windows
    - Ou rode `print-agent/baixar-agente.bat` (baixa para a Área de Trabalho)
 4. Copie `config.example.ini` → `config.ini`, cole URL/token/IP
 5. Duplo clique em `iniciar.bat` (deixe a janela aberta)
-
-Requisito no PC: [PHP para Windows](https://windows.php.net/download/) no PATH.
 
 ### Modo navegador
 
