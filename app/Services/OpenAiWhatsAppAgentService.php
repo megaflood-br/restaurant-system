@@ -55,6 +55,8 @@ class OpenAiWhatsAppAgentService
 
                 $messages[] = $choice;
 
+                $alreadySentToCustomer = false;
+
                 foreach ($toolCalls as $toolCall) {
                     $name = (string) data_get($toolCall, 'function.name', '');
                     $arguments = json_decode((string) data_get($toolCall, 'function.arguments', '{}'), true);
@@ -64,11 +66,22 @@ class OpenAiWhatsAppAgentService
                         'user_text' => $text,
                     ]), $name, $arguments);
 
+                    if (! empty($result['already_sent_to_customer'])) {
+                        $alreadySentToCustomer = true;
+                    }
+
                     $messages[] = [
                         'role' => 'tool',
                         'tool_call_id' => data_get($toolCall, 'id'),
                         'content' => json_encode($result, JSON_UNESCAPED_UNICODE),
                     ];
+                }
+
+                // PHP já enviou a resposta (ex.: chave Pix + pedido criado) — não deixe a LLM inventar outra.
+                if ($alreadySentToCustomer) {
+                    $this->appendHistory($phone, 'assistant', 'OK');
+
+                    return true;
                 }
             }
 
@@ -94,11 +107,17 @@ class OpenAiWhatsAppAgentService
             'Nome do restaurante: '.$this->bot->restaurantDisplayName(),
             'Cliente: '.($pushName ?: 'Cliente'),
             'Horário de funcionamento: '.$this->bot->openingHoursLabel(),
+            'Status agora: '.json_encode($this->bot->openingHoursSnapshot(), JSON_UNESCAPED_UNICODE),
             'Agora no restaurante: '.now()->timezone(config('app.timezone'))->format('d/m/Y H:i').' ('.config('app.timezone').')',
             'Objetivo: ajudar a montar pedido (itens com tamanho P/M/G quando existir), entrega ou retirada, horário (agora ou agendado), pagamento e Pix.',
             'Fluxo: itens → acompanhamento (set_side: fritas/legumes) → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
+            'Se force_closed=true, NÃO inicie pedido nem chame ferramentas de carrinho: informe que está fechado e diga quando abre.',
+            'Se is_open=false e force_closed=false, ACEITE montar o pedido e AGENDAR para o próximo expediente. NÃO ofereça entrega "agora" e NÃO chame set_schedule com "agora".',
+            'Se o estado da sessão for "side", use APENAS set_side — NUNCA chame add_to_cart de novo para o mesmo item.',
+            'Nunca diga que "houve um erro ao adicionar" se a ferramenta não retornou erro real (ok=false).',
             'Se o cliente já tiver endereço cadastrado, após set_extras a ferramenta devolve a confirmação. Se o cliente disser sim/mesmo, chame quote_delivery com "sim". Se disser não/outro, peça o endereço novo e depois quote_delivery.',
-            'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h"), use set_schedule assim que possível.',
+            'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h", "as 11hs"), use set_schedule assim que possível.',
+            'Horários como "11hs"/"11h" sem "daqui" são horário do relógio; se já passou hoje, a ferramenta agenda para amanhã.',
             'Nunca invente pratos, preços ou tamanhos (P/M/G).',
             'Se o produto tiver variações e o cliente NÃO disse o tamanho, NÃO chame add_to_cart com P/M/G inventado: pergunte o tamanho e só então adicione.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
@@ -107,7 +126,10 @@ class OpenAiWhatsAppAgentService
             'NÃO liste o cardápio completo em texto (nomes e preços). A resposta ao pedido de cardápio é a imagem do dia.',
             'get_menu serve apenas para montar/confirmar itens do pedido, nunca para exibir o cardápio ao cliente.',
             'Após finalizar os itens (finalize_items), se houver opções de acompanhamento, chame set_side antes de set_extras.',
-            'Na primeira saudação, também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
+            'Na primeira saudação (se não estiver force_closed), também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
+            'Com Pix, set_payment cria o pedido no sistema e já envia a chave ao cliente — não invente outra chave nem diga que houve erro se ok=true.',
+            'Se a ferramenta retornar already_sent_to_customer=true, NÃO reescreva a mensagem; responda apenas OK.',
+            'Nunca diga que o pedido foi enviado à cozinha sem confirmação (Pix aguarda comprovante, mas o pedido já fica registrado).',
             'Seja breve, clara e amigável em português do Brasil.',
             'Estado atual da sessão: '.json_encode($session, JSON_UNESCAPED_UNICODE),
             'Endereço cadastrado do cliente: '.($this->bot->savedAddressForPhone($phone, $pushName) ?: 'nenhum'),
@@ -130,9 +152,21 @@ class OpenAiWhatsAppAgentService
     /** @return array<string, mixed> */
     private function executeTool(string $phone, ?string $pushName, array $payload, string $name, array $arguments): array
     {
+        if ($name === 'add_to_cart') {
+            $session = $this->bot->sessionSnapshot($phone);
+
+            if (($session['state'] ?? '') === 'side') {
+                return [
+                    'ok' => false,
+                    'error' => 'O cliente está escolhendo o acompanhamento. Use set_side (ex.: fritas ou legumes), não add_to_cart.',
+                    'side_options' => SideOptions::all(),
+                ];
+            }
+        }
+
         return match ($name) {
             'get_menu' => ['ok' => true, 'menu' => $this->bot->menuSnapshot()],
-            'get_opening_hours' => ['ok' => true, 'hours' => $this->bot->openingHoursLabel()],
+            'get_opening_hours' => ['ok' => true, 'hours' => $this->bot->openingHoursSnapshot()],
             'send_menu_image' => $this->bot->toolSendMenuImage($phone, $pushName),
             'add_to_cart' => $this->bot->toolAddToCart($phone, $arguments, $pushName, $payload['user_text'] ?? null),
             'view_cart' => $this->bot->toolViewCart($phone),
