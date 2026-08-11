@@ -78,6 +78,68 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         $this->assertSame('pix_wait', $bot->sessionSnapshot($phone)['state']);
     }
 
+    public function test_cash_payment_creates_order_and_does_not_lie_on_failure(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $product = $this->createStrogonoff();
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->atLeast()->once();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000404';
+        $this->seedPaymentReadySession($bot, $phone, $product);
+
+        $result = $bot->toolSetPayment($phone, 'dinheiro', 'Carlos');
+
+        $this->assertTrue($result['ok']);
+        $this->assertTrue($result['order_created']);
+        $this->assertTrue($result['already_sent_to_customer']);
+        $this->assertSame(1, Order::query()->count());
+        $this->assertSame('cash', Order::query()->first()->payment_method);
+    }
+
+    public function test_set_payment_with_empty_cart_returns_error(): void
+    {
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->zeroOrMoreTimes();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $result = $bot->toolSetPayment('5511999000405', 'pix', 'Carlos');
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame(0, Order::query()->count());
+    }
+
+    public function test_payment_reply_is_handled_before_openai_and_creates_order(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $product = $this->createStrogonoff();
+        $phone = '5511999000406';
+
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->atLeast()->once();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $this->seedPaymentReadySession($bot, $phone, $product);
+
+        $bot->process($phone, 'pode ser no pix', 'Carlos');
+
+        $this->assertSame(1, Order::query()->count());
+        $this->assertSame('pix', Order::query()->first()->payment_method);
+        $this->assertSame('pix_wait', $bot->sessionSnapshot($phone)['state']);
+    }
+
     public function test_side_reply_is_handled_before_openai_path(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));

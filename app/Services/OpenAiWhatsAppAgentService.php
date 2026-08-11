@@ -45,6 +45,15 @@ class OpenAiWhatsAppAgentService
                 if ($toolCalls === []) {
                     $reply = trim((string) ($choice['content'] ?? ''));
 
+                    // Se o cliente indicou pagamento e a LLM não chamou set_payment, finalize no PHP.
+                    $forced = $this->bot->forceFinalizePaymentFromUserText($phone, $text, $pushName, $payload);
+
+                    if ($forced !== null) {
+                        $this->appendHistory($phone, 'assistant', $forced['ok'] ? 'OK' : ($forced['error'] ?? 'erro'));
+
+                        return true;
+                    }
+
                     if ($reply !== '') {
                         $this->bot->replyToCustomer($phone, $reply, $pushName);
                         $this->appendHistory($phone, 'assistant', $reply);
@@ -128,6 +137,8 @@ class OpenAiWhatsAppAgentService
             'Após finalizar os itens (finalize_items), se houver opções de acompanhamento, chame set_side antes de set_extras.',
             'Na primeira saudação (se não estiver force_closed), também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
             'Com Pix, set_payment cria o pedido no sistema e já envia a chave ao cliente — não invente outra chave nem diga que houve erro se ok=true.',
+            'Para dinheiro/cartão, set_payment também CRIA o pedido. Nunca diga que o pedido foi confirmado sem chamar set_payment e receber order_created=true.',
+            'Se set_payment retornar ok=false, NÃO invente confirmação nem número de pedido — informe o erro e peça para tentar de novo.',
             'Se a ferramenta retornar already_sent_to_customer=true, NÃO reescreva a mensagem; responda apenas OK.',
             'Nunca diga que o pedido foi enviado à cozinha sem confirmação (Pix aguarda comprovante, mas o pedido já fica registrado).',
             'Seja breve, clara e amigável em português do Brasil.',
