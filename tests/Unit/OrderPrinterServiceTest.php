@@ -122,6 +122,7 @@ class OrderPrinterServiceTest extends TestCase
             'customer_name' => 'Carlos',
             'customer_phone' => '11999999999',
             'delivery_address' => 'Rua das Flores, 100, Centro, Sao Paulo, SP',
+            'payment_method' => 'pix',
             'delivery_fee' => 8,
             'total' => 33,
         ]);
@@ -141,6 +142,7 @@ class OrderPrinterServiceTest extends TestCase
         $this->assertStringContainsString('ENTREGA', $text);
         $this->assertStringContainsString('Endereco:', $text);
         $this->assertStringContainsString('Rua das Flores', $text);
+        $this->assertStringContainsString('Pagamento: PIX', $text);
     }
 
     public function test_delivery_receipt_falls_back_to_customer_address(): void

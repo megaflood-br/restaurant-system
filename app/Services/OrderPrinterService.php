@@ -187,6 +187,7 @@ class OrderPrinterService
         $lines[] = 'Pedido: '.$order->order_number;
         $lines[] = 'Data: '.$order->created_at->format('d/m/Y H:i');
         $lines[] = 'Tipo: '.($typeLabels[$order->type] ?? $order->type);
+        $lines[] = 'Pagamento: '.PaymentMethod::label($order->payment_method);
 
         if ($order->type === 'dine_in') {
             $lines[] = 'Comanda: '.($order->comanda_number ?? '-');
