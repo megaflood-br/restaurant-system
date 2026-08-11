@@ -50,8 +50,7 @@ class EvolutionWebhookController extends Controller
                 $text = '[imagem]';
             }
 
-            $remoteJid = data_get($message, 'key.remoteJidAlt')
-                ?? data_get($message, 'key.remoteJid');
+            $remoteJid = $this->resolveRemoteJid($message);
 
             if (! $remoteJid || str_contains($remoteJid, '@g.us') || str_contains($remoteJid, '@broadcast')) {
                 continue;
@@ -134,8 +133,7 @@ class EvolutionWebhookController extends Controller
 
     private function handleHumanOutbound(array $message): void
     {
-        $remoteJid = data_get($message, 'key.remoteJidAlt')
-            ?? data_get($message, 'key.remoteJid');
+        $remoteJid = $this->resolveRemoteJid($message);
 
         if (! $remoteJid || str_contains($remoteJid, '@g.us') || str_contains($remoteJid, '@broadcast')) {
             return;
@@ -154,5 +152,39 @@ class EvolutionWebhookController extends Controller
             'phone' => $phone,
             'message_id' => $messageId,
         ]);
+    }
+
+    /**
+     * Prefere JID com número real (@s.whatsapp.net / @c.us) em vez de @lid,
+     * para a sessão do carrinho não mudar no meio do pedido.
+     */
+    private function resolveRemoteJid(array $message): ?string
+    {
+        $candidates = [
+            data_get($message, 'key.remoteJidAlt'),
+            data_get($message, 'key.remoteJid'),
+            data_get($message, 'key.participantAlt'),
+            data_get($message, 'key.participant'),
+        ];
+
+        $fallback = null;
+
+        foreach ($candidates as $jid) {
+            if (! is_string($jid) || $jid === '') {
+                continue;
+            }
+
+            if (str_contains($jid, '@g.us') || str_contains($jid, '@broadcast')) {
+                continue;
+            }
+
+            if (str_contains($jid, '@s.whatsapp.net') || str_contains($jid, '@c.us')) {
+                return $jid;
+            }
+
+            $fallback ??= $jid;
+        }
+
+        return $fallback;
     }
 }

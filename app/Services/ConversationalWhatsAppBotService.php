@@ -92,6 +92,20 @@ class ConversationalWhatsAppBotService
             return;
         }
 
+        // Pagamento: gravar pedido no PHP antes da OpenAI (ela às vezes "confirma" sem set_payment).
+        if (($session['state'] ?? '') === 'payment' && PaymentMethod::detect($text) !== null) {
+            $this->handlePayment($phone, $text, $customer);
+
+            return;
+        }
+
+        // Horário: resolver no PHP quando já estamos na etapa schedule.
+        if (($session['state'] ?? '') === 'schedule' && OrderSchedule::enabled()) {
+            $this->handleSchedule($phone, $text, $customer);
+
+            return;
+        }
+
         if ($this->shouldRefuseOrdersWhileClosed($session)) {
             $this->replyClosed($phone, $customer);
 
@@ -611,7 +625,7 @@ class ConversationalWhatsAppBotService
 
     private function handlePayment(string $phone, string $text, ?Customer $customer): void
     {
-        $method = PaymentMethod::normalize($text);
+        $method = PaymentMethod::detect($text) ?? PaymentMethod::normalize($text);
 
         if ($method === null) {
             $this->replyText($phone, 'Forma de pagamento não reconhecida. Responda com *Pix*, *dinheiro*, *cartão de crédito* ou *cartão de débito*.', $customer);
@@ -648,7 +662,11 @@ class ConversationalWhatsAppBotService
         }
 
         $this->setSession($phone, $session);
-        $this->createOrder($phone, $customer, $session);
+        $order = $this->createOrder($phone, $customer, $session);
+
+        if (! $order) {
+            $this->replyText($phone, 'Não foi possível registrar o pedido. Tente novamente.', $customer);
+        }
     }
 
     private function handlePixWait(string $phone, string $text, ?Customer $customer, array $payload): void
@@ -690,7 +708,11 @@ class ConversationalWhatsAppBotService
             }
         }
 
-        $this->createOrder($phone, $customer, $session);
+        $order = $this->createOrder($phone, $customer, $session);
+
+        if (! $order) {
+            $this->replyText($phone, 'Não encontrei o pedido para confirmar. Envie *oi* e refaça o pedido, por favor.', $customer);
+        }
     }
 
     private function createOrder(string $phone, ?Customer $customer, array $session, bool $awaitingPixProof = false): ?Order
@@ -707,13 +729,36 @@ class ConversationalWhatsAppBotService
         $claimedSession = null;
 
         try {
-            $session = $this->getSession($phone);
+            $passedSession = $session;
+            $cached = $this->getSession($phone);
+            // Prefer campos passados (payment_method etc.), mas nunca perder o carrinho da sessão.
+            $session = array_merge($cached, $passedSession);
+
+            if (($session['cart'] ?? []) === [] && ($cached['cart'] ?? []) !== []) {
+                $session['cart'] = $cached['cart'];
+            }
+
+            if (($session['cart'] ?? []) === [] && ($passedSession['cart'] ?? []) !== []) {
+                $session['cart'] = $passedSession['cart'];
+            }
+
             $cart = $session['cart'] ?? [];
 
             if ($cart === [] || ($session['order_claimed'] ?? false) === true) {
-                Log::info('WhatsApp order create skipped — empty or already claimed', ['phone' => $phone]);
+                Log::info('WhatsApp order create skipped — empty or already claimed', [
+                    'phone' => $phone,
+                    'cart_count' => is_array($cart) ? count($cart) : 0,
+                    'order_claimed' => (bool) ($session['order_claimed'] ?? false),
+                    'state' => $session['state'] ?? null,
+                    'order_id' => $session['order_id'] ?? null,
+                    'has_payment_method' => filled($session['payment_method'] ?? null),
+                ]);
 
                 if ($awaitingPixProof && filled($session['order_id'] ?? null)) {
+                    return Order::query()->find($session['order_id']);
+                }
+
+                if (filled($session['order_id'] ?? null)) {
                     return Order::query()->find($session['order_id']);
                 }
 
@@ -777,6 +822,14 @@ class ConversationalWhatsAppBotService
                 return $order->fresh('items.product');
             });
 
+            Log::info('WhatsApp order created', [
+                'phone' => $phone,
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'payment_method' => $order->payment_method,
+                'awaiting_pix_proof' => $awaitingPixProof,
+            ]);
+
             try {
                 app(OrderPrinterService::class)->maybePrintOnCreate($order);
             } catch (\Throwable) {
@@ -784,18 +837,19 @@ class ConversationalWhatsAppBotService
             }
 
             if ($awaitingPixProof) {
-                $this->setSession($phone, [
+                $this->setSession($phone, array_merge($session, [
                     'state' => 'pix_wait',
                     'order_id' => $order->id,
                     'order_claimed' => true,
                     'cart' => [],
-                    'payment_method' => 'pix',
-                ]);
+                    'payment_method' => $session['payment_method'] ?? 'pix',
+                ]));
 
                 return $order;
             }
 
             $this->clearSession($phone);
+            WhatsAppBotPause::forgetAiHistory($phone);
 
             $total = number_format((float) $order->total, 2, ',', '.');
             $estimated = (string) config('whatsapp_agent.estimated_minutes', 45);
@@ -818,7 +872,11 @@ class ConversationalWhatsAppBotService
                 $this->setSession($phone, $claimedSession);
             }
 
-            Log::error('Conversational WhatsApp order creation failed', ['error' => $exception->getMessage()]);
+            Log::error('Conversational WhatsApp order creation failed', [
+                'phone' => $phone,
+                'error' => $exception->getMessage(),
+                'exception' => $exception::class,
+            ]);
             $this->replyText($phone, 'Não foi possível criar o pedido. Tente novamente ou entre em contato conosco.', $customer);
 
             return null;
@@ -1960,7 +2018,7 @@ class ConversationalWhatsAppBotService
     /** @return array<string, mixed> */
     public function toolSetPayment(string $phone, string $methodText, ?string $pushName, array $payload = []): array
     {
-        $method = PaymentMethod::normalize($methodText);
+        $method = PaymentMethod::detect($methodText) ?? PaymentMethod::normalize($methodText);
 
         if ($method === null) {
             return ['ok' => false, 'error' => 'Forma de pagamento não reconhecida.'];
@@ -1969,6 +2027,19 @@ class ConversationalWhatsAppBotService
         $session = $this->getSession($phone);
         $customer = $this->resolveCustomer($phone, $pushName);
         $session['payment_method'] = $method;
+
+        if (($session['cart'] ?? []) === [] && ! filled($session['order_id'] ?? null)) {
+            Log::warning('WhatsApp set_payment without cart', [
+                'phone' => $phone,
+                'state' => $session['state'] ?? null,
+                'method' => $method,
+            ]);
+
+            return [
+                'ok' => false,
+                'error' => 'Carrinho vazio — não posso finalizar. Peça os itens de novo com add_to_cart.',
+            ];
+        }
 
         if ($method === 'pix') {
             $pixKey = config('whatsapp_agent.pix_key');
@@ -1993,6 +2064,7 @@ class ConversationalWhatsAppBotService
                 'already_sent_to_customer' => true,
                 'order_created' => true,
                 'order_number' => $order->order_number,
+                'order_id' => $order->id,
                 'pix_key' => $pixKey,
             ];
         }
@@ -2000,7 +2072,17 @@ class ConversationalWhatsAppBotService
         $this->setSession($phone, $session);
         $order = $this->createOrder($phone, $customer, $session);
 
-        return ['ok' => true, 'order_created' => (bool) $order];
+        if (! $order) {
+            return ['ok' => false, 'error' => 'Não foi possível registrar o pedido. Tente novamente.'];
+        }
+
+        return [
+            'ok' => true,
+            'order_created' => true,
+            'already_sent_to_customer' => true,
+            'order_number' => $order->order_number,
+            'order_id' => $order->id,
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -2010,6 +2092,37 @@ class ConversationalWhatsAppBotService
         WhatsAppBotPause::forgetAiHistory($phone);
 
         return ['ok' => true, 'message' => $this->message('cancel_message')];
+    }
+
+    /**
+     * Usado pela OpenAI quando ela responde em texto sem chamar set_payment.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function forceFinalizePaymentFromUserText(string $phone, string $text, ?string $pushName = null, array $payload = []): ?array
+    {
+        $session = $this->getSession($phone);
+        $method = PaymentMethod::detect($text);
+
+        if ($method === null) {
+            return null;
+        }
+
+        $state = (string) ($session['state'] ?? '');
+        $cartReady = ($session['cart'] ?? []) !== [];
+        $alreadyCreated = filled($session['order_id'] ?? null);
+
+        if ($state !== 'payment' && ! ($cartReady && in_array($state, ['schedule', 'address', 'extras'], true))) {
+            if (! ($alreadyCreated && $state === 'pix_wait')) {
+                return null;
+            }
+        }
+
+        if ($state !== 'payment' && $cartReady) {
+            $this->setSession($phone, array_merge($session, ['state' => 'payment']));
+        }
+
+        return $this->toolSetPayment($phone, $method, $pushName, $payload);
     }
 
     private function handoffToHuman(string $phone, ?Customer $customer): void
