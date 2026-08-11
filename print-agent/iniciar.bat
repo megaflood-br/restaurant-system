@@ -3,19 +3,6 @@ chcp 65001 >nul
 title Agente de Impressao - Bella Bistro
 cd /d "%~dp0"
 
-where php >nul 2>nul
-if errorlevel 1 (
-    echo.
-    echo PHP nao encontrado neste PC.
-    echo Instale o PHP para Windows e marque "Add PHP to PATH":
-    echo   https://windows.php.net/download/
-    echo.
-    echo Ou use o XAMPP / Laragon e rode pelo terminal deles.
-    echo.
-    pause
-    exit /b 1
-)
-
 if not exist "config.ini" (
     if exist "config.example.ini" (
         copy /y "config.example.ini" "config.ini" >nul
@@ -31,10 +18,18 @@ if not exist "config.ini" (
     exit /b 1
 )
 
-echo Iniciando agente...
+echo Iniciando agente (PowerShell — sem PHP)...
 echo Deixe esta janela aberta. Para parar: Ctrl+C
 echo.
-php "%~dp0print-agent.php"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0print-agent.ps1"
+set "ERR=%ERRORLEVEL%"
+
 echo.
-echo Agente encerrado.
+if not "%ERR%"=="0" (
+    echo Agente encerrou com erro %ERR%.
+) else (
+    echo Agente encerrado.
+)
 pause
+exit /b %ERR%
