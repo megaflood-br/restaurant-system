@@ -5,6 +5,7 @@ use App\Http\Controllers\ComandaController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryAreaController;
+use App\Http\Controllers\FinanceiroController;
 use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderPrintController;
@@ -106,6 +107,11 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::post('comandas/{comanda}/abrir', [ComandaController::class, 'open'])->name('comandas.open');
         Route::get('comandas/{comanda}', [ComandaController::class, 'show'])->name('comandas.show');
         Route::post('comandas/{comanda}/fechar', [ComandaController::class, 'close'])->name('comandas.close');
+
+        Route::get('financeiro', [FinanceiroController::class, 'index'])->name('financeiro.index');
+        Route::get('financeiro/create', [FinanceiroController::class, 'create'])->name('financeiro.create');
+        Route::post('financeiro', [FinanceiroController::class, 'store'])->name('financeiro.store');
+        Route::delete('financeiro/{financeiro}', [FinanceiroController::class, 'destroy'])->name('financeiro.destroy');
 
         Route::resource('customers', CustomerController::class);
         Route::get('customers/{customer}/comanda', [CustomerController::class, 'openComanda'])->name('customers.comanda');

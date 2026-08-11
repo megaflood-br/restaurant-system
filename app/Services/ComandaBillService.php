@@ -144,6 +144,12 @@ class ComandaBillService
                 ]);
         });
 
+        try {
+            app(CashFlowService::class)->recordComandaClose($summary, auth()->id());
+        } catch (\Throwable) {
+            // Fluxo de caixa é best-effort; fechamento da comanda já foi concluído.
+        }
+
         return $summary;
     }
 

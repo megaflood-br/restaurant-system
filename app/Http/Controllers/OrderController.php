@@ -183,6 +183,17 @@ class OrderController extends Controller
             $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
         }
 
+        if ($validated['status'] === 'delivered' && $previousStatus !== 'delivered') {
+            try {
+                app(\App\Services\CashFlowService::class)->recordOrderSale(
+                    $order->fresh(),
+                    $request->user()->id
+                );
+            } catch (\Throwable) {
+                // best-effort
+            }
+        }
+
         try {
             app(OrderPrinterService::class)->maybePrintOnStatusChange(
                 $order->fresh(['items.product', 'customer', 'deliveryArea', 'user']),
