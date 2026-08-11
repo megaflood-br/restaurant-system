@@ -79,15 +79,37 @@ class ConversationalWhatsAppBotService
 
         $session = $this->getSession($phone);
 
-        if (($session['state'] ?? '') === 'pix_wait') {
-            $this->handlePixWait($phone, $text, $customer, $payload);
+        // Acompanhamento (fritas/legumes): tratar antes da OpenAI para evitar add_to_cart errado.
+        if (($session['state'] ?? '') === 'side' && SideOptions::resolve($text) !== null) {
+            $this->handleSide($phone, $text, $customer);
 
             return;
         }
 
-        // Acompanhamento (fritas/legumes): tratar antes da OpenAI para evitar add_to_cart errado.
-        if (($session['state'] ?? '') === 'side' && SideOptions::resolve($text) !== null) {
-            $this->handleSide($phone, $text, $customer);
+        // Confirmação de endereço salvo: PHP controla o próximo passo (horário/pagamento).
+        if (($session['state'] ?? '') === 'address' && ($session['saved_address_prompt'] ?? false) === true) {
+            $command = mb_strtolower(trim($text));
+
+            if ($this->confirmsSavedAddress($command)
+                || $this->declinesSavedAddress($command)
+                || $this->matchesIntent($command, ['retirada', 'retirar', 'balcão', 'balcao', 'buscar', 'pegar'])) {
+                $this->handleAddress($phone, $text, $customer);
+
+                return;
+            }
+        }
+
+        // Em pix_wait, permitir trocar para dinheiro/cartão (em vez de insistir no comprovante).
+        if (($session['state'] ?? '') === 'pix_wait') {
+            $altMethod = PaymentMethod::detect($text);
+
+            if ($altMethod !== null && $altMethod !== 'pix') {
+                $this->switchAwayFromPix($phone, $altMethod, $customer);
+
+                return;
+            }
+
+            $this->handlePixWait($phone, $text, $customer, $payload);
 
             return;
         }
@@ -420,7 +442,7 @@ class ConversationalWhatsAppBotService
 
         if ($this->matchesIntent($command, ['retirada', 'retirar', 'balcão', 'balcao', 'buscar', 'pegar'])) {
             $this->setSession($phone, array_merge($session, [
-                'state' => 'payment',
+                'state' => OrderSchedule::enabled() ? 'schedule' : 'payment',
                 'order_type' => 'takeaway',
                 'delivery_address' => null,
                 'delivery_fee' => 0,
@@ -472,7 +494,7 @@ class ConversationalWhatsAppBotService
         ]), $customer);
 
         $this->setSession($phone, array_merge($session, [
-            'state' => 'payment',
+            'state' => OrderSchedule::enabled() ? 'schedule' : 'payment',
             'order_type' => 'delivery',
             'delivery_address' => $address,
             'delivery_fee' => $quote['delivery_fee'],
@@ -1912,7 +1934,7 @@ class ConversationalWhatsAppBotService
                 'saved_address_prompt' => false,
             ]));
 
-            return $this->deliveryStepResponse($phone);
+            return $this->deliveryStepResponse($phone, $customer, sendToCustomer: true);
         }
 
         if (($session['saved_address_prompt'] ?? false) === true) {
@@ -1923,11 +1945,15 @@ class ConversationalWhatsAppBotService
                     'saved_address_prompt' => false,
                 ]));
 
+                $message = $this->message('address_message');
+                $this->replyText($phone, $message, $customer);
+
                 return [
                     'ok' => true,
                     'next' => 'address',
                     'ask_new_address' => true,
-                    'message' => $this->message('address_message'),
+                    'message' => $message,
+                    'already_sent_to_customer' => true,
                 ];
             }
         }
@@ -1962,7 +1988,7 @@ class ConversationalWhatsAppBotService
             'saved_address_prompt' => false,
         ]));
 
-        $response = $this->deliveryStepResponse($phone);
+        $response = $this->deliveryStepResponse($phone, $customer, sendToCustomer: true, prependDeliveryQuote: true);
         $response['distance_km'] = $quote['distance_km'];
         $response['delivery_fee'] = $quote['delivery_fee'];
 
@@ -1979,53 +2005,129 @@ class ConversationalWhatsAppBotService
         }
 
         $session = $this->getSession($phone);
+        $customer = $this->resolveCustomer($phone, $pushName);
         $this->setSession($phone, array_merge($session, [
             'state' => 'payment',
             'scheduled_for' => $resolved['datetime']?->toIso8601String(),
             'scheduled_label' => $resolved['label'],
         ]));
 
+        if ($resolved['datetime'] !== null) {
+            $this->replyText($phone, 'Perfeito! Seu pedido ficou agendado para *'.$resolved['label'].'*.', $customer);
+        }
+
+        $this->sendPaymentSummary($phone, $customer);
+
         return [
             'ok' => true,
             'scheduled_label' => $resolved['label'],
             'next' => 'payment',
             'summary' => $this->buildSummary($this->getSession($phone)),
+            'already_sent_to_customer' => true,
+            'ask_payment_method' => true,
         ];
     }
 
     /** @return array<string, mixed> */
-    private function deliveryStepResponse(string $phone): array
-    {
+    private function deliveryStepResponse(
+        string $phone,
+        ?Customer $customer = null,
+        bool $sendToCustomer = false,
+        bool $prependDeliveryQuote = false,
+    ): array {
         $session = $this->getSession($phone);
+        $parts = [];
+
+        if ($prependDeliveryQuote && ($session['order_type'] ?? null) === 'delivery') {
+            $parts[] = $this->render($this->message('delivery_quote_message'), [
+                'distance_km' => number_format((float) ($session['distance_km'] ?? 0), 1, ',', '.'),
+                'delivery_fee' => number_format((float) ($session['delivery_fee'] ?? 0), 2, ',', '.'),
+            ]);
+        }
 
         if (($session['state'] ?? '') === 'schedule' && ! filled($session['scheduled_label'] ?? null)) {
+            $parts[] = OrderSchedule::schedulePrompt();
+            $message = implode("\n\n", array_filter($parts));
+
+            if ($sendToCustomer) {
+                $this->replyText($phone, $message, $customer);
+            }
+
             return [
                 'ok' => true,
                 'order_type' => $session['order_type'] ?? 'takeaway',
                 'next' => 'schedule',
-                'message' => OrderSchedule::schedulePrompt(),
+                'message' => $message,
+                'already_sent_to_customer' => $sendToCustomer,
             ];
+        }
+
+        $this->setSession($phone, array_merge($session, ['state' => 'payment']));
+
+        if ($sendToCustomer) {
+            if ($parts !== []) {
+                $this->replyText($phone, implode("\n\n", $parts), $customer);
+            }
+
+            $this->sendPaymentSummary($phone, $customer);
         }
 
         return [
             'ok' => true,
             'order_type' => $session['order_type'] ?? 'takeaway',
             'next' => 'payment',
-            'summary' => $this->buildSummary($session),
+            'summary' => $this->buildSummary($this->getSession($phone)),
+            'already_sent_to_customer' => $sendToCustomer,
+            'ask_payment_method' => true,
         ];
     }
 
     /** @return array<string, mixed> */
     public function toolSetPayment(string $phone, string $methodText, ?string $pushName, array $payload = []): array
     {
-        $method = PaymentMethod::detect($methodText) ?? PaymentMethod::normalize($methodText);
+        $userText = trim((string) ($payload['user_text'] ?? ''));
+
+        // A escolha do cliente prevalece — a LLM não pode inventar Pix após "sim" do endereço.
+        $method = PaymentMethod::detect($userText);
+
+        if ($method === null && $userText === '') {
+            $method = PaymentMethod::detect($methodText) ?? PaymentMethod::normalize($methodText);
+        }
 
         if ($method === null) {
-            return ['ok' => false, 'error' => 'Forma de pagamento não reconhecida.'];
+            return [
+                'ok' => false,
+                'error' => 'O cliente ainda não escolheu a forma de pagamento nesta mensagem. Pergunte Pix, dinheiro ou cartão e aguarde a resposta. NÃO invente Pix.',
+                'ask_payment_method' => true,
+                'next' => 'payment',
+            ];
         }
 
         $session = $this->getSession($phone);
         $customer = $this->resolveCustomer($phone, $pushName);
+        $state = (string) ($session['state'] ?? '');
+
+        if ($state === 'pix_wait' && $method !== 'pix') {
+            $this->switchAwayFromPix($phone, $method, $customer);
+
+            return [
+                'ok' => true,
+                'order_created' => true,
+                'payment_method_switched' => true,
+                'already_sent_to_customer' => true,
+                'payment_method' => $method,
+            ];
+        }
+
+        if ($state !== 'payment') {
+            return [
+                'ok' => false,
+                'error' => 'Ainda não é a etapa de pagamento (estado atual: '.($state !== '' ? $state : 'vazio').'). Conclua endereço/horário e só então pergunte a forma de pagamento. NÃO chame set_payment agora.',
+                'state' => $state,
+                'next' => $state !== '' ? $state : 'payment',
+            ];
+        }
+
         $session['payment_method'] = $method;
 
         if (($session['cart'] ?? []) === [] && ! filled($session['order_id'] ?? null)) {
@@ -2109,20 +2211,65 @@ class ConversationalWhatsAppBotService
         }
 
         $state = (string) ($session['state'] ?? '');
-        $cartReady = ($session['cart'] ?? []) !== [];
-        $alreadyCreated = filled($session['order_id'] ?? null);
 
-        if ($state !== 'payment' && ! ($cartReady && in_array($state, ['schedule', 'address', 'extras'], true))) {
-            if (! ($alreadyCreated && $state === 'pix_wait')) {
-                return null;
-            }
+        if ($state === 'pix_wait' && $method !== 'pix') {
+            $this->switchAwayFromPix($phone, $method, $this->resolveCustomer($phone, $pushName));
+
+            return [
+                'ok' => true,
+                'payment_method_switched' => true,
+                'already_sent_to_customer' => true,
+                'payment_method' => $method,
+            ];
         }
 
-        if ($state !== 'payment' && $cartReady) {
-            $this->setSession($phone, array_merge($session, ['state' => 'payment']));
+        if ($state !== 'payment') {
+            return null;
         }
 
-        return $this->toolSetPayment($phone, $method, $pushName, $payload);
+        return $this->toolSetPayment($phone, $method, $pushName, array_merge($payload, [
+            'user_text' => $text,
+        ]));
+    }
+
+    private function switchAwayFromPix(string $phone, string $method, ?Customer $customer): void
+    {
+        $session = $this->getSession($phone);
+        $order = null;
+
+        if (filled($session['order_id'] ?? null)) {
+            $order = Order::query()->with('items.product')->find($session['order_id']);
+        }
+
+        if ($order) {
+            $notes = preg_replace('/\s*Aguardando comprovante PIX\s*/u', "\n", (string) $order->notes) ?? '';
+            $order->update([
+                'payment_method' => $method,
+                'notes' => trim($notes) !== '' ? trim($notes) : null,
+            ]);
+
+            $this->clearSession($phone);
+            WhatsAppBotPause::forgetAiHistory($phone);
+
+            $template = str_replace('Comprovante recebido e ', '', $this->message('confirmed_message'));
+            $this->replyText($phone, $this->render($template, [
+                'order_number' => $order->order_number,
+                'total' => number_format((float) $order->total, 2, ',', '.'),
+                'estimated_minutes' => (string) config('whatsapp_agent.estimated_minutes', 45),
+                'scheduled_for' => OrderSchedule::formatForMessage($order->scheduled_for),
+            ])."\n\nForma de pagamento atualizada para *".PaymentMethod::label($method).'*.', $customer, $order->fresh());
+
+            return;
+        }
+
+        // Pedido Pix ainda não existia — volta para a etapa de pagamento e finaliza.
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'payment',
+            'payment_method' => $method,
+            'order_claimed' => false,
+            'order_id' => null,
+        ]));
+        $this->handlePayment($phone, $method, $customer);
     }
 
     private function handoffToHuman(string $phone, ?Customer $customer): void
