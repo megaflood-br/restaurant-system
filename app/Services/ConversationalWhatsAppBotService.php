@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\WhatsAppMessage;
 use App\Support\OrderSchedule;
+use App\Support\OpeningHours;
 use App\Support\PaymentMethod;
 use App\Support\PhoneNumber;
 use App\Support\ProductSellable;
@@ -80,6 +81,19 @@ class ConversationalWhatsAppBotService
 
         if (($session['state'] ?? '') === 'pix_wait') {
             $this->handlePixWait($phone, $text, $customer, $payload);
+
+            return;
+        }
+
+        // Acompanhamento (fritas/legumes): tratar antes da OpenAI para evitar add_to_cart errado.
+        if (($session['state'] ?? '') === 'side' && SideOptions::resolve($text) !== null) {
+            $this->handleSide($phone, $text, $customer);
+
+            return;
+        }
+
+        if ($this->shouldRefuseOrdersWhileClosed($session)) {
+            $this->replyClosed($phone, $customer);
 
             return;
         }
@@ -532,7 +546,7 @@ class ConversationalWhatsAppBotService
         }
 
         $this->setSession($phone, array_merge($session, ['state' => 'schedule']));
-        $this->replyText($phone, $this->message('schedule_message'), $customer);
+        $this->replyText($phone, OrderSchedule::schedulePrompt(), $customer);
     }
 
     private function handleSchedule(string $phone, string $text, ?Customer $customer): void
@@ -618,9 +632,17 @@ class ConversationalWhatsAppBotService
             }
 
             $this->setSession($phone, array_merge($session, ['state' => 'pix_wait']));
+            $order = $this->createOrder($phone, $customer, array_merge($session, ['state' => 'pix_wait']), awaitingPixProof: true);
+
+            if (! $order) {
+                $this->replyText($phone, 'Não foi possível registrar o pedido. Tente novamente.', $customer);
+
+                return;
+            }
+
             $this->replyText($phone, $this->render($this->message('pix_message'), [
                 'pix_key' => $pixKey,
-            ]), $customer);
+            ])."\n\nPedido *{$order->order_number}* já registrado. Assim que enviar o comprovante, confirmamos.", $customer, $order);
 
             return;
         }
@@ -637,7 +659,10 @@ class ConversationalWhatsAppBotService
 
         $command = mb_strtolower(trim($text));
         $looksLikeProof = $hasImage
-            || $this->matchesIntent($command, ['paguei', 'comprovante', 'pix feito', 'enviado', 'feito', 'ok', 'pronto']);
+            || $this->matchesIntent($command, [
+                'paguei', 'comprovante', 'pix feito', 'enviado', 'enviada', 'enviei',
+                'feito', 'ok', 'pronto', 'já paguei', 'ja paguei', 'pago', 'paguei o pix',
+            ]);
 
         if (! $looksLikeProof) {
             $this->replyText($phone, 'Assim que fizer o pagamento Pix, envie o comprovante (foto ou mensagem) para confirmarmos seu pedido.', $customer);
@@ -646,10 +671,29 @@ class ConversationalWhatsAppBotService
         }
 
         $session = $this->getSession($phone);
+
+        if (filled($session['order_id'] ?? null)) {
+            $order = Order::query()->with('items.product')->find($session['order_id']);
+
+            if ($order) {
+                $this->clearSession($phone);
+                WhatsAppBotPause::forgetAiHistory($phone);
+
+                $this->replyText($phone, $this->render($this->message('confirmed_message'), [
+                    'order_number' => $order->order_number,
+                    'total' => number_format((float) $order->total, 2, ',', '.'),
+                    'estimated_minutes' => (string) config('whatsapp_agent.estimated_minutes', 45),
+                    'scheduled_for' => OrderSchedule::formatForMessage($order->scheduled_for),
+                ]), $customer, $order);
+
+                return;
+            }
+        }
+
         $this->createOrder($phone, $customer, $session);
     }
 
-    private function createOrder(string $phone, ?Customer $customer, array $session): void
+    private function createOrder(string $phone, ?Customer $customer, array $session, bool $awaitingPixProof = false): ?Order
     {
         $lockKey = 'wa-create-order:'.$this->normalizedPhoneKey($phone);
         $lock = Cache::lock($lockKey, 20);
@@ -657,33 +701,39 @@ class ConversationalWhatsAppBotService
         if (! $lock->get()) {
             Log::info('WhatsApp order create skipped — lock busy', ['phone' => $phone]);
 
-            return;
+            return null;
         }
 
         $claimedSession = null;
 
         try {
-            // Re-read under lock so concurrent finalize cannot reuse the same cart.
             $session = $this->getSession($phone);
             $cart = $session['cart'] ?? [];
 
             if ($cart === [] || ($session['order_claimed'] ?? false) === true) {
                 Log::info('WhatsApp order create skipped — empty or already claimed', ['phone' => $phone]);
 
-                return;
+                if ($awaitingPixProof && filled($session['order_id'] ?? null)) {
+                    return Order::query()->find($session['order_id']);
+                }
+
+                return null;
             }
 
             $claimedSession = $session;
             $this->setSession($phone, array_merge($session, [
                 'cart' => [],
                 'order_claimed' => true,
-                'state' => 'creating',
+                'state' => $awaitingPixProof ? 'pix_wait' : 'creating',
             ]));
 
-            $order = DB::transaction(function () use ($cart, $customer, $phone, $session) {
+            $order = DB::transaction(function () use ($cart, $customer, $phone, $session, $awaitingPixProof) {
                 $deliveryFee = (float) ($session['delivery_fee'] ?? 0);
                 $orderType = $session['order_type'] ?? 'takeaway';
                 $notes = $this->buildOrderNotes($session);
+                if ($awaitingPixProof) {
+                    $notes = trim($notes."\nAguardando comprovante PIX");
+                }
                 $scheduledFor = $this->scheduledForFromSession($session);
 
                 $order = Order::create([
@@ -733,6 +783,18 @@ class ConversationalWhatsAppBotService
                 // best-effort
             }
 
+            if ($awaitingPixProof) {
+                $this->setSession($phone, [
+                    'state' => 'pix_wait',
+                    'order_id' => $order->id,
+                    'order_claimed' => true,
+                    'cart' => [],
+                    'payment_method' => 'pix',
+                ]);
+
+                return $order;
+            }
+
             $this->clearSession($phone);
 
             $total = number_format((float) $order->total, 2, ',', '.');
@@ -749,6 +811,8 @@ class ConversationalWhatsAppBotService
                 'estimated_minutes' => $estimated,
                 'scheduled_for' => OrderSchedule::formatForMessage($order->scheduled_for),
             ]), $customer, $order);
+
+            return $order;
         } catch (\Throwable $exception) {
             if (is_array($claimedSession)) {
                 $this->setSession($phone, $claimedSession);
@@ -756,6 +820,8 @@ class ConversationalWhatsAppBotService
 
             Log::error('Conversational WhatsApp order creation failed', ['error' => $exception->getMessage()]);
             $this->replyText($phone, 'Não foi possível criar o pedido. Tente novamente ou entre em contato conosco.', $customer);
+
+            return null;
         } finally {
             optional($lock)->release();
         }
@@ -1138,10 +1204,63 @@ class ConversationalWhatsAppBotService
             return null;
         }
 
-        $opening = (string) (config('general.opening_time') ?: config('digital_menu.opening_time', '09:00'));
-        $closing = (string) (config('general.closing_time') ?: config('digital_menu.closing_time', '22:00'));
+        $status = OpeningHours::forWhatsApp();
 
-        return 'Funcionamos de *'.$this->formatTimeForWhatsApp($opening).'* às *'.$this->formatTimeForWhatsApp($closing)."*.\n\nMe diga o que deseja pedir (ex.: *strogonoff P*) ou digite *pronto* quando terminar.";
+        if ($status['force_closed']) {
+            return $this->closedMessageText();
+        }
+
+        if (! $status['is_open']) {
+            return 'No momento estamos *fechados*. Funcionamos de *'.$status['opening_label'].'* às *'.$status['closing_label']
+                ."*.\nAbrimos *{$status['next_open_day_label']}* às *{$status['opening_label']}*."
+                ."\n\nPosso *agendar* seu pedido para o próximo expediente — me diga o que deseja (ex.: *strogonoff P*).";
+        }
+
+        return 'Estamos *abertos* agora. Funcionamos de *'.$status['opening_label'].'* às *'.$status['closing_label']
+            ."*.\n\nMe diga o que deseja pedir (ex.: *strogonoff P*) ou digite *pronto* quando terminar.";
+    }
+
+    /**
+     * Bloqueia novos pedidos só quando o restaurante está fechado manualmente.
+     * Fora do horário ainda aceitamos montagem + agendamento (não entrega "agora").
+     */
+    private function shouldRefuseOrdersWhileClosed(array $session): bool
+    {
+        $status = OpeningHours::forWhatsApp();
+
+        if ($status['is_open'] || ! $status['force_closed']) {
+            return false;
+        }
+
+        $state = (string) ($session['state'] ?? '');
+
+        if (in_array($state, ['side', 'extras', 'address', 'schedule', 'payment', 'pix_wait'], true)) {
+            return false;
+        }
+
+        if ($state === 'ordering' && ($session['cart'] ?? []) !== []) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function replyClosed(string $phone, ?Customer $customer): void
+    {
+        $this->clearSession($phone);
+        WhatsAppBotPause::forgetAiHistory($phone);
+        $this->replyText($phone, $this->closedMessageText(), $customer);
+    }
+
+    private function closedMessageText(): string
+    {
+        $status = OpeningHours::forWhatsApp();
+
+        return $this->render($this->message('closed_message'), [
+            'opening' => $status['opening_label'],
+            'closing' => $status['closing_label'],
+            'next_open_day' => $status['next_open_day_label'],
+        ]);
     }
 
     private function formatTimeForWhatsApp(string $time): string
@@ -1420,10 +1539,26 @@ class ConversationalWhatsAppBotService
 
     public function openingHoursLabel(): string
     {
-        $opening = (string) (config('general.opening_time') ?: config('digital_menu.opening_time', '09:00'));
-        $closing = (string) (config('general.closing_time') ?: config('digital_menu.closing_time', '22:00'));
+        $status = OpeningHours::forWhatsApp();
 
-        return $this->formatTimeForWhatsApp($opening).' às '.$this->formatTimeForWhatsApp($closing);
+        return $status['opening_label'].' às '.$status['closing_label'];
+    }
+
+    /** @return array<string, mixed> */
+    public function openingHoursSnapshot(): array
+    {
+        $status = OpeningHours::forWhatsApp();
+
+        return [
+            'is_open' => $status['is_open'],
+            'force_closed' => $status['force_closed'],
+            'opening' => $status['opening_label'],
+            'closing' => $status['closing_label'],
+            'next_open_day' => $status['next_open_day_label'],
+            'label' => $status['label'],
+            'detail' => $status['detail'],
+            'hours_label' => $status['opening_label'].' às '.$status['closing_label'],
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -1810,7 +1945,7 @@ class ConversationalWhatsAppBotService
                 'ok' => true,
                 'order_type' => $session['order_type'] ?? 'takeaway',
                 'next' => 'schedule',
-                'message' => $this->message('schedule_message'),
+                'message' => OrderSchedule::schedulePrompt(),
             ];
         }
 
@@ -1843,19 +1978,29 @@ class ConversationalWhatsAppBotService
             }
 
             $this->setSession($phone, array_merge($session, ['state' => 'pix_wait']));
+            $order = $this->createOrder($phone, $customer, array_merge($session, ['state' => 'pix_wait']), awaitingPixProof: true);
+
+            if (! $order) {
+                return ['ok' => false, 'error' => 'Não foi possível registrar o pedido. Tente novamente.'];
+            }
+
+            $pixMessage = $this->render($this->message('pix_message'), ['pix_key' => $pixKey]);
+            $this->replyText($phone, $pixMessage."\n\nPedido *{$order->order_number}* já registrado. Assim que enviar o comprovante, confirmamos.", $customer, $order);
 
             return [
                 'ok' => true,
                 'awaiting_pix_proof' => true,
+                'already_sent_to_customer' => true,
+                'order_created' => true,
+                'order_number' => $order->order_number,
                 'pix_key' => $pixKey,
-                'pix_message' => $this->render($this->message('pix_message'), ['pix_key' => $pixKey]),
             ];
         }
 
         $this->setSession($phone, $session);
-        $this->createOrder($phone, $customer, $session);
+        $order = $this->createOrder($phone, $customer, $session);
 
-        return ['ok' => true, 'order_created' => true];
+        return ['ok' => true, 'order_created' => (bool) $order];
     }
 
     /** @return array<string, mixed> */

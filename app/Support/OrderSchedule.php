@@ -15,7 +15,7 @@ class OrderSchedule
     /** @return array{datetime: ?Carbon, error: ?string, label: ?string} */
     public static function resolve(string $text, ?Carbon $reference = null): array
     {
-        $reference ??= now();
+        $reference ??= now()->timezone(config('app.timezone'));
         $normalized = mb_strtolower(trim($text));
 
         if ($normalized === '') {
@@ -23,6 +23,18 @@ class OrderSchedule
         }
 
         if (self::isImmediate($normalized)) {
+            if (! OpeningHours::isOpenForWhatsApp($reference)) {
+                $status = OpeningHours::forWhatsApp($reference);
+
+                return [
+                    'datetime' => null,
+                    'error' => 'No momento estamos *fechados*. Não dá para entregar agora. '
+                        ."Abrimos *{$status['next_open_day_label']}* às *{$status['opening_label']}*. "
+                        .'Informe um horário nesse período (ex.: *amanhã às 11h*).',
+                    'label' => null,
+                ];
+            }
+
             return ['datetime' => null, 'error' => null, 'label' => 'o mais breve possível'];
         }
 
@@ -31,7 +43,7 @@ class OrderSchedule
         if ($parsed === null) {
             return [
                 'datetime' => null,
-                'error' => 'Não entendi o horário. Ex.: *agora*, *12:30*, *hoje às 18h* ou *amanhã ao meio-dia*.',
+                'error' => 'Não entendi o horário. Ex.: *agora*, *12:30*, *hoje às 11h* ou *amanhã ao meio-dia*.',
                 'label' => null,
             ];
         }
@@ -51,7 +63,7 @@ class OrderSchedule
 
     public static function formatLabel(Carbon $datetime, ?Carbon $reference = null): string
     {
-        $reference ??= now();
+        $reference ??= now()->timezone(config('app.timezone'));
         $time = $datetime->format('H:i');
 
         if ($datetime->isSameDay($reference)) {
@@ -84,6 +96,19 @@ class OrderSchedule
         );
     }
 
+    public static function schedulePrompt(): string
+    {
+        if (OpeningHours::isOpenForWhatsApp()) {
+            return (string) config('whatsapp_agent.schedule_message');
+        }
+
+        $status = OpeningHours::forWhatsApp();
+
+        return "Estamos *fechados* agora. Pode *agendar* para *{$status['next_open_day_label']}* "
+            ."entre *{$status['opening_label']}* e *{$status['closing_label']}*.\n\n"
+            .'Ex.: *amanhã às 11h* ou *11:30*.';
+    }
+
     private static function isImmediate(string $text): bool
     {
         return (bool) preg_match(
@@ -99,37 +124,61 @@ class OrderSchedule
         $text = trim($text);
 
         $day = $reference->copy();
+        $explicitDay = false;
 
         if (preg_match('/\bamanh[ãa]\b/u', $text)) {
             $day = $reference->copy()->addDay();
+            $explicitDay = true;
         } elseif (preg_match('/\bhoje\b/u', $text)) {
             $day = $reference->copy();
+            $explicitDay = true;
         }
 
         if (preg_match('/\bmeio[\s-]?dia\b/u', $text)) {
-            return $day->copy()->setTime(12, 0, 0);
+            return self::rollForwardIfPast($day->copy()->setTime(12, 0, 0), $reference, $explicitDay);
         }
 
-        if (preg_match('/\b(daqui\s+a?\s*)?(\d+)\s*(hora|horas|h)\b/u', $text, $matches)) {
-            return $reference->copy()->addHours((int) $matches[2]);
+        // Relative duration: only "daqui a N hora(s)" or "N horas/minutos" — not bare "11h".
+        if (preg_match('/\bdaqui\s+a?\s*(\d+)\s*(hora|horas|h)\b/u', $text, $matches)
+            || preg_match('/\b(\d+)\s*(horas)\b/u', $text, $matches)) {
+            return $reference->copy()->addHours((int) $matches[1]);
         }
 
-        if (preg_match('/\b(daqui\s+a?\s*)?(\d+)\s*(minuto|minutos|min)\b/u', $text, $matches)) {
-            return $reference->copy()->addMinutes((int) $matches[2]);
+        if (preg_match('/\bdaqui\s+a?\s*(\d+)\s*(minuto|minutos|min)\b/u', $text, $matches)
+            || preg_match('/\b(\d+)\s*(minutos|min)\b/u', $text, $matches)) {
+            return $reference->copy()->addMinutes((int) $matches[1]);
         }
 
         if (preg_match('/\b(\d{1,2})\s*[:h]\s*(\d{2})\b/u', $text, $matches)) {
-            return self::buildTime($day, (int) $matches[1], (int) $matches[2]);
+            return self::rollForwardIfPast(
+                self::buildTime($day, (int) $matches[1], (int) $matches[2]),
+                $reference,
+                $explicitDay
+            );
         }
 
-        if (preg_match('/\b(?:às|as|para\s+as|para\s+às)?\s*(\d{1,2})\s*h(?:\s*(\d{2}))?\b/u', $text, $matches)) {
+        // "11h", "11hs", "às 11h", "as 11hs"
+        if (preg_match('/\b(?:às|as|para\s+as|para\s+às)?\s*(\d{1,2})\s*h(?:s|rs)?(?:\s*(\d{2}))?\b/u', $text, $matches)) {
             $hour = (int) $matches[1];
             $minute = isset($matches[2]) && $matches[2] !== '' ? (int) $matches[2] : 0;
 
-            return self::buildTime($day, $hour, $minute);
+            return self::rollForwardIfPast(self::buildTime($day, $hour, $minute), $reference, $explicitDay);
         }
 
         return null;
+    }
+
+    private static function rollForwardIfPast(Carbon $parsed, Carbon $reference, bool $explicitDay): Carbon
+    {
+        if ($explicitDay) {
+            return $parsed;
+        }
+
+        if ($parsed->lessThanOrEqualTo($reference)) {
+            return $parsed->copy()->addDay();
+        }
+
+        return $parsed;
     }
 
     private static function buildTime(Carbon $day, int $hour, int $minute): Carbon
@@ -144,14 +193,29 @@ class OrderSchedule
     {
         $minMinutes = max(15, (int) config('whatsapp_agent.schedule_min_minutes', 30));
         $maxDays = max(0, (int) config('whatsapp_agent.schedule_max_days', 1));
+        $hours = OpeningHours::forWhatsApp($datetime);
+
+        [$oh, $om] = array_pad(explode(':', $hours['opening']), 2, '0');
+        [$ch, $cm] = array_pad(explode(':', $hours['closing']), 2, '0');
+        $openAt = $datetime->copy()->setTime((int) $oh, (int) $om, 0);
+        $closeAt = $datetime->copy()->setTime((int) $ch, (int) $cm, 0);
+
+        if ($datetime->lessThan($openAt) || $datetime->greaterThanOrEqualTo($closeAt)) {
+            return "Nesse dia funcionamos das *{$hours['opening_label']}* às *{$hours['closing_label']}*. "
+                .'Escolha um horário nesse intervalo (ex.: *amanhã às 11h*).';
+        }
 
         if ($datetime->lessThan($reference->copy()->addMinutes($minMinutes))) {
-            return "Preciso de pelo menos {$minMinutes} minutos de antecedência. Escolha um horário mais tarde ou digite *agora*.";
+            $hint = OpeningHours::isOpenForWhatsApp($reference)
+                ? ' Escolha um horário mais tarde ou digite *agora*.'
+                : ' Escolha um horário no próximo expediente (ex.: *amanhã às 11h*).';
+
+            return "Preciso de pelo menos {$minMinutes} minutos de antecedência.".$hint;
         }
 
         if ($datetime->greaterThan($reference->copy()->addDays($maxDays)->endOfDay())) {
             return $maxDays === 0
-                ? 'Só aceito agendamento para hoje. Informe um horário de hoje ou digite *agora*.'
+                ? 'Só aceito agendamento para hoje. Informe um horário de hoje.'
                 : 'Só aceito agendamento para hoje ou amanhã.';
         }
 
