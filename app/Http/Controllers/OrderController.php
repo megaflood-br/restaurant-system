@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use App\Services\CashFlowService;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
 use App\Support\ProductSellable;
@@ -185,7 +186,7 @@ class OrderController extends Controller
 
         if ($validated['status'] === 'delivered' && $previousStatus !== 'delivered') {
             try {
-                app(\App\Services\CashFlowService::class)->recordOrderSale(
+                app(CashFlowService::class)->recordOrderSale(
                     $order->fresh(),
                     $request->user()->id
                 );
