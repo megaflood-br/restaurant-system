@@ -98,4 +98,58 @@ class OrderScheduleTest extends TestCase
         $this->assertSame('11:00', $resolved['datetime']?->format('H:i'));
         $this->assertTrue($resolved['datetime']->isSameDay(Carbon::parse('2026-08-11', 'America/Sao_Paulo')));
     }
+
+    public function test_12hs_while_closed_with_max_days_zero_schedules_tomorrow(): void
+    {
+        config(['whatsapp_agent.schedule_max_days' => 0]);
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:30:00', 'America/Sao_Paulo'));
+
+        $resolved = OrderSchedule::resolve('12hs');
+
+        $this->assertNull($resolved['error'], (string) $resolved['error']);
+        $this->assertNotNull($resolved['datetime']);
+        $this->assertTrue($resolved['datetime']->isSameDay(Carbon::parse('2026-08-11', 'America/Sao_Paulo')));
+        $this->assertSame('12:00', $resolved['datetime']->format('H:i'));
+        $this->assertStringContainsString('amanhã', (string) $resolved['label']);
+        $this->assertStringNotContainsStringIgnoringCase('só aceito agendamento para hoje', (string) $resolved['error']);
+    }
+
+    public function test_12hs_while_closed_after_hours_does_not_loop_to_today_only(): void
+    {
+        config(['whatsapp_agent.schedule_max_days' => 0]);
+        Carbon::setTestNow(Carbon::parse('2026-08-11 16:10:00', 'America/Sao_Paulo'));
+
+        $prompt = OrderSchedule::schedulePrompt();
+        $this->assertStringContainsStringIgnoringCase('amanhã', $prompt);
+
+        $resolved = OrderSchedule::resolve('12hs');
+
+        $this->assertNull($resolved['error'], (string) $resolved['error']);
+        $this->assertSame('2026-08-12', $resolved['datetime']?->format('Y-m-d'));
+        $this->assertSame('12:00', $resolved['datetime']?->format('H:i'));
+    }
+
+    public function test_max_days_zero_while_open_still_rejects_tomorrow(): void
+    {
+        config(['whatsapp_agent.schedule_max_days' => 0]);
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $resolved = OrderSchedule::resolve('amanhã às 12h');
+
+        $this->assertNull($resolved['datetime']);
+        $this->assertNotNull($resolved['error']);
+        $this->assertStringContainsStringIgnoringCase('hoje', (string) $resolved['error']);
+    }
+
+    public function test_before_opening_12hs_stays_today(): void
+    {
+        config(['whatsapp_agent.schedule_max_days' => 0]);
+        Carbon::setTestNow(Carbon::parse('2026-08-10 09:00:00', 'America/Sao_Paulo'));
+
+        $resolved = OrderSchedule::resolve('12hs');
+
+        $this->assertNull($resolved['error'], (string) $resolved['error']);
+        $this->assertSame('2026-08-10', $resolved['datetime']?->format('Y-m-d'));
+        $this->assertSame('12:00', $resolved['datetime']?->format('H:i'));
+    }
 }

@@ -106,7 +106,7 @@ class OrderSchedule
 
         return "Estamos *fechados* agora. Pode *agendar* para *{$status['next_open_day_label']}* "
             ."entre *{$status['opening_label']}* e *{$status['closing_label']}*.\n\n"
-            .'Ex.: *amanhã às 11h* ou *11:30*.';
+            .'Ex.: *'.$status['next_open_day_label'].' às 12h*, *12hs* ou *12:30*.';
     }
 
     private static function isImmediate(string $text): bool
@@ -174,8 +174,19 @@ class OrderSchedule
             return $parsed;
         }
 
+        // Horário já passou hoje → amanhã.
         if ($parsed->lessThanOrEqualTo($reference)) {
             return $parsed->copy()->addDay();
+        }
+
+        // Fechados e o próximo expediente é amanhã: "12hs" sem "hoje" = amanhã 12h
+        // (mesmo que o relógio ainda não tenha chegado nesse horário hoje).
+        if (! OpeningHours::isOpenForWhatsApp($reference) && $parsed->isSameDay($reference)) {
+            $status = OpeningHours::forWhatsApp($reference);
+
+            if (($status['next_open_day'] ?? '') === 'tomorrow') {
+                return $parsed->copy()->addDay();
+            }
         }
 
         return $parsed;
@@ -189,10 +200,28 @@ class OrderSchedule
         return $day->copy()->setTime($hour, $minute, 0);
     }
 
+    /**
+     * "Somente hoje" (max_days=0) não pode bloquear o próximo expediente
+     * quando já estamos fechados e o bot pediu para agendar amanhã.
+     */
+    private static function effectiveMaxDays(Carbon $reference): int
+    {
+        $configured = max(0, (int) config('whatsapp_agent.schedule_max_days', 1));
+
+        if (OpeningHours::isOpenForWhatsApp($reference)) {
+            return $configured;
+        }
+
+        $status = OpeningHours::forWhatsApp($reference);
+        $neededForNextOpen = ($status['next_open_day'] ?? '') === 'tomorrow' ? 1 : 0;
+
+        return max($configured, $neededForNextOpen);
+    }
+
     private static function validateDateTime(Carbon $datetime, Carbon $reference): ?string
     {
         $minMinutes = max(15, (int) config('whatsapp_agent.schedule_min_minutes', 30));
-        $maxDays = max(0, (int) config('whatsapp_agent.schedule_max_days', 1));
+        $maxDays = self::effectiveMaxDays($reference);
         $hours = OpeningHours::forWhatsApp($datetime);
 
         [$oh, $om] = array_pad(explode(':', $hours['opening']), 2, '0');
@@ -201,8 +230,11 @@ class OrderSchedule
         $closeAt = $datetime->copy()->setTime((int) $ch, (int) $cm, 0);
 
         if ($datetime->lessThan($openAt) || $datetime->greaterThanOrEqualTo($closeAt)) {
+            $status = OpeningHours::forWhatsApp($reference);
+            $hintDay = ($status['next_open_day'] ?? '') === 'tomorrow' ? 'amanhã' : 'hoje';
+
             return "Nesse dia funcionamos das *{$hours['opening_label']}* às *{$hours['closing_label']}*. "
-                .'Escolha um horário nesse intervalo (ex.: *amanhã às 11h*).';
+                ."Escolha um horário nesse intervalo (ex.: *{$hintDay} às {$hours['opening_label']}*).";
         }
 
         if ($datetime->lessThan($reference->copy()->addMinutes($minMinutes))) {
@@ -214,9 +246,11 @@ class OrderSchedule
         }
 
         if ($datetime->greaterThan($reference->copy()->addDays($maxDays)->endOfDay())) {
-            return $maxDays === 0
-                ? 'Só aceito agendamento para hoje. Informe um horário de hoje.'
-                : 'Só aceito agendamento para hoje ou amanhã.';
+            return $maxDays <= 0
+                ? 'Só aceito agendamento para hoje. Informe um horário de hoje dentro do funcionamento.'
+                : ($maxDays === 1
+                    ? 'Só aceito agendamento para hoje ou amanhã.'
+                    : "Só aceito agendamento até {$maxDays} dias à frente.");
         }
 
         return null;
