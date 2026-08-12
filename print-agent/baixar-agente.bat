@@ -1,11 +1,11 @@
 @echo off
-chcp 65001 >nul
+setlocal EnableExtensions
 title Baixar Agente de Impressao
 set "DIR=%USERPROFILE%\Desktop\bella-print-agent"
 set "BASE=https://raw.githubusercontent.com/megaflood-br/restaurant-system/main/print-agent"
 
 echo.
-echo Vai baixar so o agente (PowerShell, sem PHP) para:
+echo Vai baixar so o agente ^(PowerShell, sem PHP^) para:
 echo   %DIR%
 echo.
 mkdir "%DIR%" 2>nul

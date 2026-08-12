@@ -142,6 +142,11 @@ if ($Help) {
 
 $baseDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configPath = Join-Path $baseDir "config.ini"
+if (-not (Test-Path -LiteralPath $configPath)) {
+    # Aceita tambem CONFIG.INI / Config.ini no Windows
+    $alt = Get-ChildItem -LiteralPath $baseDir -Filter "config.ini" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($alt) { $configPath = $alt.FullName }
+}
 $config = Read-Ini $configPath
 
 if (-not $Url) { $Url = [string]$config["url"] }
