@@ -71,4 +71,43 @@ class Customer extends Model
 
         return round($this->totalSpent() / $count, 2);
     }
+
+    /** Endereço formatado a partir do cadastro (rua obrigatória). */
+    public function formattedDeliveryAddress(): ?string
+    {
+        $parts = array_values(array_filter([
+            trim((string) ($this->address ?? '')),
+            trim((string) ($this->neighborhood ?? '')),
+            trim((string) ($this->city ?? '')),
+            trim((string) ($this->state ?? '')),
+            trim((string) ($this->zip_code ?? '')),
+        ], fn (string $part) => $part !== ''));
+
+        if ($parts === [] || trim((string) ($this->address ?? '')) === '') {
+            return null;
+        }
+
+        return implode(', ', $parts);
+    }
+
+    /**
+     * Endereço para cotação de entrega: cadastro ou último pedido delivery.
+     */
+    public function resolvedDeliveryAddress(): ?string
+    {
+        $formatted = $this->formattedDeliveryAddress();
+
+        if ($formatted !== null) {
+            return $formatted;
+        }
+
+        $lastDelivery = $this->orders()
+            ->where('type', 'delivery')
+            ->whereNotNull('delivery_address')
+            ->where('delivery_address', '!=', '')
+            ->latest()
+            ->value('delivery_address');
+
+        return filled($lastDelivery) ? trim((string) $lastDelivery) : null;
+    }
 }
