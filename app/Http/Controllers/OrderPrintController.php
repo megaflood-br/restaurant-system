@@ -26,9 +26,17 @@ class OrderPrintController extends Controller
         $template = $request->input('template', 'kitchen');
 
         try {
+            if (! $printer->usesServerSidePrint()) {
+                return back()->with('error', 'Ative o modo Rede IP ou Agente local em Configurações → Impressão.');
+            }
+
             $printer->printOrder($order, $template);
 
-            return back()->with('success', 'Comanda enviada para a impressora.');
+            $message = config('printing.driver') === 'agent'
+                ? 'Comanda enfileirada para o agente local imprimir.'
+                : 'Comanda enviada para a impressora.';
+
+            return back()->with('success', $message);
         } catch (\Throwable $exception) {
             return back()->with('error', $exception->getMessage());
         }

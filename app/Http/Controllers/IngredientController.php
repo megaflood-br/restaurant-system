@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Ingredient;
 use App\Models\StockCategory;
 use App\Services\InventoryService;
@@ -11,6 +12,8 @@ use Illuminate\View\View;
 
 class IngredientController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(Request $request): View
     {
         $query = Ingredient::with('stockCategory')->orderBy('name');
@@ -76,6 +79,14 @@ class IngredientController extends Controller
         $ingredient->delete();
 
         return redirect()->route('ingredients.index')->with('success', 'Item de estoque excluído.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = Ingredient::query()->whereIn('id', $ids)->delete();
+
+        return $this->bulkResultRedirect('ingredients.index', $deleted, 0, 'item de estoque', 'itens de estoque');
     }
 
     public function movementForm(Ingredient $ingredient): View

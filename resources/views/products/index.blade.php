@@ -14,10 +14,12 @@
                 <div class="p-6">
                     <x-flash-messages />
 
+                    <x-bulk-select :action="route('products.bulk-destroy')" confirm="Excluir :count produto(s) do cardápio?">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
+                                    <x-bulk-select-all />
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Foto</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoria</th>
@@ -31,6 +33,7 @@
                             <tbody class="divide-y divide-gray-200">
                                 @forelse ($products as $product)
                                     <tr>
+                                        <x-bulk-select-item :id="$product->id" />
                                         <td class="px-4 py-3">
                                             @if ($product->image_url)
                                                 <img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="h-14 w-14 object-cover rounded-lg border border-gray-200">
@@ -107,12 +110,13 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">Nenhum produto cadastrado.</td>
+                                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">Nenhum produto cadastrado.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
                         </table>
                     </div>
+                    </x-bulk-select>
 
                     <div class="mt-4">{{ $products->links() }}</div>
                 </div>

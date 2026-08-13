@@ -1,3 +1,10 @@
+@php
+    $customerOptions = $customers->map(fn ($customer) => [
+        'id' => (string) $customer->id,
+        'label' => $customer->name.($customer->phone ? ' — '.$customer->phone : ''),
+    ])->values()->all();
+@endphp
+
 <x-app-layout>
     <x-slot name="header">
         <div class="flex justify-between items-center">
@@ -13,22 +20,49 @@
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6" x-data="{
                     search: '',
+                    customerOptions: @js($customerOptions),
+                    openFor: null,
+                    customerId: '',
+                    openUrl: '',
                     matches(number) {
                         if (!this.search.trim()) return true;
                         return String(number).includes(this.search.trim()) ||
                                String(number).padStart(3, '0').includes(this.search.trim());
-                    }
+                    },
+                    openModal(number, url) {
+                        this.openFor = number;
+                        this.openUrl = url;
+                        this.customerId = '';
+                    },
+                    closeModal() {
+                        this.openFor = null;
+                        this.openUrl = '';
+                        this.customerId = '';
+                    },
                 }">
                     <x-flash-messages />
 
                     <div class="mb-6 flex flex-wrap items-end gap-3">
-                        <form method="POST" action="{{ route('comandas.open.manual') }}" class="flex flex-wrap items-end gap-2">
+                        <form method="POST" action="{{ route('comandas.open.manual') }}" class="flex flex-wrap items-end gap-3">
                             @csrf
                             <div>
                                 <label for="open_comanda_number" class="block text-sm font-medium text-gray-700">Abrir comanda</label>
                                 <input type="number" name="comanda_number" id="open_comanda_number" min="1" max="9999" required
                                     placeholder="Nº"
+                                    value="{{ old('comanda_number') }}"
                                     class="mt-1 block w-28 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            </div>
+                            <div class="min-w-[16rem] flex-1">
+                                <label for="manual_customer_id" class="block text-sm font-medium text-gray-700">Cliente <span class="text-gray-400 font-normal">(opcional)</span></label>
+                                <select name="customer_id" id="manual_customer_id"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <option value="">Sem cliente vinculado</option>
+                                    @foreach ($customers as $customer)
+                                        <option value="{{ $customer->id }}" @selected(old('customer_id') == $customer->id)>
+                                            {{ $customer->name }}@if($customer->phone) — {{ $customer->phone }}@endif
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
                             <button type="submit"
                                 class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-md hover:bg-indigo-700">
@@ -96,22 +130,61 @@
                         @if ($overview['counts']['free'] > 0)
                             <div class="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
                                 @foreach ($overview['free'] as $item)
-                                    <form method="POST" action="{{ route('comandas.open', $item['number']) }}"
+                                    <button type="button"
                                         x-show="matches({{ $item['number'] }})"
-                                        x-cloak>
-                                        @csrf
-                                        <button type="submit"
-                                            class="w-full aspect-square rounded-lg bg-slate-500 hover:bg-slate-600 transition flex flex-col items-center justify-center text-white text-sm">
-                                            <span class="text-[10px] font-bold uppercase tracking-wide opacity-90">Abrir</span>
-                                            <span class="font-bold text-lg">{{ $item['label'] }}</span>
-                                        </button>
-                                    </form>
+                                        x-cloak
+                                        @click="openModal({{ $item['number'] }}, @js(route('comandas.open', $item['number'])))"
+                                        class="w-full aspect-square rounded-lg bg-slate-500 hover:bg-slate-600 transition flex flex-col items-center justify-center text-white text-sm">
+                                        <span class="text-[10px] font-bold uppercase tracking-wide opacity-90">Abrir</span>
+                                        <span class="font-bold text-lg">{{ $item['label'] }}</span>
+                                    </button>
                                 @endforeach
                             </div>
                         @else
                             <p class="text-sm text-gray-500">Todas as {{ $overview['total_comandas'] }} comandas estão em uso.</p>
                         @endif
                     </section>
+
+                    <div x-show="openFor !== null" x-cloak
+                        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                        @keydown.escape.window="closeModal()">
+                        <div class="absolute inset-0 bg-gray-900/50" @click="closeModal()"></div>
+                        <div class="relative w-full max-w-md rounded-xl bg-white shadow-xl p-6 space-y-4">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900">
+                                        Abrir comanda <span x-text="String(openFor).padStart(3, '0')"></span>
+                                    </h3>
+                                    <p class="text-sm text-gray-500 mt-1">Vincule um cliente cadastrado (opcional).</p>
+                                </div>
+                                <button type="button" @click="closeModal()" class="text-gray-400 hover:text-gray-600 text-sm">Fechar</button>
+                            </div>
+
+                            <form method="POST" :action="openUrl" class="space-y-4">
+                                @csrf
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Cliente</label>
+                                    <select name="customer_id" x-model="customerId"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                        <option value="">Sem cliente vinculado</option>
+                                        <template x-for="customer in customerOptions" :key="customer.id">
+                                            <option :value="customer.id" x-text="customer.label"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div class="flex flex-wrap gap-2 justify-end">
+                                    <button type="button" @click="closeModal()"
+                                        class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-xs font-semibold uppercase tracking-widest text-gray-700 hover:bg-gray-50">
+                                        Cancelar
+                                    </button>
+                                    <button type="submit"
+                                        class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md text-xs font-semibold uppercase tracking-widest text-white hover:bg-indigo-700">
+                                        Abrir comanda
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

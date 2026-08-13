@@ -9,6 +9,7 @@ use App\Models\DeliveryArea;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\WhatsAppMessage;
+use App\Services\CashFlowService;
 use App\Services\EvolutionApiService;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
@@ -178,11 +179,9 @@ class OrderApiController extends Controller
 
         $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
 
-        if ($request->boolean('print_kitchen', true)) {
+        if ($request->boolean('print_kitchen', (bool) config('printing.auto_print_on_create'))) {
             try {
-                if (config('printing.enabled') && config('printing.driver') === 'network') {
-                    $printer->printOrder($order->fresh(['items.product', 'deliveryArea']), 'kitchen');
-                }
+                $printer->dispatchKitchenPrint($order->fresh(['items.product', 'deliveryArea']));
             } catch (\Throwable) {
                 //
             }
@@ -289,6 +288,24 @@ class OrderApiController extends Controller
 
         if ($validated['status'] === 'cancelled' && $previousStatus !== 'cancelled') {
             $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']));
+        }
+
+        if ($validated['status'] === 'delivered' && $previousStatus !== 'delivered') {
+            try {
+                app(CashFlowService::class)->recordOrderSale($order->fresh());
+            } catch (\Throwable) {
+                //
+            }
+        }
+
+        try {
+            app(OrderPrinterService::class)->maybePrintOnStatusChange(
+                $order->fresh(['items.product', 'customer', 'deliveryArea', 'user']),
+                $previousStatus,
+                $validated['status']
+            );
+        } catch (\Throwable) {
+            //
         }
 
         return response()->json([

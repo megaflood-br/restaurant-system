@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Waiter;
 
 use App\Http\Controllers\Controller;
+use App\Support\ComandaCustomer;
 use App\Support\MenuCatalog;
 use App\Models\Order;
 use App\Models\Product;
@@ -159,8 +160,8 @@ class WaiterOrderController extends Controller
                 'order_number' => Order::generateOrderNumber(),
                 'type' => 'dine_in',
                 'comanda_number' => (int) $validated['comanda_number'],
-                'customer_id' => session('comanda_customer_id'),
-                'customer_name' => session('comanda_customer_name'),
+                'customer_id' => ComandaCustomer::id((int) $validated['comanda_number']),
+                'customer_name' => ComandaCustomer::name((int) $validated['comanda_number']),
                 'notes' => filled($validated['notes'] ?? null) ? $validated['notes'] : null,
                 'status' => 'pending',
                 'user_id' => $request->user()->id,
@@ -194,12 +195,10 @@ class WaiterOrderController extends Controller
         $cart->clearItems();
         $cart->setComandaNumber($comandaNumber);
 
-        if (config('printing.enabled') && config('printing.driver') === 'network') {
-            try {
-                $printer->printOrder($order->fresh(['items.product', 'user']), 'kitchen');
-            } catch (\Throwable) {
-                //
-            }
+        try {
+            $printer->maybePrintOnCreate($order->fresh(['items.product', 'user']));
+        } catch (\Throwable) {
+            //
         }
 
         session([
@@ -210,7 +209,7 @@ class WaiterOrderController extends Controller
         $returnUrl = session('order_return_url');
 
         if ($request->wantsJson()) {
-            if (config('printing.enabled') && config('printing.driver') === 'browser') {
+            if (config('printing.enabled') && config('printing.driver') === 'browser' && config('printing.auto_print_on_create')) {
                 if ($returnUrl) {
                     return response()->json([
                         'message' => 'Pedido enviado.',
@@ -234,7 +233,7 @@ class WaiterOrderController extends Controller
             ]);
         }
 
-        if (config('printing.enabled') && config('printing.driver') === 'browser') {
+        if (config('printing.enabled') && config('printing.driver') === 'browser' && config('printing.auto_print_on_create')) {
             if ($returnUrl) {
                 return redirect()->route('waiter.autoprint', [
                     'order' => $order,

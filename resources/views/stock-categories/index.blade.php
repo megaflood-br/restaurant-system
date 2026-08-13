@@ -13,34 +13,40 @@
             <div class="bg-white shadow-sm sm:rounded-lg p-6">
                 <x-flash-messages />
                 <p class="text-sm text-gray-500 mb-4">Organize itens como alimentos, limpeza, gás, embalagens, etc.</p>
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Itens</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ordem</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200">
-                        @forelse ($categories as $category)
+
+                <x-bulk-select :action="route('stock-categories.bulk-destroy')" confirm="Excluir :count categoria(s) de estoque? Os itens vinculados ficam sem categoria.">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
                             <tr>
-                                <td class="px-4 py-3 font-medium">{{ $category->name }}</td>
-                                <td class="px-4 py-3">{{ $category->ingredients_count }}</td>
-                                <td class="px-4 py-3">{{ $category->sort_order }}</td>
-                                <td class="px-4 py-3 text-right space-x-2">
-                                    <a href="{{ route('stock-categories.edit', $category) }}" class="text-indigo-600 hover:underline">Editar</a>
-                                    <form action="{{ route('stock-categories.destroy', $category) }}" method="POST" class="inline" onsubmit="return confirm('Excluir categoria?')">
-                                        @csrf @method('DELETE')
-                                        <button type="submit" class="text-red-600 hover:underline">Excluir</button>
-                                    </form>
-                                </td>
+                                <x-bulk-select-all />
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Itens</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ordem</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                             </tr>
-                        @empty
-                            <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Nenhuma categoria cadastrada.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            @forelse ($categories as $category)
+                                <tr>
+                                    <x-bulk-select-item :id="$category->id" />
+                                    <td class="px-4 py-3 font-medium">{{ $category->name }}</td>
+                                    <td class="px-4 py-3">{{ $category->ingredients_count }}</td>
+                                    <td class="px-4 py-3">{{ $category->sort_order }}</td>
+                                    <td class="px-4 py-3 text-right space-x-2">
+                                        <a href="{{ route('stock-categories.edit', $category) }}" class="text-indigo-600 hover:underline">Editar</a>
+                                        <form action="{{ route('stock-categories.destroy', $category) }}" method="POST" class="inline" onsubmit="return confirm('Excluir categoria?')">
+                                            @csrf @method('DELETE')
+                                            <button type="submit" class="text-red-600 hover:underline">Excluir</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Nenhuma categoria cadastrada.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </x-bulk-select>
+
                 <div class="mt-4">{{ $categories->links() }}</div>
             </div>
         </div>

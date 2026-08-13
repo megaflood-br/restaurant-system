@@ -35,10 +35,12 @@
                         @endif
                     </form>
 
+                    <x-bulk-select :action="route('ingredients.bulk-destroy')" confirm="Excluir :count item(ns) de estoque? Isso remove também o vínculo nas fichas técnicas.">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
+                                    <x-bulk-select-all />
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoria</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pacote</th>
@@ -52,6 +54,7 @@
                             <tbody class="divide-y divide-gray-200">
                                 @forelse ($ingredients as $ingredient)
                                     <tr>
+                                        <x-bulk-select-item :id="$ingredient->id" />
                                         <td class="px-4 py-3 font-medium text-gray-900">{{ $ingredient->name }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-600">{{ $ingredient->stockCategory?->name ?? '—' }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-600">{{ $ingredient->formattedPackageCost() }}</td>
@@ -75,12 +78,13 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">Nenhum item cadastrado.</td>
+                                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">Nenhum item cadastrado.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
                         </table>
                     </div>
+                    </x-bulk-select>
 
                     <div class="mt-4">{{ $ingredients->links() }}</div>
                 </div>

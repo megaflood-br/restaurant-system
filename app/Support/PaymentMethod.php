@@ -63,6 +63,48 @@ class PaymentMethod
         return null;
     }
 
+    /**
+     * Detecta forma de pagamento em frases (ex.: "pode ser no pix", "vou pagar em dinheiro").
+     */
+    public static function detect(?string $input): ?string
+    {
+        $exact = self::normalize($input);
+
+        if ($exact !== null) {
+            return $exact;
+        }
+
+        if ($input === null || trim($input) === '') {
+            return null;
+        }
+
+        $slug = ' '.self::slug($input).' ';
+
+        // Mais específicos primeiro (cartão de crédito antes de crédito).
+        $phrases = [
+            'cartao de credito' => 'credit',
+            'cartao credito' => 'credit',
+            'cartao de debito' => 'debit',
+            'cartao debito' => 'debit',
+            'vale refeicao' => 'voucher',
+            'dinheiro' => 'cash',
+            'especie' => 'cash',
+            'pix' => 'pix',
+            'credito' => 'credit',
+            'debito' => 'debit',
+            'voucher' => 'voucher',
+            'vale' => 'voucher',
+        ];
+
+        foreach ($phrases as $phrase => $method) {
+            if (str_contains($slug, ' '.$phrase.' ')) {
+                return $method;
+            }
+        }
+
+        return null;
+    }
+
     /** @return array<string, string> */
     public static function aliases(): array
     {

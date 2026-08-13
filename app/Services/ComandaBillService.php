@@ -85,7 +85,7 @@ class ComandaBillService
     {
         return $this->openOrdersQuery()
             ->where('comanda_number', $comandaNumber)
-            ->with(['items.product', 'user'])
+            ->with(['items.product', 'user', 'customer'])
             ->oldest()
             ->get();
     }
@@ -144,7 +144,24 @@ class ComandaBillService
                 ]);
         });
 
+        try {
+            app(CashFlowService::class)->recordComandaClose($summary, auth()->id());
+        } catch (\Throwable) {
+            // Fluxo de caixa é best-effort; fechamento da comanda já foi concluído.
+        }
+
         return $summary;
+    }
+
+    public function assertOpenOrderOnComanda(int $comandaNumber, Order $order): void
+    {
+        if ($order->type !== 'dine_in'
+            || (int) $order->comanda_number !== $comandaNumber
+            || in_array($order->status, ['delivered', 'cancelled'], true)
+            || ! $order->created_at?->isToday()
+        ) {
+            throw new RuntimeException('Pedido não pertence a esta comanda aberta.');
+        }
     }
 
     private function openOrdersQuery()

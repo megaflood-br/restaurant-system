@@ -18,6 +18,12 @@ class OpenAiWhatsAppAgentPromptTest extends TestCase
         $bot->shouldReceive('menuSnapshot')->andReturn([]);
         $bot->shouldReceive('restaurantDisplayName')->andReturn('Bella Bistrô');
         $bot->shouldReceive('openingHoursLabel')->andReturn('11:00 às 15:00');
+        $bot->shouldReceive('openingHoursSnapshot')->andReturn([
+            'is_open' => true,
+            'opening' => '11:00',
+            'closing' => '15:00',
+            'force_closed' => false,
+        ])->byDefault();
         $bot->shouldReceive('savedAddressForPhone')->andReturn(null);
         $bot->shouldReceive('normalizedPhoneKey')->andReturn('5511999000200');
 
@@ -34,6 +40,6 @@ class OpenAiWhatsAppAgentPromptTest extends TestCase
         $system = $messages[0]['content'] ?? '';
 
         $this->assertStringContainsString('NÃO chame send_menu_image', $system);
-        $this->assertStringNotContainsString('Na primeira saudação, também chame send_menu_image', $system);
+        $this->assertStringNotContainsString('também chame send_menu_image junto com uma mensagem curta de boas-vindas', $system);
     }
 }

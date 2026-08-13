@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Category;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -9,6 +10,8 @@ use Illuminate\View\View;
 
 class CategoryController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(): View
     {
         $categories = Category::withCount('products')->latest()->paginate(10);
@@ -65,5 +68,25 @@ class CategoryController extends Controller
         $category->delete();
 
         return redirect()->route('categories.index')->with('success', 'Categoria excluída com sucesso.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = 0;
+        $skipped = 0;
+
+        foreach (Category::query()->whereIn('id', $ids)->get() as $category) {
+            if ($category->products()->exists()) {
+                $skipped++;
+
+                continue;
+            }
+
+            $category->delete();
+            $deleted++;
+        }
+
+        return $this->bulkResultRedirect('categories.index', $deleted, $skipped, 'categoria', 'categorias');
     }
 }

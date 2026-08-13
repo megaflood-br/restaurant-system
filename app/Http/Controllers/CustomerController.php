@@ -2,14 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Customer;
 use App\Models\CustomerInteraction;
+use App\Support\ComandaCustomer;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class CustomerController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(Request $request): View
     {
         $customers = Customer::query()
@@ -47,6 +52,41 @@ class CustomerController extends Controller
         return redirect()
             ->route('customers.show', $customer)
             ->with('success', 'Cliente cadastrado com sucesso.');
+    }
+
+    public function quickStore(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'email' => ['nullable', 'email', 'max:255', 'unique:customers,email'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'neighborhood' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'state' => ['nullable', 'string', 'size:2'],
+            'zip_code' => ['nullable', 'string', 'max:10'],
+        ]);
+
+        if (isset($validated['state'])) {
+            $validated['state'] = strtoupper($validated['state']);
+        }
+
+        $customer = Customer::create([
+            ...$validated,
+            'is_active' => true,
+        ]);
+
+        $label = $customer->name.($customer->phone ? ' — '.$customer->phone : '');
+
+        return response()->json([
+            'data' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'label' => $label,
+            ],
+            'message' => 'Cliente cadastrado com sucesso.',
+        ], 201);
     }
 
     public function show(Customer $customer): View
@@ -90,10 +130,7 @@ class CustomerController extends Controller
     {
         $comanda = (int) config('restaurant.counter_comanda_number', 950);
 
-        session([
-            'comanda_customer_id' => $customer->id,
-            'comanda_customer_name' => $customer->name,
-        ]);
+        ComandaCustomer::bind($comanda, $customer);
 
         return redirect()->route('comandas.show', ['comanda' => $comanda, 'add' => 1])
             ->with('success', 'Comanda aberta para '.$customer->name.'. Adicione os produtos.');
@@ -107,6 +144,14 @@ class CustomerController extends Controller
         return redirect()
             ->route('customers.index')
             ->with('success', "Cliente {$name} excluído com sucesso. Pedidos vinculados foram mantidos sem o vínculo do cliente.");
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = Customer::query()->whereIn('id', $ids)->delete();
+
+        return $this->bulkResultRedirect('customers.index', $deleted, 0, 'cliente', 'clientes');
     }
 
     public function storeInteraction(Request $request, Customer $customer): RedirectResponse

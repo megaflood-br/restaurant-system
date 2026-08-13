@@ -71,6 +71,7 @@
             <div class="large center" style="margin: 6px 0; padding: 4px; border: 2px solid #000;">*** AGENDADO: {{ strtoupper($order->scheduledLabel()) }} ***</div>
         @endif
         <div><strong>Tipo:</strong> {{ $typeLabels[$order->type] ?? $order->type }}</div>
+        <div class="large"><strong>Pagamento:</strong> {{ \App\Support\PaymentMethod::label($order->payment_method) }}</div>
 
         @if ($order->type === 'dine_in')
             <div class="large">Comanda: {{ $order->comanda_number ? str_pad((string) $order->comanda_number, 3, '0', STR_PAD_LEFT) : '—' }}</div>
@@ -86,9 +87,20 @@
                 @if ($order->deliveryArea)
                     <div><strong>Bairro:</strong> {{ $order->deliveryArea->name }}</div>
                 @endif
-                @if ($order->delivery_address)
-                    <div><strong>Endereço:</strong> {{ $order->delivery_address }}</div>
-                @endif
+                @php
+                    $printAddress = filled($order->delivery_address)
+                        ? $order->delivery_address
+                        : trim(collect([
+                            $order->customer?->address,
+                            $order->customer?->neighborhood,
+                            $order->customer?->city,
+                            $order->customer?->state,
+                            $order->customer?->zip_code,
+                        ])->filter()->implode(', '));
+                @endphp
+                <div class="divider"></div>
+                <div class="center bold">*** ENTREGA ***</div>
+                <div class="large"><strong>Endereço:</strong> {{ $printAddress !== '' ? $printAddress : '(não informado)' }}</div>
             @endif
         @endif
 

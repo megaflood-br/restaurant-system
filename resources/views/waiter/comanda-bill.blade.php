@@ -11,6 +11,9 @@
             <div>
                 <a href="{{ route('waiter.comandas.index') }}" class="text-sm text-indigo-600 font-medium">← Comandas</a>
                 <h2 class="text-2xl font-bold mt-1">Comanda {{ str_pad((string) $comanda, 3, '0', STR_PAD_LEFT) }}</h2>
+                @if (! empty($linkedCustomer['name']))
+                    <p class="text-sm text-gray-600 mt-0.5">Cliente: <strong>{{ $linkedCustomer['name'] }}</strong></p>
+                @endif
                 @if ($bill && ($bill['elapsed_label'] ?? null))
                     <p class="text-sm text-gray-500 mt-0.5">
                         Tempo aberta: <strong class="text-gray-700">{{ $bill['elapsed_label'] }}</strong>

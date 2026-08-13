@@ -26,33 +26,12 @@ class DigitalMenu
     /** @param  array<string, mixed>  $settings */
     public static function openingStatus(array $settings): array
     {
-        $opening = $settings['opening_time'] ?? '09:00';
-        $closing = $settings['closing_time'] ?? '22:00';
-        $openAt = self::formatTime($opening);
-
-        if ($settings['force_closed'] ?? false) {
-            return [
-                'is_open' => false,
-                'label' => 'Fechado',
-                'detail' => "Abrimos às {$openAt}",
-            ];
-        }
-
-        $now = now()->format('H:i');
-        $isOpen = $now >= $opening && $now < $closing;
-
-        if ($isOpen) {
-            return [
-                'is_open' => true,
-                'label' => 'Aberto',
-                'detail' => 'até '.self::formatTime($closing),
-            ];
-        }
+        $status = OpeningHours::status($settings);
 
         return [
-            'is_open' => false,
-            'label' => 'Fechado',
-            'detail' => "Abrimos às {$openAt}",
+            'is_open' => $status['is_open'],
+            'label' => $status['label'],
+            'detail' => $status['detail'],
         ];
     }
 
@@ -81,12 +60,5 @@ class DigitalMenu
     public static function usesDedicatedDomain(): bool
     {
         return filled(config('digital_menu.public_domain'));
-    }
-
-    private static function formatTime(string $time): string
-    {
-        $parts = explode(':', $time);
-
-        return sprintf('%02dh%02d', (int) ($parts[0] ?? 0), (int) ($parts[1] ?? 0));
     }
 }

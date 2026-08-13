@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Waiter;
 
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
 use App\Services\ComandaBillService;
 use App\Services\OrderPrinterService;
 use App\Services\WaiterCartService;
+use App\Support\ComandaCustomer;
 use App\Support\PaymentMethod;
 use App\Support\MenuCatalog;
 use Illuminate\Http\RedirectResponse;
@@ -19,20 +21,39 @@ class WaiterComandaController extends Controller
     {
         return view('waiter.comandas', [
             'overview' => $comandas->overview(),
+            'customers' => Customer::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'phone']),
         ]);
     }
 
-    public function open(int $comanda, WaiterCartService $cart, ComandaBillService $comandas): RedirectResponse
+    public function open(Request $request, int $comanda, WaiterCartService $cart, ComandaBillService $comandas): RedirectResponse
     {
         if ($comanda < 1 || $comanda > $comandas->totalComandas()) {
             return back()->with('error', 'Número de comanda inválido.');
         }
 
+        $validated = $request->validate([
+            'customer_id' => ['nullable', 'exists:customers,id'],
+        ]);
+
+        $customer = isset($validated['customer_id'])
+            ? Customer::query()->find($validated['customer_id'])
+            : null;
+
+        ComandaCustomer::bind($comanda, $customer);
+
         $cart->clearItems();
         $cart->setComandaNumber($comanda);
 
+        $message = 'Comanda '.str_pad((string) $comanda, 3, '0', STR_PAD_LEFT).' aberta.';
+        if ($customer) {
+            $message = 'Comanda '.str_pad((string) $comanda, 3, '0', STR_PAD_LEFT).' aberta para '.$customer->name.'.';
+        }
+
         return redirect()->route('waiter.comandas.show', ['comanda' => $comanda, 'add' => 1])
-            ->with('success', 'Comanda '.str_pad((string) $comanda, 3, '0', STR_PAD_LEFT).' aberta.');
+            ->with('success', $message);
     }
 
     public function show(int $comanda, ComandaBillService $comandas): View
@@ -41,10 +62,27 @@ class WaiterComandaController extends Controller
         $categories = MenuCatalog::categories();
         $bill = $orders->isNotEmpty() ? $comandas->buildSummary($orders) : null;
 
+        $linkedCustomer = ComandaCustomer::get($comanda);
+        if ($linkedCustomer === null) {
+            $fromOrder = $orders->first(fn ($order) => $order->customer_id || filled($order->customer_name));
+            if ($fromOrder?->customer) {
+                $linkedCustomer = [
+                    'id' => $fromOrder->customer->id,
+                    'name' => $fromOrder->customer->name,
+                ];
+            } elseif (filled($fromOrder?->customer_name)) {
+                $linkedCustomer = [
+                    'id' => 0,
+                    'name' => (string) $fromOrder->customer_name,
+                ];
+            }
+        }
+
         return view('waiter.comanda-bill', [
             'bill' => $bill,
             'comanda' => $comanda,
             'categories' => $categories,
+            'linkedCustomer' => $linkedCustomer,
             'autoOpenPicker' => request()->boolean('add'),
         ]);
     }
@@ -61,6 +99,8 @@ class WaiterComandaController extends Controller
             return back()->with('error', $exception->getMessage())->withInput();
         }
 
+        ComandaCustomer::forget($comanda);
+
         if ((int) $cart->all()['comanda_number'] === $comanda) {
             $cart->clearItems();
             $cart->setComandaNumber(null);
@@ -76,9 +116,9 @@ class WaiterComandaController extends Controller
             'waiter_closed_bill' => $bill,
         ]);
 
-        if (config('printing.enabled') && config('printing.driver') === 'network') {
+        if (config('printing.enabled') && in_array(config('printing.driver'), ['network', 'agent'], true)) {
             try {
-                $printer->printComandaBill($bill);
+                $printer->dispatchComandaBill($bill);
             } catch (\Throwable) {
                 //
             }

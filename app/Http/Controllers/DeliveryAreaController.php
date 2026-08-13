@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\DeliveryArea;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -9,6 +10,8 @@ use Illuminate\View\View;
 
 class DeliveryAreaController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(): View
     {
         $deliveryAreas = DeliveryArea::withCount('orders')->ordered()->paginate(15);
@@ -73,5 +76,25 @@ class DeliveryAreaController extends Controller
         $deliveryArea->delete();
 
         return redirect()->route('delivery-areas.index')->with('success', 'Região de entrega excluída com sucesso.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = 0;
+        $skipped = 0;
+
+        foreach (DeliveryArea::query()->whereIn('id', $ids)->get() as $area) {
+            if ($area->orders()->exists()) {
+                $skipped++;
+
+                continue;
+            }
+
+            $area->delete();
+            $deleted++;
+        }
+
+        return $this->bulkResultRedirect('delivery-areas.index', $deleted, $skipped, 'região', 'regiões');
     }
 }

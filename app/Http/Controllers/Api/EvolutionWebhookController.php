@@ -34,6 +34,16 @@ class EvolutionWebhookController extends Controller
         ]);
 
         foreach ($this->extractMessages($payload) as $message) {
+            if ($this->isGroupOrBroadcastMessage($message)) {
+                Log::info('Evolution webhook group/broadcast message ignored', [
+                    'remote_jid' => data_get($message, 'key.remoteJid'),
+                    'remote_jid_alt' => data_get($message, 'key.remoteJidAlt'),
+                    'participant' => data_get($message, 'key.participant'),
+                ]);
+
+                continue;
+            }
+
             if (data_get($message, 'key.fromMe') === true) {
                 $this->handleHumanOutbound($message);
 
@@ -50,10 +60,9 @@ class EvolutionWebhookController extends Controller
                 $text = '[imagem]';
             }
 
-            $remoteJid = data_get($message, 'key.remoteJidAlt')
-                ?? data_get($message, 'key.remoteJid');
+            $remoteJid = $this->resolveRemoteJid($message);
 
-            if (! $remoteJid || str_contains($remoteJid, '@g.us') || str_contains($remoteJid, '@broadcast')) {
+            if (! $remoteJid || $this->isNonDirectChatJid($remoteJid)) {
                 continue;
             }
 
@@ -134,10 +143,13 @@ class EvolutionWebhookController extends Controller
 
     private function handleHumanOutbound(array $message): void
     {
-        $remoteJid = data_get($message, 'key.remoteJidAlt')
-            ?? data_get($message, 'key.remoteJid');
+        if ($this->isGroupOrBroadcastMessage($message)) {
+            return;
+        }
 
-        if (! $remoteJid || str_contains($remoteJid, '@g.us') || str_contains($remoteJid, '@broadcast')) {
+        $remoteJid = $this->resolveRemoteJid($message);
+
+        if (! $remoteJid || $this->isNonDirectChatJid($remoteJid)) {
             return;
         }
 
@@ -154,5 +166,85 @@ class EvolutionWebhookController extends Controller
             'phone' => $phone,
             'message_id' => $messageId,
         ]);
+    }
+
+    /**
+     * Mensagens de grupo/lista/newsletter NÃO devem acionar o bot.
+     * Em grupos, remoteJid é @g.us e participant é quem postou — se usarmos
+     * o participant como destino, o bot responde no privado da pessoa.
+     */
+    private function isGroupOrBroadcastMessage(array $message): bool
+    {
+        foreach ([
+            data_get($message, 'key.remoteJid'),
+            data_get($message, 'key.remoteJidAlt'),
+        ] as $jid) {
+            if (is_string($jid) && $this->isNonDirectChatJid($jid)) {
+                return true;
+            }
+        }
+
+        // Em chat 1:1 não existe participant; em grupo a Evolution preenche.
+        $participant = data_get($message, 'key.participant')
+            ?? data_get($message, 'key.participantAlt')
+            ?? data_get($message, 'participant');
+
+        if (is_string($participant) && $participant !== '') {
+            $remoteJid = data_get($message, 'key.remoteJid');
+
+            if (is_string($remoteJid) && $this->isNonDirectChatJid($remoteJid)) {
+                return true;
+            }
+
+            // participant presente + remoteJid de grupo em formato lid/g.us já coberto;
+            // se remoteJid for grupo numérico sem sufixo claro, ainda assim ignore.
+            if (is_string($remoteJid) && str_contains($remoteJid, '@g.us')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isNonDirectChatJid(string $jid): bool
+    {
+        $jid = strtolower($jid);
+
+        return str_contains($jid, '@g.us')
+            || str_contains($jid, '@broadcast')
+            || str_contains($jid, '@newsletter')
+            || str_ends_with($jid, '@g.us');
+    }
+
+    /**
+     * Resolve o chat 1:1. NÃO usa participant — esse campo é de grupo.
+     * Prefere número real (@s.whatsapp.net / @c.us) em vez de @lid.
+     */
+    private function resolveRemoteJid(array $message): ?string
+    {
+        $candidates = [
+            data_get($message, 'key.remoteJidAlt'),
+            data_get($message, 'key.remoteJid'),
+        ];
+
+        $fallback = null;
+
+        foreach ($candidates as $jid) {
+            if (! is_string($jid) || $jid === '') {
+                continue;
+            }
+
+            if ($this->isNonDirectChatJid($jid)) {
+                continue;
+            }
+
+            if (str_contains($jid, '@s.whatsapp.net') || str_contains($jid, '@c.us')) {
+                return $jid;
+            }
+
+            $fallback ??= $jid;
+        }
+
+        return $fallback;
     }
 }

@@ -257,8 +257,13 @@
                                 <label for="driver" class="block text-sm font-medium text-gray-700">Modo de impressão</label>
                                 <select name="driver" id="driver" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                     <option value="browser" @selected(old('driver', $printing['driver']) === 'browser')>Navegador (qualquer impressora Windows)</option>
-                                    <option value="network" @selected(old('driver', $printing['driver']) === 'network')>Rede IP (impressora térmica ESC/POS)</option>
+                                    <option value="agent" @selected(old('driver', $printing['driver']) === 'agent')>Agente local (recomendado com painel na nuvem)</option>
+                                    <option value="network" @selected(old('driver', $printing['driver']) === 'network')>Rede IP direta (só se o servidor alcança a impressora)</option>
                                 </select>
+                                <p class="mt-1 text-xs text-gray-500">
+                                    Com o painel na nuvem, use <strong>Agente local</strong>: um script no PC do restaurante busca os cupons e imprime em {{ $printing['network_host'] ?: '192.168.1.100' }}:9100.
+                                    <strong>Rede IP</strong> só funciona se o servidor PHP estiver na mesma rede da impressora.
+                                </p>
                             </div>
 
                             <div class="flex items-center gap-2">
@@ -267,16 +272,37 @@
                             </div>
 
                             <div class="flex items-center gap-2">
+                                <input type="checkbox" name="print_on_preparing" id="print_on_preparing" value="1" @checked(old('print_on_preparing', $printing['print_on_preparing'] ?? true)) class="rounded border-gray-300 text-indigo-600">
+                                <label for="print_on_preparing" class="text-sm text-gray-700">Imprimir ao mudar status para <strong>Preparando</strong></label>
+                            </div>
+                            <p class="text-xs text-gray-500 -mt-2">Recomendado no início: deixe a 1ª opção desmarcada e a 2ª marcada. O pedido fica Pendente; ao mudar para Preparando, a comanda imprime.</p>
+
+                            <div class="flex items-center gap-2">
                                 <input type="checkbox" name="kitchen_hide_prices" id="kitchen_hide_prices" value="1" @checked(old('kitchen_hide_prices', $printing['kitchen_hide_prices'])) class="rounded border-gray-300 text-indigo-600">
                                 <label for="kitchen_hide_prices" class="text-sm text-gray-700">Ocultar preços na via cozinha</label>
                             </div>
 
                             <div class="border-t border-gray-200 pt-6">
-                                <h3 class="text-sm font-semibold text-gray-800 mb-4">Impressora de rede</h3>
+                                <h3 class="text-sm font-semibold text-gray-800 mb-2">Impressora de rede (ESC/POS)</h3>
+                                <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1">
+                                    <p><strong>Agente local (nuvem + impressora no Wi‑Fi):</strong></p>
+                                    <ol class="list-decimal list-inside space-y-0.5">
+                                        <li>Escolha o modo <strong>Agente local</strong> e salve.</li>
+                                        <li>Copie o <strong>token da API</strong> em Configurações → Integração.</li>
+                                        <li>No PC do restaurante, baixe <strong>só</strong> a pasta <code class="bg-amber-100 px-1 rounded">print-agent</code> (não precisa do sistema inteiro):</li>
+                                    </ol>
+                                    <p class="mt-1"><a class="underline font-medium" href="https://github.com/megaflood-br/restaurant-system/tree/main/print-agent" target="_blank" rel="noopener">github.com/.../print-agent</a></p>
+                                    <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-[11px] leading-relaxed">1. Copie config.example.ini → config.ini (cole o token)
+2. Duplo clique em iniciar.bat
+   (PowerShell do Windows — sem instalar PHP)</pre>
+                                    <p class="mt-1">Ou baixe o atalho <code class="bg-amber-100 px-1 rounded">baixar-agente.bat</code> — ele coloca os arquivos na Área de Trabalho.</p>
+                                    <p class="mt-1">Deixe a janela aberta. Com “imprimir ao Preparando”, a comanda só entra na fila quando você mudar o status.</p>
+                                    <p class="mt-2"><strong>Rede IP direta:</strong> IP <code class="bg-amber-100 px-1 rounded">192.168.1.100</code>, porta <code class="bg-amber-100 px-1 rounded">9100</code>, largura <code class="bg-amber-100 px-1 rounded">48</code> (80mm). Só funciona se o servidor alcançar esse IP.</p>
+                                </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div class="md:col-span-2">
                                         <label for="network_host" class="block text-sm font-medium text-gray-700">IP da impressora</label>
-                                        <input type="text" name="network_host" id="network_host" value="{{ old('network_host', $printing['network_host']) }}" placeholder="192.168.0.100"
+                                        <input type="text" name="network_host" id="network_host" value="{{ old('network_host', $printing['network_host']) }}" placeholder="192.168.1.100"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                     </div>
                                     <div>
@@ -293,7 +319,7 @@
                                         <label for="paper_width" class="block text-sm font-medium text-gray-700">Largura do papel (caracteres)</label>
                                         <input type="number" name="paper_width" id="paper_width" min="24" max="48" value="{{ old('paper_width', $printing['paper_width']) }}"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                        <p class="mt-1 text-xs text-gray-500">Padrão: 32 para bobina 58mm, 48 para 80mm.</p>
+                                        <p class="mt-1 text-xs text-gray-500">32 ≈ bobina 58mm · 48 ≈ bobina 80mm (sua impressora).</p>
                                     </div>
                                 </div>
                             </div>

@@ -33,7 +33,7 @@ class Product extends Model
     protected function imageUrl(): Attribute
     {
         return Attribute::get(function (): ?string {
-            $path = $this->recipe?->image ?? $this->image;
+            $path = $this->image ?: $this->recipe?->image;
 
             if (! $path) {
                 return null;
