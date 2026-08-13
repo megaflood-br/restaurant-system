@@ -206,7 +206,7 @@ class OpenAiWhatsAppAgentService
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'get_opening_hours',
-                'description' => 'Retorna horário de funcionamento.',
+                'description' => 'Retorna horário de funcionamento e se o restaurante está aberto agora (is_open, next_open_day).',
                 'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [
