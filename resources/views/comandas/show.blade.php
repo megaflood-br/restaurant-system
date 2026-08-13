@@ -100,14 +100,37 @@
                 </div>
             @endif
 
-            <button type="button"
-                @click="$dispatch('open-product-picker', 'comanda-{{ $comanda }}')"
-                class="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 shadow-sm transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Adicionar produtos
-            </button>
+            <div class="flex flex-wrap gap-3">
+                <button type="button"
+                    @click="$dispatch('open-product-picker', 'comanda-{{ $comanda }}')"
+                    class="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 shadow-sm transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Adicionar produtos
+                </button>
+
+                @if ($editing)
+                    <a href="{{ route('comandas.show', $comanda) }}"
+                        class="inline-flex items-center gap-2 px-5 py-3 bg-white border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 shadow-sm transition">
+                        Sair da edição
+                    </a>
+                @else
+                    <a href="{{ route('comandas.show', ['comanda' => $comanda, 'edit' => 1]) }}"
+                        class="inline-flex items-center gap-2 px-5 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 shadow-sm transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Editar comanda
+                    </a>
+                @endif
+            </div>
+
+            @if ($editing)
+                <div class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+                    Modo edição: altere quantidade/obs, remova itens, cancele pedidos ou vincule o cliente.
+                </div>
+            @endif
 
             @if ($categories->isNotEmpty())
                 <x-product-picker-modal

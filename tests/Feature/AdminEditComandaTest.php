@@ -54,11 +54,17 @@ class AdminEditComandaTest extends TestCase
         $this->seedOpenOrder($admin, 5);
 
         $this->actingAs($admin)
+            ->get(route('comandas.show', 5))
+            ->assertOk()
+            ->assertSee('Editar comanda');
+
+        $this->actingAs($admin)
             ->get(route('comandas.show', ['comanda' => 5, 'edit' => 1]))
             ->assertOk()
             ->assertSee('Editando')
             ->assertSee('Sair da edição')
-            ->assertSee('Cancelar pedido');
+            ->assertSee('Cancelar pedido')
+            ->assertSee('Modo edição');
     }
 
     public function test_admin_can_update_item_quantity(): void
