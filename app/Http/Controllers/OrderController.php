@@ -134,28 +134,37 @@ class OrderController extends Controller
             'items.*.notes' => ['nullable', 'string'],
         ]);
 
-        $order = DB::transaction(function () use ($validated, $request, $deliveryFee) {
-            $customer = isset($validated['customer_id'])
-                ? Customer::find($validated['customer_id'])
-                : null;
+        $customer = isset($validated['customer_id'])
+            ? Customer::find($validated['customer_id'])
+            : null;
 
-            $deliveryFeeAmount = 0.0;
-            $deliveryAreaId = null;
-            $deliveryAddress = null;
+        // Cotação (HTTP/Nominatim) FORA da transaction — no SQLite, HTTP lento
+        // dentro de DB::transaction() segura o lock e causa "database is locked".
+        $deliveryFeeAmount = 0.0;
+        $deliveryAreaId = null;
+        $deliveryAddress = null;
 
-            if ($validated['type'] === 'delivery' && $customer) {
-                $deliveryAddress = $customer->resolvedDeliveryAddress();
+        if ($validated['type'] === 'delivery' && $customer) {
+            $deliveryAddress = $customer->resolvedDeliveryAddress();
 
-                if ($deliveryAddress !== null) {
-                    $quote = $deliveryFee->quoteForAddress($deliveryAddress);
+            if ($deliveryAddress !== null) {
+                $quote = $deliveryFee->quoteForAddress($deliveryAddress);
 
-                    if ($quote) {
-                        $deliveryFeeAmount = (float) $quote['delivery_fee'];
-                        $deliveryAreaId = $quote['delivery_area_id'];
-                    }
+                if ($quote) {
+                    $deliveryFeeAmount = (float) $quote['delivery_fee'];
+                    $deliveryAreaId = $quote['delivery_area_id'];
                 }
             }
+        }
 
+        $order = DB::transaction(function () use (
+            $validated,
+            $request,
+            $customer,
+            $deliveryFeeAmount,
+            $deliveryAreaId,
+            $deliveryAddress,
+        ) {
             $order = Order::create([
                 'order_number' => Order::generateOrderNumber(),
                 'customer_id' => $customer?->id,
