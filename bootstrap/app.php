@@ -1,5 +1,10 @@
 <?php
 
+use App\Http\Middleware\AuthenticateIntegrationApi;
+use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\EnsureStaff;
+use App\Http\Middleware\ShareWaiterCart;
+use App\Http\Middleware\SkipNgrokBrowserWarning;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,18 +25,18 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
-            'waiter.cart' => \App\Http\Middleware\ShareWaiterCart::class,
-            'integration.api' => \App\Http\Middleware\AuthenticateIntegrationApi::class,
-            'role.admin' => \App\Http\Middleware\EnsureAdmin::class,
-            'role.staff' => \App\Http\Middleware\EnsureStaff::class,
+            'waiter.cart' => ShareWaiterCart::class,
+            'integration.api' => AuthenticateIntegrationApi::class,
+            'role.admin' => EnsureAdmin::class,
+            'role.staff' => EnsureStaff::class,
         ]);
 
         $middleware->web(append: [
-            \App\Http\Middleware\SkipNgrokBrowserWarning::class,
+            SkipNgrokBrowserWarning::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
+            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
     })->create();

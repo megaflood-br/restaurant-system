@@ -6,17 +6,74 @@
     'modal' => false,
 ])
 
+@php
+    $customerOptions = $customers->map(fn ($customer) => [
+        'id' => (string) $customer->id,
+        'label' => $customer->name.($customer->phone ? ' — '.$customer->phone : ''),
+    ])->values()->all();
+@endphp
+
 <form method="POST" action="{{ route('orders.store') }}"
     x-data="{
         type: '{{ old('type', $selectedCustomer ? 'delivery' : 'dine_in') }}',
         customerId: '{{ old('customer_id', $selectedCustomer?->id ?? '') }}',
+        customerOptions: @js($customerOptions),
+        showNewCustomer: false,
+        savingCustomer: false,
+        customerError: '',
+        newCustomer: { name: '', phone: '', email: '', address: '', neighborhood: '', city: '', state: '', zip_code: '' },
         items: [{ variantId: '' }],
         addItem() { this.items.push({ variantId: '' }); },
         removeItem(index) { this.items.splice(index, 1); },
         syncVariant(index, event) {
             const option = event.target.selectedOptions[0];
             this.items[index].variantId = option?.dataset?.variantId || '';
-        }
+        },
+        openNewCustomer() {
+            this.showNewCustomer = true;
+            this.customerError = '';
+            this.customerId = '';
+        },
+        cancelNewCustomer() {
+            this.showNewCustomer = false;
+            this.customerError = '';
+            this.newCustomer = { name: '', phone: '', email: '', address: '', neighborhood: '', city: '', state: '', zip_code: '' };
+        },
+        async saveNewCustomer() {
+            this.customerError = '';
+            if (!this.newCustomer.name.trim()) {
+                this.customerError = 'Informe o nome do cliente.';
+                return;
+            }
+            this.savingCustomer = true;
+            try {
+                const res = await fetch(@js(route('customers.quick-store')), {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(this.newCustomer),
+                });
+                const json = await res.json();
+                if (!res.ok) {
+                    const firstError = json.errors ? Object.values(json.errors).flat()[0] : null;
+                    this.customerError = firstError || json.message || 'Não foi possível cadastrar o cliente.';
+                    return;
+                }
+                const created = json.data;
+                this.customerOptions = [...this.customerOptions, { id: String(created.id), label: created.label }];
+                this.customerId = String(created.id);
+                this.cancelNewCustomer();
+            } catch (e) {
+                this.customerError = 'Falha de conexão ao cadastrar o cliente.';
+            } finally {
+                this.savingCustomer = false;
+            }
+        },
     }"
     class="space-y-6">
     @csrf
@@ -36,22 +93,88 @@
                 value="{{ old('comanda_number', $comandaNumber ?? '') }}"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
         </div>
-        <div x-show="type !== 'dine_in'" class="md:col-span-2">
-            <label for="customer_id" class="block text-sm font-medium text-gray-700">Cliente cadastrado</label>
-            <select name="customer_id" id="customer_id" x-model="customerId" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                <option value="">Selecionar cliente ou preencher manualmente...</option>
-                @foreach ($customers as $customer)
-                    <option value="{{ $customer->id }}" @selected(old('customer_id', $selectedCustomer?->id) == $customer->id)>
-                        {{ $customer->name }}@if($customer->phone) — {{ $customer->phone }}@endif
-                    </option>
-                @endforeach
-            </select>
+        <div x-show="type !== 'dine_in'" class="md:col-span-2 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+                <div class="flex-1">
+                    <label for="customer_id" class="block text-sm font-medium text-gray-700">Cliente cadastrado</label>
+                    <select name="customer_id" id="customer_id" x-model="customerId" :disabled="showNewCustomer"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100">
+                        <option value="">Selecionar cliente ou preencher manualmente...</option>
+                        <template x-for="customer in customerOptions" :key="customer.id">
+                            <option :value="customer.id" x-text="customer.label" :selected="customerId === customer.id"></option>
+                        </template>
+                    </select>
+                </div>
+                <button type="button" x-show="!showNewCustomer" @click="openNewCustomer()"
+                    class="inline-flex items-center justify-center px-4 py-2 bg-white border border-indigo-300 text-indigo-700 text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-indigo-50 whitespace-nowrap">
+                    + Novo cliente
+                </button>
+            </div>
+
+            <div x-show="showNewCustomer" x-cloak class="rounded-lg border border-indigo-200 bg-indigo-50/50 p-4 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                    <p class="text-sm font-medium text-indigo-950">Cadastrar novo cliente</p>
+                    <button type="button" @click="cancelNewCustomer()" class="text-xs text-indigo-700 hover:underline">Cancelar</button>
+                </div>
+                <p class="text-xs text-indigo-900/80">O cliente será salvo no CRM e já ficará selecionado neste pedido.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Nome *</label>
+                        <input type="text" x-model="newCustomer.name" autocomplete="name"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Telefone</label>
+                        <input type="text" x-model="newCustomer.phone" autocomplete="tel"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">E-mail</label>
+                        <input type="email" x-model="newCustomer.email" autocomplete="email"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Endereço</label>
+                        <input type="text" x-model="newCustomer.address" autocomplete="street-address"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Bairro</label>
+                        <input type="text" x-model="newCustomer.neighborhood"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Cidade</label>
+                        <input type="text" x-model="newCustomer.city" autocomplete="address-level2"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">UF</label>
+                        <input type="text" maxlength="2" x-model="newCustomer.state" autocomplete="address-level1"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">CEP</label>
+                        <input type="text" x-model="newCustomer.zip_code" autocomplete="postal-code"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <p class="text-sm text-red-600" x-show="customerError" x-text="customerError"></p>
+
+                <button type="button" @click="saveNewCustomer()" :disabled="savingCustomer"
+                    class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-indigo-700 disabled:opacity-50">
+                    <span x-show="!savingCustomer">Salvar cliente</span>
+                    <span x-show="savingCustomer" x-cloak>Salvando…</span>
+                </button>
+            </div>
         </div>
-        <div x-show="type !== 'dine_in' && !customerId">
+        <div x-show="type !== 'dine_in' && !customerId && !showNewCustomer">
             <label for="customer_name" class="block text-sm font-medium text-gray-700">Nome do cliente</label>
             <input type="text" name="customer_name" id="customer_name" value="{{ old('customer_name') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
         </div>
-        <div x-show="type !== 'dine_in' && !customerId">
+        <div x-show="type !== 'dine_in' && !customerId && !showNewCustomer">
             <label for="customer_phone" class="block text-sm font-medium text-gray-700">Telefone</label>
             <input type="text" name="customer_phone" id="customer_phone" value="{{ old('customer_phone') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
         </div>
