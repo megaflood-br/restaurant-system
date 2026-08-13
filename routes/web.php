@@ -125,6 +125,11 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::put('settings/printing', [SettingsController::class, 'updatePrinting'])->name('settings.printing.update');
         Route::put('settings/integration', [SettingsController::class, 'updateIntegration'])->name('settings.integration.update');
         Route::put('settings/whatsapp-agent', [SettingsController::class, 'updateWhatsappAgent'])->name('settings.whatsapp-agent.update');
+        Route::put('settings/evolution', [SettingsController::class, 'updateEvolution'])->name('settings.evolution.update');
+        Route::get('settings/evolution/status', [SettingsController::class, 'evolutionStatus'])->name('settings.evolution.status');
+        Route::post('settings/evolution/connect', [SettingsController::class, 'evolutionConnect'])->name('settings.evolution.connect');
+        Route::post('settings/evolution/logout', [SettingsController::class, 'evolutionLogout'])->name('settings.evolution.logout');
+        Route::post('settings/evolution/webhook', [SettingsController::class, 'evolutionWebhook'])->name('settings.evolution.webhook');
         Route::post('settings/integration/regenerate-token', [SettingsController::class, 'regenerateIntegrationToken'])->name('settings.integration.regenerate-token');
         Route::post('settings/printing/test', [SettingsController::class, 'testPrinting'])->name('settings.printing.test');
 

@@ -96,6 +96,12 @@ class AppSettings
             'whatsapp_agent.schedule_min_minutes' => (int) Setting::get('whatsapp_agent', 'schedule_min_minutes', config('whatsapp_agent.schedule_min_minutes', 30)),
             'whatsapp_agent.schedule_max_days' => (int) Setting::get('whatsapp_agent', 'schedule_max_days', config('whatsapp_agent.schedule_max_days', 1)),
             'whatsapp_agent.schedule_message' => Setting::get('whatsapp_agent', 'schedule_message', config('whatsapp_agent.schedule_message')),
+
+            'evolution.enabled' => Setting::get('evolution', 'enabled', config('evolution.enabled')),
+            'evolution.base_url' => rtrim((string) Setting::get('evolution', 'base_url', config('evolution.base_url')), '/'),
+            'evolution.api_key' => Setting::get('evolution', 'api_key', config('evolution.api_key')),
+            'evolution.instance' => Setting::get('evolution', 'instance', config('evolution.instance')),
+            'evolution.webhook_secret' => Setting::get('evolution', 'webhook_secret', config('evolution.webhook_secret')),
         ]);
     }
 
@@ -210,6 +216,13 @@ class AppSettings
                 'schedule_min_minutes' => config('whatsapp_agent.schedule_min_minutes', 30),
                 'schedule_max_days' => config('whatsapp_agent.schedule_max_days', 1),
                 'schedule_message' => config('whatsapp_agent.schedule_message', ''),
+            ],
+            'evolution' => [
+                'enabled' => config('evolution.enabled', false),
+                'base_url' => config('evolution.base_url', 'http://localhost:8080'),
+                'api_key' => config('evolution.api_key', ''),
+                'instance' => config('evolution.instance', 'restaurant'),
+                'webhook_secret' => config('evolution.webhook_secret', ''),
             ],
         ];
     }
@@ -336,6 +349,23 @@ class AppSettings
             'schedule_min_minutes' => config('whatsapp_agent.schedule_min_minutes'),
             'schedule_max_days' => config('whatsapp_agent.schedule_max_days'),
             'schedule_message' => config('whatsapp_agent.schedule_message'),
+        ];
+    }
+
+    public static function evolution(): array
+    {
+        $apiKey = (string) config('evolution.api_key', '');
+        $webhookSecret = (string) config('evolution.webhook_secret', '');
+
+        return [
+            'enabled' => (bool) config('evolution.enabled'),
+            'base_url' => (string) config('evolution.base_url', ''),
+            'api_key_set' => filled($apiKey),
+            'api_key_preview' => filled($apiKey) ? substr($apiKey, 0, 6).'…' : null,
+            'instance' => (string) config('evolution.instance', ''),
+            'webhook_secret_set' => filled($webhookSecret),
+            'webhook_url' => url('/api/webhooks/evolution'),
+            'webhook_url_by_events' => url('/api/webhooks/evolution/messages-upsert'),
         ];
     }
 

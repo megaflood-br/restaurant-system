@@ -48,6 +48,12 @@ If PHP-FPM / Octane / queue workers are used, restart them too — cached config
 times still look like UTC after an `.env` edit. Verify with:
 `php artisan tinker --execute="echo config('app.timezone').' '.now();"`
 
+### Evolution / WhatsApp
+Credenciais e QR Code ficam em **Configurações → Agente WhatsApp** (grupo `evolution` na
+tabela `settings`). O `.env` (`EVOLUTION_*`) só é fallback inicial. Depois de salvar URL/API
+Key, use **Gerar QR Code** e **Configurar webhook** na mesma tela. O servidor Laravel precisa
+alcançar a URL da Evolution (rede/firewall); o celular escaneia o QR normalmente.
+
 ### Printing (thermal ESC/POS)
 - Cloud VPS cannot reach LAN printers (`192.168.1.100:9100`). Use driver **`agent`**
   plus `scripts/print-agent.php` on a restaurant PC, or **`browser`**. See README § Impressão.
