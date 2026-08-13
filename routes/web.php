@@ -115,6 +115,10 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::post('comandas/{comanda}/abrir', [ComandaController::class, 'open'])->name('comandas.open');
         Route::get('comandas/{comanda}', [ComandaController::class, 'show'])->name('comandas.show');
         Route::post('comandas/{comanda}/fechar', [ComandaController::class, 'close'])->name('comandas.close');
+        Route::patch('comandas/{comanda}/cliente', [ComandaController::class, 'updateCustomer'])->name('comandas.customer');
+        Route::patch('comandas/{comanda}/pedidos/{order}/itens/{item}', [ComandaController::class, 'updateItem'])->name('comandas.items.update');
+        Route::delete('comandas/{comanda}/pedidos/{order}/itens/{item}', [ComandaController::class, 'destroyItem'])->name('comandas.items.destroy');
+        Route::post('comandas/{comanda}/pedidos/{order}/cancelar', [ComandaController::class, 'cancelOrder'])->name('comandas.orders.cancel');
 
         Route::get('financeiro', [FinanceiroController::class, 'index'])->name('financeiro.index');
         Route::get('financeiro/create', [FinanceiroController::class, 'create'])->name('financeiro.create');

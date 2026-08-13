@@ -153,6 +153,17 @@ class ComandaBillService
         return $summary;
     }
 
+    public function assertOpenOrderOnComanda(int $comandaNumber, Order $order): void
+    {
+        if ($order->type !== 'dine_in'
+            || (int) $order->comanda_number !== $comandaNumber
+            || in_array($order->status, ['delivered', 'cancelled'], true)
+            || ! $order->created_at?->isToday()
+        ) {
+            throw new RuntimeException('Pedido não pertence a esta comanda aberta.');
+        }
+    }
+
     private function openOrdersQuery()
     {
         return Order::query()
