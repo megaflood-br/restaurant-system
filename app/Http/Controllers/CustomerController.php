@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Customer;
 use App\Models\CustomerInteraction;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -50,6 +51,41 @@ class CustomerController extends Controller
         return redirect()
             ->route('customers.show', $customer)
             ->with('success', 'Cliente cadastrado com sucesso.');
+    }
+
+    public function quickStore(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'email' => ['nullable', 'email', 'max:255', 'unique:customers,email'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'neighborhood' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'state' => ['nullable', 'string', 'size:2'],
+            'zip_code' => ['nullable', 'string', 'max:10'],
+        ]);
+
+        if (isset($validated['state'])) {
+            $validated['state'] = strtoupper($validated['state']);
+        }
+
+        $customer = Customer::create([
+            ...$validated,
+            'is_active' => true,
+        ]);
+
+        $label = $customer->name.($customer->phone ? ' — '.$customer->phone : '');
+
+        return response()->json([
+            'data' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'label' => $label,
+            ],
+            'message' => 'Cliente cadastrado com sucesso.',
+        ], 201);
     }
 
     public function show(Customer $customer): View

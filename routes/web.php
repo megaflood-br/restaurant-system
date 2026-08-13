@@ -121,6 +121,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::post('financeiro', [FinanceiroController::class, 'store'])->name('financeiro.store');
         Route::delete('financeiro/{financeiro}', [FinanceiroController::class, 'destroy'])->name('financeiro.destroy');
 
+        Route::post('customers/quick', [CustomerController::class, 'quickStore'])->name('customers.quick-store');
         Route::resource('customers', CustomerController::class);
         Route::delete('customers-bulk', [CustomerController::class, 'bulkDestroy'])->name('customers.bulk-destroy');
         Route::get('customers/{customer}/comanda', [CustomerController::class, 'openComanda'])->name('customers.comanda');
