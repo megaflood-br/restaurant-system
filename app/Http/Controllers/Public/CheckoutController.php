@@ -139,12 +139,10 @@ class CheckoutController extends Controller
 
         $cart->clear();
 
-        if (config('printing.enabled') && config('printing.driver') === 'network') {
-            try {
-                $printer->printOrder($order->fresh(['items.product', 'deliveryArea']), 'kitchen');
-            } catch (\Throwable) {
-                //
-            }
+        try {
+            $printer->maybePrintOnCreate($order->fresh(['items.product', 'deliveryArea']));
+        } catch (\Throwable) {
+            //
         }
 
         session(['last_order_id' => $order->id]);

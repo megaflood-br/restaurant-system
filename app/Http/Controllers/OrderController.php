@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
+use App\Services\CashFlowService;
+use App\Services\DeliveryFeeService;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
 use App\Support\ProductSellable;
 use App\Support\ProductVariants;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +21,8 @@ use Illuminate\View\View;
 
 class OrderController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(Request $request): View
     {
         $orders = Order::with('items.product', 'user', 'customer')
@@ -70,7 +77,49 @@ class OrderController extends Controller
         return view('orders.create', compact('products', 'customers', 'selectedCustomer', 'comandaNumber'));
     }
 
-    public function store(Request $request, InventoryService $inventory): RedirectResponse
+    public function deliveryQuote(Customer $customer, DeliveryFeeService $deliveryFee): JsonResponse
+    {
+        $address = $customer->resolvedDeliveryAddress();
+
+        if ($address === null) {
+            return response()->json([
+                'ok' => false,
+                'reason' => 'missing_address',
+                'message' => 'Cliente sem endereço cadastrado.',
+            ]);
+        }
+
+        $diagnosed = $deliveryFee->diagnoseAddress($address);
+
+        if ($diagnosed['quote'] === null) {
+            $messages = [
+                'missing_origin' => 'Origem de entrega não configurada nas configurações gerais.',
+                'geocode_failed' => 'Não foi possível localizar o endereço do cliente.',
+                'out_of_range' => 'Endereço fora das áreas de entrega cadastradas.',
+            ];
+
+            return response()->json([
+                'ok' => false,
+                'reason' => $diagnosed['reason'],
+                'distance_km' => $diagnosed['distance_km'],
+                'delivery_address' => $address,
+                'message' => $messages[$diagnosed['reason'] ?? ''] ?? 'Não foi possível calcular a taxa de entrega.',
+            ]);
+        }
+
+        $quote = $diagnosed['quote'];
+
+        return response()->json([
+            'ok' => true,
+            'delivery_address' => $address,
+            'distance_km' => $quote['distance_km'],
+            'delivery_area_id' => $quote['delivery_area_id'],
+            'delivery_area_name' => $quote['delivery_area_name'],
+            'delivery_fee' => $quote['delivery_fee'],
+        ]);
+    }
+
+    public function store(Request $request, InventoryService $inventory, DeliveryFeeService $deliveryFee): RedirectResponse
     {
         $validated = $request->validate([
             'type' => ['required', 'in:dine_in,delivery,takeaway'],
@@ -86,11 +135,37 @@ class OrderController extends Controller
             'items.*.notes' => ['nullable', 'string'],
         ]);
 
-        $order = DB::transaction(function () use ($validated, $request) {
-            $customer = isset($validated['customer_id'])
-                ? Customer::find($validated['customer_id'])
-                : null;
+        $customer = isset($validated['customer_id'])
+            ? Customer::find($validated['customer_id'])
+            : null;
 
+        // Cotação (HTTP/Nominatim) FORA da transaction — no SQLite, HTTP lento
+        // dentro de DB::transaction() segura o lock e causa "database is locked".
+        $deliveryFeeAmount = 0.0;
+        $deliveryAreaId = null;
+        $deliveryAddress = null;
+
+        if ($validated['type'] === 'delivery' && $customer) {
+            $deliveryAddress = $customer->resolvedDeliveryAddress();
+
+            if ($deliveryAddress !== null) {
+                $quote = $deliveryFee->quoteForAddress($deliveryAddress);
+
+                if ($quote) {
+                    $deliveryFeeAmount = (float) $quote['delivery_fee'];
+                    $deliveryAreaId = $quote['delivery_area_id'];
+                }
+            }
+        }
+
+        $order = DB::transaction(function () use (
+            $validated,
+            $request,
+            $customer,
+            $deliveryFeeAmount,
+            $deliveryAreaId,
+            $deliveryAddress,
+        ) {
             $order = Order::create([
                 'order_number' => Order::generateOrderNumber(),
                 'customer_id' => $customer?->id,
@@ -98,6 +173,9 @@ class OrderController extends Controller
                 'comanda_number' => $validated['comanda_number'] ?? null,
                 'customer_name' => $customer?->name ?? ($validated['customer_name'] ?? null),
                 'customer_phone' => $customer?->phone ?? ($validated['customer_phone'] ?? null),
+                'delivery_area_id' => $deliveryAreaId,
+                'delivery_fee' => $deliveryFeeAmount,
+                'delivery_address' => $deliveryAddress,
                 'notes' => $validated['notes'] ?? null,
                 'status' => 'pending',
                 'user_id' => $request->user()->id,
@@ -118,14 +196,14 @@ class OrderController extends Controller
                 $total += $line['subtotal'];
             }
 
-            $order->update(['total' => $total]);
+            $order->update(['total' => $total + $deliveryFeeAmount]);
 
             return $order;
         });
 
         $inventory->deductForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
 
-        $this->tryPrint($order);
+        $this->tryPrintOnCreate($order);
 
         if (config('printing.auto_print_on_create') && config('printing.driver') === 'browser') {
             return redirect()->route('orders.print', ['order' => $order, 'autoprint' => 1])
@@ -135,24 +213,159 @@ class OrderController extends Controller
         return redirect()->route('orders.show', $order)->with('success', 'Pedido criado com sucesso.');
     }
 
-    private function tryPrint(Order $order): void
+    private function tryPrintOnCreate(Order $order): void
     {
-        if (! config('printing.enabled') || config('printing.driver') !== 'network') {
-            return;
-        }
-
         try {
-            app(OrderPrinterService::class)->printOrder($order, 'kitchen');
+            app(OrderPrinterService::class)->maybePrintOnCreate($order);
         } catch (\Throwable) {
-            // Impressão em rede é best-effort.
+            // Impressão em rede/agente é best-effort.
         }
     }
 
-    public function show(Order $order): View
+    public function show(Request $request, Order $order): View
     {
         $order->load('items.product', 'user', 'customer', 'deliveryArea');
 
-        return view('orders.show', compact('order'));
+        return view('orders.show', [
+            'order' => $order,
+            'editing' => $request->boolean('edit'),
+            'customers' => Customer::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'phone']),
+        ]);
+    }
+
+    public function updateDetails(Request $request, Order $order): RedirectResponse
+    {
+        if ($redirect = $this->rejectIfNotEditable($order)) {
+            return $redirect;
+        }
+
+        $validated = $request->validate([
+            'notes' => ['nullable', 'string'],
+            'customer_id' => ['nullable', 'exists:customers,id'],
+            'customer_name' => ['nullable', 'string', 'max:255'],
+            'customer_phone' => ['nullable', 'string', 'max:20'],
+            'delivery_address' => ['nullable', 'string', 'max:500'],
+            'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $customer = isset($validated['customer_id'])
+            ? Customer::query()->find($validated['customer_id'])
+            : null;
+
+        $order->update([
+            'notes' => $validated['notes'] ?? null,
+            'customer_id' => $customer?->id,
+            'customer_name' => $customer?->name ?? ($validated['customer_name'] ?? $order->customer_name),
+            'customer_phone' => $customer?->phone ?? ($validated['customer_phone'] ?? $order->customer_phone),
+            'delivery_address' => $order->type === 'delivery'
+                ? ($validated['delivery_address'] ?? $order->delivery_address)
+                : $order->delivery_address,
+            'delivery_fee' => $order->type === 'delivery' && array_key_exists('delivery_fee', $validated)
+                ? (float) ($validated['delivery_fee'] ?? 0)
+                : $order->delivery_fee,
+        ]);
+
+        $order->recalculateTotal();
+
+        return redirect()
+            ->route('orders.show', ['order' => $order, 'edit' => 1])
+            ->with('success', 'Dados do pedido atualizados.');
+    }
+
+    public function updateItem(
+        Request $request,
+        Order $order,
+        OrderItem $item,
+        InventoryService $inventory,
+    ): RedirectResponse {
+        if ($redirect = $this->rejectIfNotEditable($order)) {
+            return $redirect;
+        }
+
+        if ((int) $item->order_id !== (int) $order->id) {
+            return back()->with('error', 'Item não pertence a este pedido.');
+        }
+
+        $validated = $request->validate([
+            'quantity' => ['required', 'integer', 'min:1', 'max:999'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        DB::transaction(function () use ($item, $validated, $order) {
+            $item->update([
+                'quantity' => $validated['quantity'],
+                'subtotal' => round((float) $item->unit_price * (int) $validated['quantity'], 2),
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            $order->recalculateTotal();
+        });
+
+        $inventory->resyncForOrder($order->fresh(), $request->user()->id);
+
+        return redirect()
+            ->route('orders.show', ['order' => $order, 'edit' => 1])
+            ->with('success', 'Item atualizado.');
+    }
+
+    public function destroyItem(
+        Request $request,
+        Order $order,
+        OrderItem $item,
+        InventoryService $inventory,
+    ): RedirectResponse {
+        if ($redirect = $this->rejectIfNotEditable($order)) {
+            return $redirect;
+        }
+
+        if ((int) $item->order_id !== (int) $order->id) {
+            return back()->with('error', 'Item não pertence a este pedido.');
+        }
+
+        DB::transaction(function () use ($item, $order, $inventory, $request) {
+            $fresh = $order->fresh(['items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients']);
+            $hadInventory = (bool) $fresh?->inventory_deducted_at;
+
+            if ($hadInventory && $fresh) {
+                $inventory->restoreForOrder($fresh, $request->user()->id);
+            }
+
+            $item->delete();
+            $order->refresh()->load('items');
+
+            if ($order->items->isEmpty()) {
+                $order->update(['status' => 'cancelled', 'total' => (float) $order->delivery_fee]);
+
+                return;
+            }
+
+            $order->recalculateTotal();
+
+            if ($hadInventory) {
+                $inventory->deductForOrder(
+                    $order->fresh(['items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients']),
+                    $request->user()->id
+                );
+            }
+        });
+
+        return redirect()
+            ->route('orders.show', ['order' => $order, 'edit' => 1])
+            ->with('success', 'Item removido.');
+    }
+
+    private function rejectIfNotEditable(Order $order): ?RedirectResponse
+    {
+        if ($order->status === 'cancelled') {
+            return redirect()
+                ->route('orders.show', $order)
+                ->with('error', 'Pedido cancelado não pode ser editado.');
+        }
+
+        return null;
     }
 
     public function destroy(Request $request, Order $order, InventoryService $inventory): RedirectResponse
@@ -174,6 +387,28 @@ class OrderController extends Controller
             ->with('success', "Pedido {$orderNumber} excluído com sucesso.");
     }
 
+    public function bulkDestroy(Request $request, InventoryService $inventory): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = 0;
+
+        foreach (Order::query()->whereIn('id', $ids)->get() as $order) {
+            DB::transaction(function () use ($order, $inventory, $request) {
+                $fresh = $order->fresh(['items.product.recipe', 'items.productVariant.recipe']);
+
+                if ($fresh && $fresh->inventory_deducted_at && $fresh->status !== 'cancelled') {
+                    $inventory->restoreForOrder($fresh, $request->user()->id);
+                }
+
+                $order->delete();
+            });
+
+            $deleted++;
+        }
+
+        return $this->bulkResultRedirect('orders.index', $deleted, 0, 'pedido', 'pedidos');
+    }
+
     public function updateStatus(Request $request, Order $order, InventoryService $inventory): RedirectResponse
     {
         $validated = $request->validate([
@@ -187,6 +422,34 @@ class OrderController extends Controller
             $inventory->restoreForOrder($order->fresh(['items.product.recipe', 'items.productVariant.recipe']), $request->user()->id);
         }
 
-        return back()->with('success', 'Status do pedido atualizado.');
+        if ($validated['status'] === 'delivered' && $previousStatus !== 'delivered') {
+            try {
+                app(CashFlowService::class)->recordOrderSale(
+                    $order->fresh(),
+                    $request->user()->id
+                );
+            } catch (\Throwable) {
+                // best-effort
+            }
+        }
+
+        try {
+            app(OrderPrinterService::class)->maybePrintOnStatusChange(
+                $order->fresh(['items.product', 'customer', 'deliveryArea', 'user']),
+                $previousStatus,
+                $validated['status']
+            );
+        } catch (\Throwable) {
+            // best-effort
+        }
+
+        $message = 'Status do pedido atualizado.';
+        if ($validated['status'] === 'preparing' && $previousStatus !== 'preparing' && config('printing.print_on_preparing')) {
+            $message = config('printing.driver') === 'agent'
+                ? 'Status atualizado para Preparando. Comanda enfileirada para impressão.'
+                : 'Status atualizado para Preparando. Comanda enviada para impressão.';
+        }
+
+        return back()->with('success', $message);
     }
 }

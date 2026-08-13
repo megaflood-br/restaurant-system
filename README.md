@@ -89,32 +89,37 @@ O pedido aparece em **Pedidos** no painel admin.
 
 ## Impressão de comandas
 
-### Modo navegador (padrão)
+Configure em **Configurações → Impressão** (não depende de variáveis `PRINTING_*` no `.env`).
 
-Funciona com qualquer impressora instalada no Windows (incluindo térmica 80mm):
+### Modo agente local (recomendado com painel na nuvem)
 
-```env
-PRINTING_ENABLED=true
-PRINTING_DRIVER=browser
-PRINTING_AUTO_ON_CREATE=true
-```
+O servidor enfileira o cupom; um **pacote pequeno** no PC do restaurante imprime
+em `192.168.1.100:9100`. **Não precisa clonar o sistema Laravel.**
 
-Ao criar um pedido, abre automaticamente a tela de impressão. Também disponível em **Pedidos → Imprimir**.
+1. Modo: **Agente local** (+ largura `48` para bobina 80mm)
+2. Token em **Configurações → Integração**
+3. No PC do restaurante, baixe só a pasta [`print-agent/`](print-agent/):
+   - **Não precisa de PHP** — usa PowerShell do Windows
+   - Ou rode `print-agent/baixar-agente.bat` (baixa para a Área de Trabalho)
+4. Copie `config.example.ini` → `config.ini`, cole URL/token/IP
+5. Duplo clique em `iniciar.bat` (deixe a janela aberta)
 
-Configure a impressora térmica como **padrão** no Windows e selecione-a no diálogo de impressão.
+### Modo navegador
 
-### Modo rede (impressora térmica IP)
+Funciona com qualquer impressora instalada no Windows (incluindo térmica 80mm).
+Ao criar um pedido (com autoimpressão ligada), abre a tela de impressão do navegador.
+Também disponível em **Pedidos → Imprimir**.
 
-Para impressoras ESC/POS na rede (porta 9100):
+### Modo rede IP direta
 
-```env
-PRINTING_DRIVER=network
-PRINTING_NETWORK_HOST=192.168.0.100
-PRINTING_NETWORK_PORT=9100
-```
+Só use se o **servidor PHP** alcançar o IP da impressora (mesmo LAN / VPN):
 
-A comanda é enviada automaticamente ao criar pedido (painel ou WhatsApp).
+1. Modo: **Rede IP**
+2. IP / porta: `192.168.1.100` / `9100`
+3. Largura: `48`
+4. **Testar impressora de rede**
 
+Se o painel está na VPS e a impressora só no Wi‑Fi do restaurante, a conexão falha — use **Agente local**.
 ## Stack
 
 - Laravel 13

@@ -41,7 +41,7 @@ class OpeningHoursTest extends TestCase
             'digital_menu.force_closed' => false,
         ]);
 
-        Carbon::setTestNow(Carbon::parse('2026-08-10 18:45:00', 'America/Sao_Paulo'));
+        Carbon::setTestNow(Carbon::parse('2026-08-10 21:45:00', 'America/Sao_Paulo'));
 
         $status = OpeningHours::forWhatsApp();
 

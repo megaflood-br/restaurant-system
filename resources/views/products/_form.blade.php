@@ -1,16 +1,31 @@
-<div class="rounded-lg bg-amber-50 border border-amber-100 p-4 text-sm text-amber-900">
-    A foto exibida no cardápio digital vem da <strong>ficha técnica</strong> vinculada.
-    @if (!empty($product?->recipe))
-        <a href="{{ route('recipes.edit', $product->recipe) }}" class="text-indigo-600 hover:underline font-medium">Editar foto na ficha</a>
-        @if ($product->recipe->image_url)
-            <img src="{{ $product->recipe->image_url }}" alt="{{ $product->name }}" class="mt-3 h-32 w-32 object-cover rounded-lg border border-amber-200">
-        @else
-            <p class="mt-2 text-amber-800">Esta ficha ainda não tem foto cadastrada.</p>
-        @endif
-    @elseif (!empty($product) && $product->hasVariants())
-        <p class="mt-1">Produtos com variações usam a ficha de cada tamanho abaixo.</p>
-    @elseif (!empty($product))
-        <a href="{{ route('recipes.index') }}" class="text-indigo-600 hover:underline font-medium">Vincule uma ficha técnica</a> para definir a foto.
+<div class="space-y-3 rounded-lg border border-gray-200 p-4">
+    <div>
+        <label for="image" class="block text-sm font-medium text-gray-700">Foto do produto</label>
+        <p class="mt-1 text-xs text-gray-500">
+            Use para itens prontos (refrigerante, suco, etc.) sem ficha técnica.
+            Se houver foto aqui, ela tem prioridade no cardápio. Sem foto no produto, usa a da ficha vinculada (se existir).
+        </p>
+        <input type="file" name="image" id="image" accept="image/jpeg,image/png,image/webp"
+            class="mt-2 block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-indigo-50 file:text-indigo-700">
+        @error('image') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+    </div>
+
+    @if (!empty($product?->image))
+        <div class="flex items-start gap-4">
+            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($product->image) }}"
+                alt="{{ $product->name }}"
+                class="h-28 w-28 object-cover rounded-lg border border-gray-200">
+            <label class="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                <input type="checkbox" name="remove_image" value="1" class="rounded border-gray-300 text-indigo-600">
+                Remover foto do produto
+            </label>
+        </div>
+    @elseif (!empty($product?->recipe?->image_url))
+        <div class="rounded-md bg-amber-50 border border-amber-100 p-3 text-sm text-amber-900">
+            <p>Sem foto no produto — o cardápio está usando a foto da ficha técnica.</p>
+            <img src="{{ $product->recipe->image_url }}" alt="{{ $product->name }}" class="mt-2 h-24 w-24 object-cover rounded-lg border border-amber-200">
+            <a href="{{ route('recipes.edit', $product->recipe) }}" class="mt-2 inline-block text-indigo-600 hover:underline text-xs font-medium">Editar foto na ficha</a>
+        </div>
     @endif
 </div>
 

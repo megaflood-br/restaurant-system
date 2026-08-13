@@ -38,17 +38,16 @@ class WhatsAppClosedHoursTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_greeting_while_closed_does_not_start_order(): void
+    public function test_force_closed_blocks_new_orders(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-08-10 18:45:00', 'America/Sao_Paulo'));
+        config(['digital_menu.force_closed' => true]);
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
 
         $whatsApp = Mockery::mock(WhatsAppService::class);
         $whatsApp->shouldReceive('sendToPhone')
             ->once()
             ->withArgs(function (string $phone, string $message) {
-                return str_contains($message, 'fechado')
-                    && str_contains($message, 'amanhã')
-                    && str_contains($message, '11h00');
+                return str_contains($message, 'fechado');
             });
         $whatsApp->shouldReceive('sendImageToPhone')->never();
         $this->app->instance(WhatsAppService::class, $whatsApp);
@@ -61,19 +60,35 @@ class WhatsAppClosedHoursTest extends TestCase
         $this->assertSame([], $snapshot['cart']);
     }
 
-    public function test_greeting_while_open_starts_welcome_flow(): void
+    public function test_outside_hours_still_allows_greeting_for_scheduling(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:45:00', 'America/Sao_Paulo'));
 
         $whatsApp = Mockery::mock(WhatsAppService::class);
         $whatsApp->shouldReceive('sendToPhone')->atLeast()->once();
-        $whatsApp->shouldReceive('sendImageToPhone')->zeroOrMoreTimes();
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
         $this->app->instance(WhatsAppService::class, $whatsApp);
 
         $bot = app(ConversationalWhatsAppBotService::class);
         $bot->process('5511999000301', 'ola', 'Carlos');
 
         $snapshot = $bot->sessionSnapshot('5511999000301');
+        $this->assertSame('ordering', $snapshot['state']);
+    }
+
+    public function test_greeting_while_open_starts_welcome_flow(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->atLeast()->once();
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $bot->process('5511999000302', 'ola', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot('5511999000302');
         $this->assertSame('ordering', $snapshot['state']);
     }
 }

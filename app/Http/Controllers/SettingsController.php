@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use App\Models\WhatsAppMessage;
+use App\Services\EvolutionApiService;
 use App\Services\OrderPrinterService;
 use App\Support\AppSettings;
 use App\Support\MenuTheme;
 use App\Support\SideOptions;
 use App\Support\WeeklyMenuImages;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -30,6 +32,7 @@ class SettingsController extends Controller
             'digitalMenu' => AppSettings::digitalMenu(),
             'integration' => AppSettings::integration(),
             'whatsappAgent' => AppSettings::whatsappAgent(),
+            'evolution' => AppSettings::evolution(),
             'tab' => $tab,
             'messages' => $tab === 'integration'
                 ? WhatsAppMessage::with('customer', 'order', 'user')->latest()->paginate(15)->withQueryString()
@@ -189,8 +192,9 @@ class SettingsController extends Controller
         $validated = $request->validate([
             'enabled' => ['boolean'],
             'restaurant_name' => ['required', 'string', 'max:255'],
-            'driver' => ['required', 'in:browser,network'],
+            'driver' => ['required', 'in:browser,network,agent'],
             'auto_print_on_create' => ['boolean'],
+            'print_on_preparing' => ['boolean'],
             'network_host' => ['nullable', 'string', 'max:255'],
             'network_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
             'network_timeout' => ['nullable', 'integer', 'min:1', 'max:60'],
@@ -203,6 +207,7 @@ class SettingsController extends Controller
             'restaurant_name' => $validated['restaurant_name'],
             'driver' => $validated['driver'],
             'auto_print_on_create' => $request->boolean('auto_print_on_create'),
+            'print_on_preparing' => $request->boolean('print_on_preparing'),
             'network_host' => $validated['network_host'] ?? '',
             'network_port' => $validated['network_port'] ?? 9100,
             'network_timeout' => $validated['network_timeout'] ?? 5,
@@ -265,14 +270,22 @@ class SettingsController extends Controller
     {
         AppSettings::loadIntoConfig();
 
-        if (! config('printing.network.host')) {
-            return back()->with('error', 'Informe o IP da impressora antes de testar.');
+        if (! in_array(config('printing.driver'), ['network', 'agent'], true)) {
+            return back()->with('error', 'Para testar, escolha o modo "Rede IP" ou "Agente local", salve e tente de novo. (Ou use o modo Navegador e imprima pelo Windows.)');
+        }
+
+        if (config('printing.driver') === 'network' && ! config('printing.network.host')) {
+            return back()->with('error', 'Informe o IP da impressora (ex.: 192.168.1.100), porta 9100, salve e teste novamente.');
         }
 
         try {
             $printer->printTestPage();
 
-            return back()->with('success', 'Teste enviado para a impressora com sucesso.');
+            if (config('printing.driver') === 'agent') {
+                return back()->with('success', 'Teste enfileirado. Com o agente local rodando no PC do restaurante, o cupom deve sair em instantes.');
+            }
+
+            return back()->with('success', 'Teste enviado para a impressora com sucesso. Confira se saiu o cupom "TESTE DE IMPRESSAO".');
         } catch (\Throwable $exception) {
             return back()->with('error', 'Falha no teste: '.$exception->getMessage());
         }
@@ -359,5 +372,98 @@ class SettingsController extends Controller
 
         return redirect()->route('settings.index', ['tab' => 'whatsapp_agent'])
             ->with('success', 'Configurações do agente WhatsApp salvas.');
+    }
+
+    public function updateEvolution(Request $request): RedirectResponse
+    {
+        AppSettings::loadIntoConfig();
+
+        $validated = $request->validate([
+            'base_url' => ['required', 'string', 'max:500'],
+            'api_key' => ['nullable', 'string', 'max:500'],
+            'instance' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9_-]+$/'],
+            'webhook_secret' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $baseUrl = rtrim($validated['base_url'], '/');
+        $previousKey = (string) config('evolution.api_key', '');
+        $previousSecret = (string) config('evolution.webhook_secret', '');
+
+        $apiKey = filled($validated['api_key'] ?? null)
+            ? $validated['api_key']
+            : $previousKey;
+
+        if ($request->boolean('clear_webhook_secret')) {
+            $webhookSecret = '';
+        } elseif (filled($validated['webhook_secret'] ?? null)) {
+            $webhookSecret = (string) $validated['webhook_secret'];
+        } else {
+            $webhookSecret = $previousSecret;
+        }
+
+        Setting::setMany('evolution', [
+            'enabled' => $request->boolean('evolution_enabled'),
+            'base_url' => $baseUrl,
+            'api_key' => $apiKey,
+            'instance' => $validated['instance'],
+            'webhook_secret' => $webhookSecret,
+        ]);
+
+        AppSettings::loadIntoConfig();
+
+        return redirect()->route('settings.index', ['tab' => 'whatsapp_agent'])
+            ->with('success', 'Configurações da Evolution API salvas.');
+    }
+
+    public function evolutionStatus(EvolutionApiService $evolutionApi): JsonResponse
+    {
+        AppSettings::loadIntoConfig();
+
+        return response()->json(['data' => $evolutionApi->connectionState()]);
+    }
+
+    public function evolutionConnect(EvolutionApiService $evolutionApi): JsonResponse
+    {
+        AppSettings::loadIntoConfig();
+
+        try {
+            $result = $evolutionApi->connectWithQr();
+
+            return response()->json(['data' => $result]);
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function evolutionLogout(EvolutionApiService $evolutionApi): JsonResponse
+    {
+        AppSettings::loadIntoConfig();
+
+        try {
+            $result = $evolutionApi->logout();
+
+            return response()->json(['data' => $result]);
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function evolutionWebhook(EvolutionApiService $evolutionApi): JsonResponse
+    {
+        AppSettings::loadIntoConfig();
+
+        try {
+            $result = $evolutionApi->setWebhook();
+
+            return response()->json(['data' => $result]);
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
     }
 }

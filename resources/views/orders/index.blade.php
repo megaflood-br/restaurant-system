@@ -15,39 +15,48 @@
                 <div class="p-4 sm:p-6">
                     <x-flash-messages />
 
-                    <div class="hidden md:block overflow-x-auto">
-                        @include('orders._table', ['orders' => $orders])
-                    </div>
+                    <x-bulk-select :action="route('orders.bulk-destroy')" confirm="Excluir :count pedido(s) selecionado(s)? Esta ação não pode ser desfeita.">
+                        <div class="hidden md:block overflow-x-auto">
+                            @include('orders._table', ['orders' => $orders])
+                        </div>
 
-                    <div class="md:hidden space-y-3">
-                        @php
-                            $typeLabels = ['dine_in' => 'Salão', 'delivery' => 'Delivery', 'takeaway' => 'Retirada'];
-                        @endphp
-                        @forelse ($orders as $order)
-                            <div class="border border-gray-200 rounded-lg p-4">
-                                <div class="flex justify-between items-start gap-2">
-                                    <div>
-                                        <p class="font-semibold text-gray-900">{{ $order->order_number }}</p>
-                                        <p class="text-xs text-gray-500">{{ $order->created_at->format('d/m/Y H:i') }}</p>
+                        <div class="md:hidden space-y-3">
+                            @php
+                                $typeLabels = ['dine_in' => 'Salão', 'delivery' => 'Delivery', 'takeaway' => 'Retirada'];
+                            @endphp
+                            @forelse ($orders as $order)
+                                <div class="border border-gray-200 rounded-lg p-4">
+                                    <div class="flex justify-between items-start gap-2">
+                                        <div>
+                                            <p class="font-semibold text-gray-900">{{ $order->order_number }}</p>
+                                            <p class="text-xs text-gray-500">{{ $order->created_at->format('d/m/Y H:i') }}</p>
+                                        </div>
+                                        <x-order-status-badge :status="$order->status" />
                                     </div>
-                                    <x-order-status-badge :status="$order->status" />
+                                    <p class="text-sm text-gray-600 mt-2">{{ $typeLabels[$order->type] ?? $order->type }} · R$ {{ number_format($order->total, 2, ',', '.') }}</p>
+                                    <div class="mt-3 flex gap-3 text-sm">
+                                        <a href="{{ route('orders.show', $order) }}" class="text-indigo-600">Detalhes</a>
+                                        @if ($order->status !== 'cancelled')
+                                            <a href="{{ route('orders.show', ['order' => $order, 'edit' => 1]) }}" class="text-amber-600 font-medium">Editar</a>
+                                        @endif
+                                        @include('orders._print-action', [
+                                            'order' => $order,
+                                            'linkClass' => 'text-gray-600',
+                                            'buttonClass' => 'text-gray-600',
+                                        ])
+                                        <form method="POST" action="{{ route('orders.destroy', $order) }}" class="inline"
+                                            onsubmit="return confirm('Excluir o pedido {{ $order->order_number }}?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="text-red-600">Excluir</button>
+                                        </form>
+                                    </div>
                                 </div>
-                                <p class="text-sm text-gray-600 mt-2">{{ $typeLabels[$order->type] ?? $order->type }} · R$ {{ number_format($order->total, 2, ',', '.') }}</p>
-                                <div class="mt-3 flex gap-3 text-sm">
-                                    <a href="{{ route('orders.show', $order) }}" class="text-indigo-600">Detalhes</a>
-                                    <a href="{{ route('orders.print', $order) }}" target="_blank" class="text-gray-600">Imprimir</a>
-                                    <form method="POST" action="{{ route('orders.destroy', $order) }}" class="inline"
-                                        onsubmit="return confirm('Excluir o pedido {{ $order->order_number }}?');">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="text-red-600">Excluir</button>
-                                    </form>
-                                </div>
-                            </div>
-                        @empty
-                            <p class="text-center text-gray-500 py-8">Nenhum pedido registrado.</p>
-                        @endforelse
-                    </div>
+                            @empty
+                                <p class="text-center text-gray-500 py-8">Nenhum pedido registrado.</p>
+                            @endforelse
+                        </div>
+                    </x-bulk-select>
 
                     <div class="mt-4">{{ $orders->links() }}</div>
                 </div>

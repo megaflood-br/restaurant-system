@@ -1,5 +1,9 @@
 * text=auto eol=lf
 
+# Scripts Windows precisam de CRLF; com LF o CMD quebra (erro "'d'/'not' nao reconhecido").
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 *.blade.php diff=html
 *.css diff=css
 *.html diff=html

@@ -18,10 +18,12 @@
                         Configure faixas de distância em quilômetros e a taxa de entrega de cada uma. O bot do WhatsApp calcula a taxa com base no endereço do cliente e na localização do restaurante (Configurações → Geral).
                     </p>
 
+                    <x-bulk-select :action="route('delivery-areas.bulk-destroy')" confirm="Excluir :count região(ões)? Regiões com pedidos serão ignoradas.">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
+                                    <x-bulk-select-all />
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Faixa</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Distância (km)</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Taxa</th>
@@ -34,6 +36,7 @@
                             <tbody class="divide-y divide-gray-200">
                                 @forelse ($deliveryAreas as $area)
                                     <tr>
+                                        <x-bulk-select-item :id="$area->id" />
                                         <td class="px-4 py-3 font-medium text-gray-900">{{ $area->name }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ $area->rangeLabel() }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">R$ {{ number_format($area->fee, 2, ',', '.') }}</td>
@@ -55,7 +58,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
                                             Nenhuma faixa cadastrada. Cadastre distâncias em km para habilitar cálculo de entrega.
                                         </td>
                                     </tr>
@@ -63,6 +66,7 @@
                             </tbody>
                         </table>
                     </div>
+                    </x-bulk-select>
 
                     <div class="mt-4">{{ $deliveryAreas->links() }}</div>
                 </div>

@@ -69,6 +69,13 @@ class IntegrationDocsController extends Controller
                     'send' => ['POST', "{$base}/whatsapp/messages"],
                     'log_inbound' => ['POST', "{$base}/whatsapp/inbound"],
                 ],
+                'print_jobs' => [
+                    'pending' => ['GET', "{$base}/print-jobs/pending"],
+                    'claim' => ['POST', "{$base}/print-jobs/claim"],
+                    'complete' => ['POST', "{$base}/print-jobs/{id}/complete"],
+                    'fail' => ['POST', "{$base}/print-jobs/{id}/fail", ['error' => 'opcional']],
+                    'note' => 'Use o script scripts/print-agent.php no PC do restaurante com driver=agent.',
+                ],
             ],
             'webhooks' => [
                 'evolution_inbound' => url('/api/webhooks/evolution'),

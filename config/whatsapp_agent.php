@@ -6,7 +6,7 @@ return [
     'use_openai' => false,
     'forward_to_n8n' => true,
     'restaurant_name' => '',
-    'welcome_message' => "Olá! Seja muito bem-vindo(a) ao {restaurant_name}! 🍽️ Que bom ter você por aqui hoje.\n\nPara você dar aquela conferida nos nossos pratos fresquinhos, segue o cardápio de hoje:",
+    'welcome_message' => "Olá! Seja muito bem-vindo(a) ao {restaurant_name}! 🍽️ Que bom ter você por aqui hoje.\n\nQuer fazer um pedido? É só me dizer o que deseja, ou digite *cardápio* para ver o menu de hoje.",
     'closed_message' => "Olá! No momento o *{restaurant_name}* está *fechado*. 🕐\n\nNosso horário é das *{opening}* às *{closing}*.\nAbrimos *{next_open_day}* às *{opening}*.\n\nQuando estivermos abertos, é só mandar um *oi* para fazer seu pedido!",
     'menu_followup_message' => 'O que vai mandar de bom por aí hoje? É só me mandar os pratos que você quer, ou me perguntar qualquer dúvida!',
     'extras_message' => 'Beleza! Vai precisar de talher descartável? E tem alguma observação nos pratos (como tirar salada, sem cebola, etc.)?',
