@@ -105,6 +105,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
 
         Route::resource('orders', OrderController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::delete('orders-bulk', [OrderController::class, 'bulkDestroy'])->name('orders.bulk-destroy');
+        Route::get('customers/{customer}/delivery-quote', [OrderController::class, 'deliveryQuote'])->name('customers.delivery-quote');
         Route::patch('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status');
         Route::get('orders/{order}/print', [OrderPrintController::class, 'show'])->name('orders.print');
         Route::post('orders/{order}/print/network', [OrderPrintController::class, 'network'])->name('orders.print.network');

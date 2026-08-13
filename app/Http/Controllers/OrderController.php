@@ -7,10 +7,12 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\CashFlowService;
+use App\Services\DeliveryFeeService;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
 use App\Support\ProductSellable;
 use App\Support\ProductVariants;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -74,7 +76,49 @@ class OrderController extends Controller
         return view('orders.create', compact('products', 'customers', 'selectedCustomer', 'comandaNumber'));
     }
 
-    public function store(Request $request, InventoryService $inventory): RedirectResponse
+    public function deliveryQuote(Customer $customer, DeliveryFeeService $deliveryFee): JsonResponse
+    {
+        $address = $customer->resolvedDeliveryAddress();
+
+        if ($address === null) {
+            return response()->json([
+                'ok' => false,
+                'reason' => 'missing_address',
+                'message' => 'Cliente sem endereço cadastrado.',
+            ]);
+        }
+
+        $diagnosed = $deliveryFee->diagnoseAddress($address);
+
+        if ($diagnosed['quote'] === null) {
+            $messages = [
+                'missing_origin' => 'Origem de entrega não configurada nas configurações gerais.',
+                'geocode_failed' => 'Não foi possível localizar o endereço do cliente.',
+                'out_of_range' => 'Endereço fora das áreas de entrega cadastradas.',
+            ];
+
+            return response()->json([
+                'ok' => false,
+                'reason' => $diagnosed['reason'],
+                'distance_km' => $diagnosed['distance_km'],
+                'delivery_address' => $address,
+                'message' => $messages[$diagnosed['reason'] ?? ''] ?? 'Não foi possível calcular a taxa de entrega.',
+            ]);
+        }
+
+        $quote = $diagnosed['quote'];
+
+        return response()->json([
+            'ok' => true,
+            'delivery_address' => $address,
+            'distance_km' => $quote['distance_km'],
+            'delivery_area_id' => $quote['delivery_area_id'],
+            'delivery_area_name' => $quote['delivery_area_name'],
+            'delivery_fee' => $quote['delivery_fee'],
+        ]);
+    }
+
+    public function store(Request $request, InventoryService $inventory, DeliveryFeeService $deliveryFee): RedirectResponse
     {
         $validated = $request->validate([
             'type' => ['required', 'in:dine_in,delivery,takeaway'],
@@ -90,10 +134,27 @@ class OrderController extends Controller
             'items.*.notes' => ['nullable', 'string'],
         ]);
 
-        $order = DB::transaction(function () use ($validated, $request) {
+        $order = DB::transaction(function () use ($validated, $request, $deliveryFee) {
             $customer = isset($validated['customer_id'])
                 ? Customer::find($validated['customer_id'])
                 : null;
+
+            $deliveryFeeAmount = 0.0;
+            $deliveryAreaId = null;
+            $deliveryAddress = null;
+
+            if ($validated['type'] === 'delivery' && $customer) {
+                $deliveryAddress = $customer->resolvedDeliveryAddress();
+
+                if ($deliveryAddress !== null) {
+                    $quote = $deliveryFee->quoteForAddress($deliveryAddress);
+
+                    if ($quote) {
+                        $deliveryFeeAmount = (float) $quote['delivery_fee'];
+                        $deliveryAreaId = $quote['delivery_area_id'];
+                    }
+                }
+            }
 
             $order = Order::create([
                 'order_number' => Order::generateOrderNumber(),
@@ -102,6 +163,9 @@ class OrderController extends Controller
                 'comanda_number' => $validated['comanda_number'] ?? null,
                 'customer_name' => $customer?->name ?? ($validated['customer_name'] ?? null),
                 'customer_phone' => $customer?->phone ?? ($validated['customer_phone'] ?? null),
+                'delivery_area_id' => $deliveryAreaId,
+                'delivery_fee' => $deliveryFeeAmount,
+                'delivery_address' => $deliveryAddress,
                 'notes' => $validated['notes'] ?? null,
                 'status' => 'pending',
                 'user_id' => $request->user()->id,
@@ -122,7 +186,7 @@ class OrderController extends Controller
                 $total += $line['subtotal'];
             }
 
-            $order->update(['total' => $total]);
+            $order->update(['total' => $total + $deliveryFeeAmount]);
 
             return $order;
         });

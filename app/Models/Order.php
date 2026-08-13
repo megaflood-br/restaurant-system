@@ -79,9 +79,28 @@ class Order extends Model
     public static function generateOrderNumber(): string
     {
         $date = now()->format('Ymd');
-        $count = static::whereDate('created_at', today())->count() + 1;
+        $prefix = sprintf('PED-%s-', $date);
 
-        return sprintf('PED-%s-%04d', $date, $count);
+        $max = 0;
+
+        foreach (static::query()->where('order_number', 'like', $prefix.'%')->pluck('order_number') as $number) {
+            if (preg_match('/^PED-\d{8}-(\d+)$/', (string) $number, $matches) === 1) {
+                $max = max($max, (int) $matches[1]);
+            }
+        }
+
+        $sequence = $max + 1;
+
+        // Garante número livre mesmo se houver “buracos” ou corrida entre requests.
+        while (
+            static::query()
+                ->where('order_number', sprintf('PED-%s-%04d', $date, $sequence))
+                ->exists()
+        ) {
+            $sequence++;
+        }
+
+        return sprintf('PED-%s-%04d', $date, $sequence);
     }
 
     public function waitingMinutes(): int
