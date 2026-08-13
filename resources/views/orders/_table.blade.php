@@ -1,6 +1,7 @@
 <table class="min-w-full divide-y divide-gray-200">
     <thead class="bg-gray-50">
         <tr>
+            <x-bulk-select-all />
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pedido</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente/Comanda</th>
@@ -16,6 +17,7 @@
         @endphp
         @forelse ($orders as $order)
             <tr>
+                <x-bulk-select-item :id="$order->id" />
                 <td class="px-4 py-3">
                     <p class="font-medium text-gray-900">{{ $order->order_number }}</p>
                     <p class="text-xs text-gray-500">{{ $order->created_at->format('d/m/Y H:i') }}</p>
@@ -51,7 +53,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-gray-500">Nenhum pedido registrado.</td>
+                <td colspan="8" class="px-4 py-8 text-center text-gray-500">Nenhum pedido registrado.</td>
             </tr>
         @endforelse
     </tbody>

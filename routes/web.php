@@ -87,17 +87,24 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
         Route::resource('categories', CategoryController::class)->except(['show']);
+        Route::delete('categories-bulk', [CategoryController::class, 'bulkDestroy'])->name('categories.bulk-destroy');
         Route::resource('products', ProductController::class)->except(['show']);
+        Route::delete('products-bulk', [ProductController::class, 'bulkDestroy'])->name('products.bulk-destroy');
         Route::get('recipes/{recipe}/imprimir', [RecipeController::class, 'print'])->name('recipes.print');
         Route::resource('recipes', RecipeController::class)->except(['show']);
+        Route::delete('recipes-bulk', [RecipeController::class, 'bulkDestroy'])->name('recipes.bulk-destroy');
         Route::resource('delivery-areas', DeliveryAreaController::class)->except(['show']);
+        Route::delete('delivery-areas-bulk', [DeliveryAreaController::class, 'bulkDestroy'])->name('delivery-areas.bulk-destroy');
         Route::resource('users', UserController::class)->except(['show']);
         Route::resource('stock-categories', StockCategoryController::class)->except(['show']);
+        Route::delete('stock-categories-bulk', [StockCategoryController::class, 'bulkDestroy'])->name('stock-categories.bulk-destroy');
         Route::resource('ingredients', IngredientController::class)->except(['show']);
+        Route::delete('ingredients-bulk', [IngredientController::class, 'bulkDestroy'])->name('ingredients.bulk-destroy');
         Route::get('ingredients/{ingredient}/movement', [IngredientController::class, 'movementForm'])->name('ingredients.movement');
         Route::post('ingredients/{ingredient}/movement', [IngredientController::class, 'storeMovement'])->name('ingredients.movement.store');
 
         Route::resource('orders', OrderController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+        Route::delete('orders-bulk', [OrderController::class, 'bulkDestroy'])->name('orders.bulk-destroy');
         Route::patch('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status');
         Route::get('orders/{order}/print', [OrderPrintController::class, 'show'])->name('orders.print');
         Route::post('orders/{order}/print/network', [OrderPrintController::class, 'network'])->name('orders.print.network');
@@ -114,6 +121,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::delete('financeiro/{financeiro}', [FinanceiroController::class, 'destroy'])->name('financeiro.destroy');
 
         Route::resource('customers', CustomerController::class);
+        Route::delete('customers-bulk', [CustomerController::class, 'bulkDestroy'])->name('customers.bulk-destroy');
         Route::get('customers/{customer}/comanda', [CustomerController::class, 'openComanda'])->name('customers.comanda');
         Route::post('customers/{customer}/interactions', [CustomerController::class, 'storeInteraction'])->name('customers.interactions.store');
         Route::get('whatsapp', [WhatsAppController::class, 'index'])->name('whatsapp.index');

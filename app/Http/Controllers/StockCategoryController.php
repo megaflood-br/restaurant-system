@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\StockCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -9,6 +10,8 @@ use Illuminate\View\View;
 
 class StockCategoryController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(): View
     {
         $categories = StockCategory::withCount('ingredients')
@@ -65,9 +68,27 @@ class StockCategoryController extends Controller
 
     public function destroy(StockCategory $stockCategory): RedirectResponse
     {
-        $stockCategory->ingredients()->update(['stock_category_id' => null]);
-        $stockCategory->delete();
+        $this->deleteStockCategory($stockCategory);
 
         return redirect()->route('stock-categories.index')->with('success', 'Categoria de estoque excluída.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = 0;
+
+        foreach (StockCategory::query()->whereIn('id', $ids)->get() as $category) {
+            $this->deleteStockCategory($category);
+            $deleted++;
+        }
+
+        return $this->bulkResultRedirect('stock-categories.index', $deleted, 0, 'categoria de estoque', 'categorias de estoque');
+    }
+
+    private function deleteStockCategory(StockCategory $stockCategory): void
+    {
+        $stockCategory->ingredients()->update(['stock_category_id' => null]);
+        $stockCategory->delete();
     }
 }

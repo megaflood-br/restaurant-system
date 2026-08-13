@@ -28,84 +28,88 @@
                         </button>
                     </form>
 
-                    <div class="hidden md:block overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contato</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pedidos</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                @forelse ($customers as $customer)
+                    <x-bulk-select :action="route('customers.bulk-destroy')" confirm="Excluir :count cliente(s) selecionado(s)? Pedidos vinculados serão mantidos.">
+                        <div class="hidden md:block overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
                                     <tr>
-                                        <td class="px-4 py-3">
-                                            <p class="font-medium text-gray-900">{{ $customer->name }}</p>
-                                            @if ($customer->city)
-                                                <p class="text-sm text-gray-500">{{ $customer->city }}{{ $customer->state ? ', '.$customer->state : '' }}</p>
-                                            @endif
-                                        </td>
-                                        <td class="px-4 py-3 text-sm text-gray-700">
-                                            @if ($customer->phone)<p>{{ $customer->phone }}</p>@endif
-                                            @if ($customer->email)<p class="text-gray-500">{{ $customer->email }}</p>@endif
-                                        </td>
-                                        <td class="px-4 py-3 text-sm text-gray-700">{{ $customer->orders_count }}</td>
-                                        <td class="px-4 py-3">
-                                            <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $customer->is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }}">
-                                                {{ $customer->is_active ? 'Ativo' : 'Inativo' }}
-                                            </span>
-                                        </td>
-                                        <td class="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-                                            <a href="{{ route('customers.show', $customer) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Perfil</a>
-                                            <a href="{{ route('customers.edit', $customer) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Editar</a>
-                                            <form method="POST" action="{{ route('customers.destroy', $customer) }}" class="inline"
-                                                onsubmit="return confirm('Excluir o cliente {{ $customer->name }}? Pedidos vinculados serão mantidos sem o vínculo do cliente.');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="text-red-600 hover:text-red-800 text-sm">Excluir</button>
-                                            </form>
-                                        </td>
+                                        <x-bulk-select-all />
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contato</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pedidos</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                                     </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="5" class="px-4 py-8 text-center text-gray-500">Nenhum cliente cadastrado.</td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    @forelse ($customers as $customer)
+                                        <tr>
+                                            <x-bulk-select-item :id="$customer->id" />
+                                            <td class="px-4 py-3">
+                                                <p class="font-medium text-gray-900">{{ $customer->name }}</p>
+                                                @if ($customer->city)
+                                                    <p class="text-sm text-gray-500">{{ $customer->city }}{{ $customer->state ? ', '.$customer->state : '' }}</p>
+                                                @endif
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-gray-700">
+                                                @if ($customer->phone)<p>{{ $customer->phone }}</p>@endif
+                                                @if ($customer->email)<p class="text-gray-500">{{ $customer->email }}</p>@endif
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-gray-700">{{ $customer->orders_count }}</td>
+                                            <td class="px-4 py-3">
+                                                <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $customer->is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }}">
+                                                    {{ $customer->is_active ? 'Ativo' : 'Inativo' }}
+                                                </span>
+                                            </td>
+                                            <td class="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                                                <a href="{{ route('customers.show', $customer) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Perfil</a>
+                                                <a href="{{ route('customers.edit', $customer) }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Editar</a>
+                                                <form method="POST" action="{{ route('customers.destroy', $customer) }}" class="inline"
+                                                    onsubmit="return confirm('Excluir o cliente {{ $customer->name }}? Pedidos vinculados serão mantidos sem o vínculo do cliente.');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="text-red-600 hover:text-red-800 text-sm">Excluir</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhum cliente cadastrado.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
 
-                    <div class="md:hidden space-y-3">
-                        @forelse ($customers as $customer)
-                            <div class="border border-gray-200 rounded-lg p-4">
-                                <div class="flex justify-between items-start">
-                                    <div>
-                                        <p class="font-semibold text-gray-900">{{ $customer->name }}</p>
-                                        <p class="text-sm text-gray-500">{{ $customer->phone ?? $customer->email ?? '—' }}</p>
+                        <div class="md:hidden space-y-3">
+                            @forelse ($customers as $customer)
+                                <div class="border border-gray-200 rounded-lg p-4">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <p class="font-semibold text-gray-900">{{ $customer->name }}</p>
+                                            <p class="text-sm text-gray-500">{{ $customer->phone ?? $customer->email ?? '—' }}</p>
+                                        </div>
+                                        <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $customer->is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }}">
+                                            {{ $customer->is_active ? 'Ativo' : 'Inativo' }}
+                                        </span>
                                     </div>
-                                    <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $customer->is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }}">
-                                        {{ $customer->is_active ? 'Ativo' : 'Inativo' }}
-                                    </span>
+                                    <p class="text-sm text-gray-600 mt-2">{{ $customer->orders_count }} pedido(s)</p>
+                                    <div class="mt-3 flex gap-3 text-sm">
+                                        <a href="{{ route('customers.show', $customer) }}" class="text-indigo-600">Perfil</a>
+                                        <a href="{{ route('customers.edit', $customer) }}" class="text-indigo-600">Editar</a>
+                                        <form method="POST" action="{{ route('customers.destroy', $customer) }}" class="inline"
+                                            onsubmit="return confirm('Excluir o cliente {{ $customer->name }}?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="text-red-600">Excluir</button>
+                                        </form>
+                                    </div>
                                 </div>
-                                <p class="text-sm text-gray-600 mt-2">{{ $customer->orders_count }} pedido(s)</p>
-                                <div class="mt-3 flex gap-3 text-sm">
-                                    <a href="{{ route('customers.show', $customer) }}" class="text-indigo-600">Perfil</a>
-                                    <a href="{{ route('customers.edit', $customer) }}" class="text-indigo-600">Editar</a>
-                                    <form method="POST" action="{{ route('customers.destroy', $customer) }}" class="inline"
-                                        onsubmit="return confirm('Excluir o cliente {{ $customer->name }}?');">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="text-red-600">Excluir</button>
-                                    </form>
-                                </div>
-                            </div>
-                        @empty
-                            <p class="text-center text-gray-500 py-8">Nenhum cliente cadastrado.</p>
-                        @endforelse
-                    </div>
+                            @empty
+                                <p class="text-center text-gray-500 py-8">Nenhum cliente cadastrado.</p>
+                            @endforelse
+                        </div>
+                    </x-bulk-select>
 
                     <div class="mt-4">{{ $customers->links() }}</div>
                 </div>

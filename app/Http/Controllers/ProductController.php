@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Category;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Recipe;
+use App\Support\ProductVariants;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -17,10 +19,12 @@ use Illuminate\View\View;
 
 class ProductController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(): View
     {
         $with = ['category', 'recipe'];
-        if (\App\Support\ProductVariants::enabled()) {
+        if (ProductVariants::enabled()) {
             $with[] = 'variants.recipe';
         }
 
@@ -70,7 +74,7 @@ class ProductController extends Controller
     public function edit(Product $product): View
     {
         $with = ['recipe'];
-        if (\App\Support\ProductVariants::enabled()) {
+        if (ProductVariants::enabled()) {
             $with[] = 'variants.recipe';
         }
 
@@ -118,6 +122,26 @@ class ProductController extends Controller
 
     public function destroy(Product $product): RedirectResponse
     {
+        $this->deleteProduct($product);
+
+        return redirect()->route('products.index')->with('success', 'Produto excluído com sucesso.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = 0;
+
+        foreach (Product::query()->whereIn('id', $ids)->get() as $product) {
+            $this->deleteProduct($product);
+            $deleted++;
+        }
+
+        return $this->bulkResultRedirect('products.index', $deleted, 0, 'produto', 'produtos');
+    }
+
+    private function deleteProduct(Product $product): void
+    {
         DB::transaction(function () use ($product) {
             OrderItem::query()
                 ->where('product_id', $product->id)
@@ -131,8 +155,6 @@ class ProductController extends Controller
             $this->deleteImage($product->image);
             $product->delete();
         });
-
-        return redirect()->route('products.index')->with('success', 'Produto excluído com sucesso.');
     }
 
     /** @return array<string, mixed> */

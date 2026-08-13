@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Customer;
 use App\Models\CustomerInteraction;
 use Illuminate\Http\RedirectResponse;
@@ -10,6 +11,8 @@ use Illuminate\View\View;
 
 class CustomerController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(Request $request): View
     {
         $customers = Customer::query()
@@ -107,6 +110,14 @@ class CustomerController extends Controller
         return redirect()
             ->route('customers.index')
             ->with('success', "Cliente {$name} excluído com sucesso. Pedidos vinculados foram mantidos sem o vínculo do cliente.");
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = Customer::query()->whereIn('id', $ids)->delete();
+
+        return $this->bulkResultRedirect('customers.index', $deleted, 0, 'cliente', 'clientes');
     }
 
     public function storeInteraction(Request $request, Customer $customer): RedirectResponse

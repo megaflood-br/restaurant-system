@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
@@ -17,6 +18,8 @@ use Illuminate\View\View;
 
 class OrderController extends Controller
 {
+    use HandlesBulkDestroy;
+
     public function index(Request $request): View
     {
         $orders = Order::with('items.product', 'user', 'customer')
@@ -169,6 +172,28 @@ class OrderController extends Controller
         return redirect()
             ->route('orders.index')
             ->with('success', "Pedido {$orderNumber} excluído com sucesso.");
+    }
+
+    public function bulkDestroy(Request $request, InventoryService $inventory): RedirectResponse
+    {
+        $ids = $this->bulkIds($request);
+        $deleted = 0;
+
+        foreach (Order::query()->whereIn('id', $ids)->get() as $order) {
+            DB::transaction(function () use ($order, $inventory, $request) {
+                $fresh = $order->fresh(['items.product.recipe', 'items.productVariant.recipe']);
+
+                if ($fresh && $fresh->inventory_deducted_at && $fresh->status !== 'cancelled') {
+                    $inventory->restoreForOrder($fresh, $request->user()->id);
+                }
+
+                $order->delete();
+            });
+
+            $deleted++;
+        }
+
+        return $this->bulkResultRedirect('orders.index', $deleted, 0, 'pedido', 'pedidos');
     }
 
     public function updateStatus(Request $request, Order $order, InventoryService $inventory): RedirectResponse
