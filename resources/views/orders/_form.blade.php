@@ -11,12 +11,59 @@
         type: '{{ old('type', $selectedCustomer ? 'delivery' : 'dine_in') }}',
         customerId: '{{ old('customer_id', $selectedCustomer?->id ?? '') }}',
         items: [{ variantId: '' }],
+        deliveryQuote: null,
+        deliveryQuoteLoading: false,
+        deliveryQuoteError: null,
+        quoteUrlTemplate: @js(route('customers.delivery-quote', ['customer' => '__CUSTOMER__'])),
         addItem() { this.items.push({ variantId: '' }); },
         removeItem(index) { this.items.splice(index, 1); },
         syncVariant(index, event) {
             const option = event.target.selectedOptions[0];
             this.items[index].variantId = option?.dataset?.variantId || '';
-        }
+        },
+        async refreshDeliveryQuote() {
+            this.deliveryQuote = null;
+            this.deliveryQuoteError = null;
+
+            if (this.type !== 'delivery' || !this.customerId) {
+                return;
+            }
+
+            this.deliveryQuoteLoading = true;
+
+            try {
+                const response = await fetch(this.quoteUrlTemplate.replace('__CUSTOMER__', this.customerId), {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+                const data = await response.json();
+
+                if (data.ok) {
+                    this.deliveryQuote = data;
+                } else {
+                    this.deliveryQuoteError = data.message || 'Não foi possível calcular a taxa.';
+                    if (data.delivery_address) {
+                        this.deliveryQuote = {
+                            delivery_address: data.delivery_address,
+                            delivery_fee: null,
+                            distance_km: data.distance_km ?? null,
+                            delivery_area_name: null,
+                        };
+                    }
+                }
+            } catch (e) {
+                this.deliveryQuoteError = 'Erro ao consultar a taxa de entrega.';
+            } finally {
+                this.deliveryQuoteLoading = false;
+            }
+        },
+        init() {
+            this.$watch('type', () => this.refreshDeliveryQuote());
+            this.$watch('customerId', () => this.refreshDeliveryQuote());
+            this.refreshDeliveryQuote();
+        },
     }"
     class="space-y-6">
     @csrf
@@ -55,6 +102,29 @@
             <label for="customer_phone" class="block text-sm font-medium text-gray-700">Telefone</label>
             <input type="text" name="customer_phone" id="customer_phone" value="{{ old('customer_phone') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
         </div>
+    </div>
+
+    <div x-show="type === 'delivery' && customerId" x-cloak class="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+        <template x-if="deliveryQuoteLoading">
+            <p>Calculando taxa de entrega...</p>
+        </template>
+        <template x-if="!deliveryQuoteLoading && deliveryQuote && deliveryQuote.delivery_fee !== null && deliveryQuote.delivery_fee !== undefined">
+            <div class="space-y-1">
+                <p class="font-medium">
+                    Taxa de entrega:
+                    <span x-text="'R$ ' + Number(deliveryQuote.delivery_fee).toFixed(2).replace('.', ',')"></span>
+                    <span class="font-normal text-indigo-700" x-show="deliveryQuote.delivery_area_name" x-text="'(' + deliveryQuote.delivery_area_name + ')'"></span>
+                </p>
+                <p class="text-indigo-800" x-show="deliveryQuote.distance_km != null" x-text="'Distância aprox.: ' + deliveryQuote.distance_km + ' km'"></p>
+                <p class="text-indigo-700" x-text="deliveryQuote.delivery_address"></p>
+            </div>
+        </template>
+        <template x-if="!deliveryQuoteLoading && deliveryQuoteError">
+            <div class="space-y-1">
+                <p class="font-medium text-amber-800" x-text="deliveryQuoteError"></p>
+                <p class="text-indigo-700" x-show="deliveryQuote?.delivery_address" x-text="deliveryQuote.delivery_address"></p>
+            </div>
+        </template>
     </div>
 
     <div>

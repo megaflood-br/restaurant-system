@@ -508,41 +508,12 @@ class ConversationalWhatsAppBotService
 
     private function savedDeliveryAddress(?Customer $customer): ?string
     {
-        if (! $customer) {
-            return null;
-        }
-
-        $formatted = $this->formatCustomerAddress($customer);
-
-        if ($formatted !== null) {
-            return $formatted;
-        }
-
-        $lastDelivery = $customer->orders()
-            ->where('type', 'delivery')
-            ->whereNotNull('delivery_address')
-            ->where('delivery_address', '!=', '')
-            ->latest()
-            ->value('delivery_address');
-
-        return filled($lastDelivery) ? trim((string) $lastDelivery) : null;
+        return $customer?->resolvedDeliveryAddress();
     }
 
     private function formatCustomerAddress(Customer $customer): ?string
     {
-        $parts = array_values(array_filter([
-            trim((string) ($customer->address ?? '')),
-            trim((string) ($customer->neighborhood ?? '')),
-            trim((string) ($customer->city ?? '')),
-            trim((string) ($customer->state ?? '')),
-            trim((string) ($customer->zip_code ?? '')),
-        ], fn (string $part) => $part !== ''));
-
-        if ($parts === [] || trim((string) ($customer->address ?? '')) === '') {
-            return null;
-        }
-
-        return implode(', ', $parts);
+        return $customer->formattedDeliveryAddress();
     }
 
     private function confirmsSavedAddress(string $command): bool
