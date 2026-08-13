@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Waiter;
 
 use App\Http\Controllers\Controller;
+use App\Support\ComandaCustomer;
 use App\Support\MenuCatalog;
 use App\Models\Order;
 use App\Models\Product;
@@ -159,8 +160,8 @@ class WaiterOrderController extends Controller
                 'order_number' => Order::generateOrderNumber(),
                 'type' => 'dine_in',
                 'comanda_number' => (int) $validated['comanda_number'],
-                'customer_id' => session('comanda_customer_id'),
-                'customer_name' => session('comanda_customer_name'),
+                'customer_id' => ComandaCustomer::id((int) $validated['comanda_number']),
+                'customer_name' => ComandaCustomer::name((int) $validated['comanda_number']),
                 'notes' => filled($validated['notes'] ?? null) ? $validated['notes'] : null,
                 'status' => 'pending',
                 'user_id' => $request->user()->id,

@@ -1,13 +1,34 @@
 @extends('layouts.waiter')
 
 @section('content')
+    @php
+        $customerOptions = $customers->map(fn ($customer) => [
+            'id' => (string) $customer->id,
+            'label' => $customer->name.($customer->phone ? ' — '.$customer->phone : ''),
+        ])->values()->all();
+    @endphp
+
     <div class="px-4 py-4 pb-6" x-data="{
         search: '',
+        customerOptions: @js($customerOptions),
+        openFor: null,
+        customerId: '',
+        openUrl: '',
         matches(number) {
             if (!this.search.trim()) return true;
             return String(number).includes(this.search.trim()) ||
                    String(number).padStart(3, '0').includes(this.search.trim());
-        }
+        },
+        openModal(number, url) {
+            this.openFor = number;
+            this.openUrl = url;
+            this.customerId = '';
+        },
+        closeModal() {
+            this.openFor = null;
+            this.openUrl = '';
+            this.customerId = '';
+        },
     }">
         <div class="mb-5">
             <input type="search" x-model="search" inputmode="numeric"
@@ -32,6 +53,9 @@
 
         @if (session('error'))
             <div class="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700 mb-4">{{ session('error') }}</div>
+        @endif
+        @if (session('success'))
+            <div class="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800 mb-4">{{ session('success') }}</div>
         @endif
 
         @if ($overview['counts']['occupied'] > 0)
@@ -85,16 +109,14 @@
             @if ($overview['counts']['free'] > 0)
                 <div class="grid grid-cols-4 gap-2">
                     @foreach ($overview['free'] as $comanda)
-                        <form method="POST" action="{{ route('waiter.comandas.open', $comanda['number']) }}"
+                        <button type="button"
                             x-show="matches({{ $comanda['number'] }})"
-                            x-cloak>
-                            @csrf
-                            <button type="submit"
-                                class="w-full aspect-square rounded-lg bg-slate-500 hover:bg-slate-600 active:scale-95 transition shadow-sm flex flex-col items-center justify-center text-white">
-                                <span class="text-[10px] font-bold uppercase tracking-wide opacity-90">Entregar</span>
-                                <span class="text-xl font-bold leading-none">{{ $comanda['label'] }}</span>
-                            </button>
-                        </form>
+                            x-cloak
+                            @click="openModal({{ $comanda['number'] }}, @js(route('waiter.comandas.open', $comanda['number'])))"
+                            class="w-full aspect-square rounded-lg bg-slate-500 hover:bg-slate-600 active:scale-95 transition shadow-sm flex flex-col items-center justify-center text-white">
+                            <span class="text-[10px] font-bold uppercase tracking-wide opacity-90">Entregar</span>
+                            <span class="text-xl font-bold leading-none">{{ $comanda['label'] }}</span>
+                        </button>
                     @endforeach
                 </div>
             @else
@@ -103,5 +125,43 @@
                 </p>
             @endif
         </section>
+
+        <div x-show="openFor !== null" x-cloak
+            class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+            @keydown.escape.window="closeModal()">
+            <div class="absolute inset-0 bg-gray-900/50" @click="closeModal()"></div>
+            <div class="relative w-full max-w-md rounded-2xl bg-white shadow-xl p-5 space-y-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        Abrir comanda <span x-text="String(openFor).padStart(3, '0')"></span>
+                    </h3>
+                    <p class="text-sm text-gray-500 mt-1">Vincular cliente é opcional.</p>
+                </div>
+
+                <form method="POST" :action="openUrl" class="space-y-4">
+                    @csrf
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Cliente</label>
+                        <select name="customer_id" x-model="customerId"
+                            class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <option value="">Sem cliente</option>
+                            <template x-for="customer in customerOptions" :key="customer.id">
+                                <option :value="customer.id" x-text="customer.label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" @click="closeModal()"
+                            class="px-4 py-3 rounded-xl bg-white border border-gray-300 text-sm font-semibold text-gray-700">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                            class="px-4 py-3 rounded-xl bg-indigo-600 text-sm font-semibold text-white">
+                            Abrir
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 @endsection
