@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Services\DeliveryFeeService;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DeliveryFeeServiceTest extends TestCase
@@ -114,5 +115,88 @@ class DeliveryFeeServiceTest extends TestCase
 
         $this->assertNotNull($distance);
         $this->assertLessThan(1, $distance);
+    }
+
+    public function test_geocode_falls_back_to_neighbourhood_when_street_is_unknown(): void
+    {
+        config([
+            'digital_menu.city' => 'Atibaia',
+            'digital_menu.state' => 'SP',
+            'general.delivery_origin_lat' => '-23.1171',
+            'general.delivery_origin_lng' => '-46.5502',
+        ]);
+
+        Http::fake(function (Request $request) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $q = (string) ($query['q'] ?? '');
+
+            if (str_contains(Str::lower($q), 'lurdes')) {
+                return Http::response([], 200);
+            }
+
+            if (str_contains(Str::lower(Str::ascii($q)), 'jardim imperial')) {
+                $this->assertStringContainsStringIgnoringCase('Jardim', $q);
+
+                return Http::response([
+                    [
+                        'lat' => '-23.1420',
+                        'lon' => '-46.5873',
+                        'display_name' => 'Jardim Imperial, Atibaia, SP, Brasil',
+                        'address' => [
+                            'suburb' => 'Jardim Imperial',
+                            'city' => 'Atibaia',
+                            'state' => 'São Paulo',
+                        ],
+                    ],
+                ], 200);
+            }
+
+            return Http::response([], 200);
+        });
+
+        $distance = app(DeliveryFeeService::class)->distanceFromAddress(
+            'Rua Lurdes Neves Machado, 550, Jd Imperial, Atibaia, SP, 12940000'
+        );
+
+        $this->assertNotNull($distance);
+        $this->assertGreaterThan(0, $distance);
+    }
+
+    public function test_geocode_normalizes_jd_abbreviation_in_first_query(): void
+    {
+        config([
+            'digital_menu.city' => 'Atibaia',
+            'digital_menu.state' => 'SP',
+            'general.delivery_origin_lat' => '-23.1171',
+            'general.delivery_origin_lng' => '-46.5502',
+        ]);
+
+        Http::fake(function (Request $request) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $q = (string) ($query['q'] ?? '');
+
+            $this->assertStringNotContainsString('Jd ', $q);
+            $this->assertStringContainsString('Jardim Imperial', $q);
+            $this->assertMatchesRegularExpression('/12940-000/', $q);
+
+            return Http::response([
+                [
+                    'lat' => '-23.1420',
+                    'lon' => '-46.5873',
+                    'display_name' => 'Jardim Imperial, Atibaia, SP, Brasil',
+                    'address' => [
+                        'suburb' => 'Jardim Imperial',
+                        'city' => 'Atibaia',
+                    ],
+                ],
+            ], 200);
+        });
+
+        $distance = app(DeliveryFeeService::class)->distanceFromAddress(
+            'Jd Imperial, Atibaia, SP, 12940000'
+        );
+
+        $this->assertNotNull($distance);
+        Http::assertSentCount(1);
     }
 }

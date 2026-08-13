@@ -135,24 +135,161 @@ class DeliveryFeeService
             return null;
         }
 
-        $context = $this->geocodeContextSuffix();
         $restrictToCity = $this->restaurantCity() !== '';
+        $candidates = $this->geocodeCandidates($query);
+        $attempted = 0;
 
-        // Always search inside the restaurant city first (never Brazil-wide).
-        if ($context !== '') {
-            $scoped = $this->requestGeocode($query.', '.$context, $restrictToCity);
-
-            if ($scoped !== null) {
-                return $scoped;
+        foreach ($candidates as $candidate) {
+            if ($attempted > 0) {
+                $this->throttleNominatim();
             }
 
-            // Retry the raw text, still filtered/biased to the restaurant city.
-            if ($restrictToCity) {
-                return $this->requestGeocode($query, true);
+            $attempted++;
+
+            // Prefer city-scoped + bounded search; last passes loosen the box a bit.
+            $bounded = $attempted <= 2;
+            $hit = $this->requestGeocode($candidate, $restrictToCity, $bounded);
+
+            if ($hit !== null) {
+                return $hit;
             }
         }
 
-        return $this->requestGeocode($query, false);
+        return null;
+    }
+
+    /**
+     * Builds progressive queries: full address → without number → neighbourhood/city → CEP.
+     * Many Brazilian streets are missing from OSM; bairro/CEP still yield a usable point.
+     *
+     * @return list<string>
+     */
+    private function geocodeCandidates(string $address): array
+    {
+        $normalized = $this->normalizeAddressQuery($address);
+        $context = $this->geocodeContextSuffix();
+        $candidates = [];
+
+        $push = function (string $value) use (&$candidates): void {
+            $value = trim($value, " \t,");
+            if ($value === '' || in_array($value, $candidates, true)) {
+                return;
+            }
+            $candidates[] = $value;
+        };
+
+        // City-scoped query first (more precise for Nominatim).
+        if ($context !== '') {
+            $push($normalized.', '.$context);
+        }
+        $push($normalized);
+
+        $withoutNumber = $this->stripLeadingStreetNumber($normalized);
+        if ($withoutNumber !== $normalized) {
+            if ($context !== '') {
+                $push($withoutNumber.', '.$context);
+            }
+            $push($withoutNumber);
+        }
+
+        $areaQuery = $this->neighbourhoodCityQuery($normalized);
+        if ($areaQuery !== null) {
+            if ($context !== '' && ! str_contains(
+                $this->normalizePlaceName($areaQuery),
+                $this->normalizePlaceName($this->restaurantCity())
+            )) {
+                $push($areaQuery.', '.$context);
+            }
+            $push($areaQuery);
+        }
+
+        $cep = $this->extractCep($normalized) ?? $this->extractCep($address);
+        if ($cep !== null) {
+            if ($context !== '') {
+                $push($cep.', '.$context);
+            }
+            $push($cep);
+        }
+
+        return $candidates;
+    }
+
+    private function normalizeAddressQuery(string $address): string
+    {
+        $value = trim(preg_replace('/\s+/', ' ', $address) ?? $address);
+
+        // Expand common Brazilian abbreviations so Nominatim can match suburbs.
+        $replacements = [
+            '/\bJds?\b\.?/iu' => 'Jardim',
+            '/\bJrd\b\.?/iu' => 'Jardim',
+            '/\bJd(im)?\b\.?/iu' => 'Jardim',
+            '/\bVl\b\.?/iu' => 'Vila',
+            '/\bPq\b\.?/iu' => 'Parque',
+            '/\bRes\b\.?/iu' => 'Residencial',
+            '/\bAv\b\.?/iu' => 'Avenida',
+            '/\bR\b\.?(?=\s+[A-Za-zÀ-ú])/u' => 'Rua',
+        ];
+
+        foreach ($replacements as $pattern => $replacement) {
+            $value = preg_replace($pattern, $replacement, $value) ?? $value;
+        }
+
+        // Format CEP 12940000 → 12940-000
+        $value = preg_replace('/\b(\d{5})(\d{3})\b/', '$1-$2', $value) ?? $value;
+
+        return trim(preg_replace('/\s+/', ' ', $value) ?? $value);
+    }
+
+    private function stripLeadingStreetNumber(string $address): string
+    {
+        // "Rua X, 550, Bairro" or "Rua X 550, Bairro"
+        $stripped = preg_replace('/^(.+?)(?:,\s*|\s+)(\d+[A-Za-z\-\/]*)\b,?\s*/u', '$1, ', $address, 1);
+
+        return trim((string) $stripped, " \t,");
+    }
+
+    private function neighbourhoodCityQuery(string $address): ?string
+    {
+        $parts = array_values(array_filter(array_map(
+            static fn (string $part) => trim($part),
+            explode(',', $address)
+        ), static fn (string $part) => $part !== ''));
+
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        // Drop street (and optional number) so we geocode by bairro/cidade.
+        while ($parts !== [] && $this->looksLikeStreetOrNumber($parts[0])) {
+            array_shift($parts);
+        }
+
+        if ($parts === []) {
+            return null;
+        }
+
+        return implode(', ', $parts);
+    }
+
+    private function looksLikeStreetOrNumber(string $part): bool
+    {
+        if (preg_match('/^\d+[A-Za-z\-\/]*$/u', $part) === 1) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/^(rua|r|avenida|av|alameda|al|travessa|tv|estrada|rodovia|praça|praca|largo|viela|beco)\b/iu',
+            $part
+        );
+    }
+
+    private function extractCep(string $address): ?string
+    {
+        if (preg_match('/\b(\d{5})-?(\d{3})\b/', $address, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1].'-'.$matches[2];
     }
 
     private function geocodeContextSuffix(): string
@@ -172,8 +309,18 @@ class DeliveryFeeService
         return trim((string) config('digital_menu.city'));
     }
 
+    private function throttleNominatim(): void
+    {
+        if (app()->environment('testing')) {
+            return;
+        }
+
+        // Nominatim usage policy: max 1 request/second.
+        usleep(1_100_000);
+    }
+
     /** @return array{lat: float, lng: float}|null */
-    private function requestGeocode(string $query, bool $restrictToCity): ?array
+    private function requestGeocode(string $query, bool $restrictToCity, bool $bounded = true): ?array
     {
         try {
             $params = [
@@ -198,7 +345,9 @@ class DeliveryFeeService
                     $lng + $delta,
                     $lat - $delta,
                 ]);
-                $params['bounded'] = 1;
+                if ($bounded) {
+                    $params['bounded'] = 1;
+                }
             }
 
             $response = Http::timeout(8)
