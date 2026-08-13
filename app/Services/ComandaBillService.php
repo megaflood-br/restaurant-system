@@ -85,7 +85,7 @@ class ComandaBillService
     {
         return $this->openOrdersQuery()
             ->where('comanda_number', $comandaNumber)
-            ->with(['items.product', 'user'])
+            ->with(['items.product', 'user', 'customer'])
             ->oldest()
             ->get();
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Customer;
 use App\Models\CustomerInteraction;
+use App\Support\ComandaCustomer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -129,10 +130,7 @@ class CustomerController extends Controller
     {
         $comanda = (int) config('restaurant.counter_comanda_number', 950);
 
-        session([
-            'comanda_customer_id' => $customer->id,
-            'comanda_customer_name' => $customer->name,
-        ]);
+        ComandaCustomer::bind($comanda, $customer);
 
         return redirect()->route('comandas.show', ['comanda' => $comanda, 'add' => 1])
             ->with('success', 'Comanda aberta para '.$customer->name.'. Adicione os produtos.');

@@ -17,6 +17,9 @@
                 <h2 class="font-semibold text-xl text-gray-800 leading-tight mt-1">
                     Comanda {{ str_pad((string) $comanda, 3, '0', STR_PAD_LEFT) }}
                 </h2>
+                @if (! empty($linkedCustomer['name']))
+                    <p class="text-sm text-gray-600 mt-0.5">Cliente: <strong>{{ $linkedCustomer['name'] }}</strong></p>
+                @endif
             </div>
             @if ($bill)
                 <p class="text-2xl font-bold text-indigo-600">R$ {{ number_format($bill['total'], 2, ',', '.') }}</p>
