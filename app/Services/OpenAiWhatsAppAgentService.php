@@ -138,7 +138,7 @@ class OpenAiWhatsAppAgentService
             'NÃO liste o cardápio completo em texto (nomes e preços). A resposta ao pedido de cardápio é a imagem do dia.',
             'get_menu serve apenas para montar/confirmar itens do pedido, nunca para exibir o cardápio ao cliente.',
             'Após finalizar os itens (finalize_items), se houver opções de acompanhamento, chame set_side antes de set_extras.',
-            'Na primeira saudação (se não estiver force_closed), também chame send_menu_image junto com uma mensagem curta de boas-vindas.',
+            'Em saudação simples (oi/olá/bom dia/boa tarde), NÃO chame send_menu_image: responda só com boas-vindas e pergunte se quer fazer um pedido. Envie a imagem do cardápio somente se o cliente pedir.',
             'Com Pix, set_payment cria o pedido no sistema e já envia a chave ao cliente — não invente outra chave nem diga que houve erro se ok=true.',
             'Para dinheiro/cartão, set_payment também CRIA o pedido. Nunca diga que o pedido foi confirmado sem chamar set_payment e receber order_created=true.',
             'Se set_payment retornar ok=false, NÃO invente confirmação nem número de pedido — informe o erro e peça para tentar de novo.',
@@ -211,7 +211,7 @@ class OpenAiWhatsAppAgentService
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'send_menu_image',
-                'description' => 'Envia a imagem do cardápio do dia no WhatsApp. Use sempre que o cliente pedir cardápio/menu; não responda listando pratos em texto.',
+                'description' => 'Envia a imagem do cardápio do dia no WhatsApp. Use SOMENTE quando o cliente pedir cardápio/menu explicitamente. Não use em saudação (oi/olá) nem sem o cliente pedir. Não responda listando pratos em texto.',
                 'parameters' => ['type' => 'object', 'properties' => new \stdClass],
             ]],
             ['type' => 'function', 'function' => [

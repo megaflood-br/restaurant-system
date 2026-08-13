@@ -165,8 +165,6 @@ class ConversationalWhatsAppBotService
     private function handleWelcome(string $phone, string $text, ?Customer $customer): void
     {
         $this->replyText($phone, $this->render($this->message('welcome_message')), $customer);
-        $this->sendMenuImage($phone, $customer, sendFollowup: false);
-        $this->replyText($phone, $this->message('menu_followup_message'), $customer);
 
         $this->setSession($phone, [
             'state' => 'ordering',
