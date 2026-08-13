@@ -88,6 +88,25 @@ class InventoryService
         });
     }
 
+    /** Reaplica baixa de estoque após editar itens de um pedido já baixado. */
+    public function resyncForOrder(Order $order, ?int $userId = null): void
+    {
+        $fresh = $order->fresh(['items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients']);
+
+        if (! $fresh) {
+            return;
+        }
+
+        if ($fresh->inventory_deducted_at) {
+            $this->restoreForOrder($fresh, $userId);
+            $fresh = $fresh->fresh(['items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients']);
+        }
+
+        if ($fresh && $fresh->items->isNotEmpty() && $fresh->status !== 'cancelled') {
+            $this->deductForOrder($fresh, $userId);
+        }
+    }
+
     public function manualMovement(
         Ingredient $ingredient,
         string $type,
