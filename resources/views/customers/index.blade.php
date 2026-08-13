@@ -120,9 +120,9 @@
     <x-modal name="new-customer" maxWidth="2xl" focusable>
         <div class="p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Novo cliente</h3>
-            <form method="POST" action="{{ route('customers.store') }}" class="space-y-4">
+            <form method="POST" action="{{ route('customers.store') }}" class="space-y-4" autocomplete="off">
                 @csrf
-                @include('customers._form')
+                @include('customers._form', ['customer' => null])
                 <div class="flex gap-3 pt-2">
                     <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-indigo-700">
                         Salvar cliente
