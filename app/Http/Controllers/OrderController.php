@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Services\CashFlowService;
 use App\Services\DeliveryFeeService;
@@ -221,11 +222,150 @@ class OrderController extends Controller
         }
     }
 
-    public function show(Order $order): View
+    public function show(Request $request, Order $order): View
     {
         $order->load('items.product', 'user', 'customer', 'deliveryArea');
 
-        return view('orders.show', compact('order'));
+        return view('orders.show', [
+            'order' => $order,
+            'editing' => $request->boolean('edit'),
+            'customers' => Customer::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'phone']),
+        ]);
+    }
+
+    public function updateDetails(Request $request, Order $order): RedirectResponse
+    {
+        if ($redirect = $this->rejectIfNotEditable($order)) {
+            return $redirect;
+        }
+
+        $validated = $request->validate([
+            'notes' => ['nullable', 'string'],
+            'customer_id' => ['nullable', 'exists:customers,id'],
+            'customer_name' => ['nullable', 'string', 'max:255'],
+            'customer_phone' => ['nullable', 'string', 'max:20'],
+            'delivery_address' => ['nullable', 'string', 'max:500'],
+            'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $customer = isset($validated['customer_id'])
+            ? Customer::query()->find($validated['customer_id'])
+            : null;
+
+        $order->update([
+            'notes' => $validated['notes'] ?? null,
+            'customer_id' => $customer?->id,
+            'customer_name' => $customer?->name ?? ($validated['customer_name'] ?? $order->customer_name),
+            'customer_phone' => $customer?->phone ?? ($validated['customer_phone'] ?? $order->customer_phone),
+            'delivery_address' => $order->type === 'delivery'
+                ? ($validated['delivery_address'] ?? $order->delivery_address)
+                : $order->delivery_address,
+            'delivery_fee' => $order->type === 'delivery' && array_key_exists('delivery_fee', $validated)
+                ? (float) ($validated['delivery_fee'] ?? 0)
+                : $order->delivery_fee,
+        ]);
+
+        $order->recalculateTotal();
+
+        return redirect()
+            ->route('orders.show', ['order' => $order, 'edit' => 1])
+            ->with('success', 'Dados do pedido atualizados.');
+    }
+
+    public function updateItem(
+        Request $request,
+        Order $order,
+        OrderItem $item,
+        InventoryService $inventory,
+    ): RedirectResponse {
+        if ($redirect = $this->rejectIfNotEditable($order)) {
+            return $redirect;
+        }
+
+        if ((int) $item->order_id !== (int) $order->id) {
+            return back()->with('error', 'Item não pertence a este pedido.');
+        }
+
+        $validated = $request->validate([
+            'quantity' => ['required', 'integer', 'min:1', 'max:999'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        DB::transaction(function () use ($item, $validated, $order) {
+            $item->update([
+                'quantity' => $validated['quantity'],
+                'subtotal' => round((float) $item->unit_price * (int) $validated['quantity'], 2),
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            $order->recalculateTotal();
+        });
+
+        $inventory->resyncForOrder($order->fresh(), $request->user()->id);
+
+        return redirect()
+            ->route('orders.show', ['order' => $order, 'edit' => 1])
+            ->with('success', 'Item atualizado.');
+    }
+
+    public function destroyItem(
+        Request $request,
+        Order $order,
+        OrderItem $item,
+        InventoryService $inventory,
+    ): RedirectResponse {
+        if ($redirect = $this->rejectIfNotEditable($order)) {
+            return $redirect;
+        }
+
+        if ((int) $item->order_id !== (int) $order->id) {
+            return back()->with('error', 'Item não pertence a este pedido.');
+        }
+
+        DB::transaction(function () use ($item, $order, $inventory, $request) {
+            $fresh = $order->fresh(['items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients']);
+            $hadInventory = (bool) $fresh?->inventory_deducted_at;
+
+            if ($hadInventory && $fresh) {
+                $inventory->restoreForOrder($fresh, $request->user()->id);
+            }
+
+            $item->delete();
+            $order->refresh()->load('items');
+
+            if ($order->items->isEmpty()) {
+                $order->update(['status' => 'cancelled', 'total' => (float) $order->delivery_fee]);
+
+                return;
+            }
+
+            $order->recalculateTotal();
+
+            if ($hadInventory) {
+                $inventory->deductForOrder(
+                    $order->fresh(['items.product.recipe.ingredients', 'items.productVariant.recipe.ingredients']),
+                    $request->user()->id
+                );
+            }
+        });
+
+        return redirect()
+            ->route('orders.show', ['order' => $order, 'edit' => 1])
+            ->with('success', 'Item removido.');
+    }
+
+    private function rejectIfNotEditable(Order $order): ?RedirectResponse
+    {
+        if ($order->status === 'cancelled') {
+            return redirect()
+                ->route('orders.show', $order)
+                ->with('error', 'Pedido cancelado não pode ser editado.');
+        }
+
+        return null;
     }
 
     public function destroy(Request $request, Order $order, InventoryService $inventory): RedirectResponse

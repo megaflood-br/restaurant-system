@@ -36,6 +36,9 @@
                                     <p class="text-sm text-gray-600 mt-2">{{ $typeLabels[$order->type] ?? $order->type }} · R$ {{ number_format($order->total, 2, ',', '.') }}</p>
                                     <div class="mt-3 flex gap-3 text-sm">
                                         <a href="{{ route('orders.show', $order) }}" class="text-indigo-600">Detalhes</a>
+                                        @if ($order->status !== 'cancelled')
+                                            <a href="{{ route('orders.show', ['order' => $order, 'edit' => 1]) }}" class="text-amber-600 font-medium">Editar</a>
+                                        @endif
                                         @include('orders._print-action', [
                                             'order' => $order,
                                             'linkClass' => 'text-gray-600',
