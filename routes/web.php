@@ -98,6 +98,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::resource('users', UserController::class)->except(['show']);
         Route::resource('stock-categories', StockCategoryController::class)->except(['show']);
         Route::delete('stock-categories-bulk', [StockCategoryController::class, 'bulkDestroy'])->name('stock-categories.bulk-destroy');
+        Route::get('ingredients/precos', [IngredientController::class, 'prices'])->name('ingredients.prices');
         Route::resource('ingredients', IngredientController::class)->except(['show']);
         Route::delete('ingredients-bulk', [IngredientController::class, 'bulkDestroy'])->name('ingredients.bulk-destroy');
         Route::get('ingredients/{ingredient}/movement', [IngredientController::class, 'movementForm'])->name('ingredients.movement');
