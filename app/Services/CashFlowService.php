@@ -152,12 +152,12 @@ class CashFlowService
             return null;
         }
 
-        // Se a comanda já foi fechada no caixa, não lança de novo o pedido de salão.
+        // Só ignora se ESTE pedido já entrou no fechamento da comanda (meta.order_ids).
         if ($order->type === 'dine_in' && $order->comanda_number) {
-            $comandaKey = 'comanda:'.($order->created_at?->toDateString() ?? today()->toDateString()).':'.$order->comanda_number;
+            $comandaMovement = $this->comandaCloseMovementFor($order);
 
-            if (CashMovement::query()->where('source', 'comanda')->where('source_key', $comandaKey)->exists()) {
-                return CashMovement::query()->where('source', 'comanda')->where('source_key', $comandaKey)->first();
+            if ($comandaMovement && $this->orderCoveredByComandaClose($order, $comandaMovement)) {
+                return $comandaMovement;
             }
         }
 
@@ -193,7 +193,7 @@ class CashFlowService
                 'user_id' => $userId,
                 'source' => 'order',
                 'source_key' => $sourceKey,
-                'occurred_at' => $order->updated_at ?? now(),
+                'occurred_at' => $order->created_at ?? $order->updated_at ?? now(),
                 'meta' => [
                     'order_type' => $order->type,
                     'order_number' => $order->order_number,
@@ -253,12 +253,68 @@ class CashFlowService
         }
 
         if ($order->type === 'dine_in' && $order->comanda_number) {
-            $comandaKey = 'comanda:'.($order->created_at?->toDateString() ?? today()->toDateString()).':'.$order->comanda_number;
+            $comandaMovement = $this->comandaCloseMovementFor($order);
 
-            return CashMovement::query()->where('source', 'comanda')->where('source_key', $comandaKey)->exists();
+            return $comandaMovement !== null
+                && $this->orderCoveredByComandaClose($order, $comandaMovement);
         }
 
         return false;
+    }
+
+    /**
+     * Diferença entre totais de pedidos entregues do dia e o que já está no caixa
+     * (lançamentos order/comanda desse dia).
+     */
+    public function deliveredSalesGapForDate(CarbonInterface $date): float
+    {
+        $dateString = $date->timezone(config('app.timezone'))->toDateString();
+
+        $ordersTotal = (float) Order::query()
+            ->whereDate('created_at', $dateString)
+            ->where('status', 'delivered')
+            ->sum('total');
+
+        $cashTotal = (float) CashMovement::query()
+            ->whereDate('reference_date', $dateString)
+            ->where('type', 'entrada')
+            ->whereIn('source', ['order', 'comanda'])
+            ->sum('amount');
+
+        return round(max(0, $ordersTotal - $cashTotal), 2);
+    }
+
+    private function comandaCloseMovementFor(Order $order): ?CashMovement
+    {
+        if (! $order->comanda_number) {
+            return null;
+        }
+
+        $comandaKey = 'comanda:'.($order->created_at?->toDateString() ?? today()->toDateString()).':'.$order->comanda_number;
+
+        return CashMovement::query()
+            ->where('source', 'comanda')
+            ->where('source_key', $comandaKey)
+            ->first();
+    }
+
+    /**
+     * Pedido de salão só está coberto pelo fechamento se aparecer em meta.order_ids.
+     * Sem meta (legado): assume coberto para não duplicar.
+     */
+    private function orderCoveredByComandaClose(Order $order, CashMovement $comandaMovement): bool
+    {
+        $meta = $comandaMovement->meta ?? null;
+
+        if (! is_array($meta) || ! array_key_exists('order_ids', $meta)) {
+            return true;
+        }
+
+        $ids = collect($meta['order_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return in_array((int) $order->id, $ids, true);
     }
 
     public function deleteManual(CashMovement $movement): void

@@ -98,14 +98,22 @@ class FinanceiroController extends Controller
             : today();
 
         $result = $cashFlow->syncDeliveredSalesForDate($date, $request->user()->id);
+        $gap = $cashFlow->deliveredSalesGapForDate($date);
 
-        $message = $result['created'] === 0
-            ? 'Nenhuma venda faltando no caixa para este dia.'
-            : sprintf(
+        if ($result['created'] > 0) {
+            $message = sprintf(
                 'Sincronizadas %d venda(s) — R$ %s adicionados às entradas.',
                 $result['created'],
                 number_format($result['amount'], 2, ',', '.')
             );
+        } elseif ($gap > 0.009) {
+            $message = sprintf(
+                'Nenhum lançamento novo criado, mas ainda há cerca de R$ %s de pedidos entregues sem cobertura completa no caixa. Confira se há lançamentos manuais a ajustar.',
+                number_format($gap, 2, ',', '.')
+            );
+        } else {
+            $message = 'Nenhuma venda faltando no caixa para este dia.';
+        }
 
         return redirect()
             ->route('financeiro.index', ['date' => $date->toDateString()])
