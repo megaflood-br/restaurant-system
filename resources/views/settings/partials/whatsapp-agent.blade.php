@@ -447,6 +447,7 @@ function evolutionPanel(cfg) {
         'payment_message' => '5. Forma de pagamento',
         'pix_message' => '5b. Instruções Pix',
         'confirmed_message' => '6. Pedido confirmado',
+        'comanda_feedback_message' => '7. Feedback após fechar comanda (salão)',
     ] as $field => $label)
         <div>
             <label for="{{ $field }}" class="block text-sm font-medium text-gray-700">{{ $label }}</label>
@@ -461,8 +462,44 @@ function evolutionPanel(cfg) {
             @if ($field === 'closed_message')
                 <p class="mt-1 text-xs text-gray-500">Usado quando o cardápio está marcado como fechado. Placeholders: <code class="bg-gray-100 px-1 rounded">{opening}</code>, <code class="bg-gray-100 px-1 rounded">{closing}</code>, <code class="bg-gray-100 px-1 rounded">{next_open_day}</code>, <code class="bg-gray-100 px-1 rounded">{restaurant_name}</code>.</p>
             @endif
+            @if ($field === 'comanda_feedback_message')
+                <p class="mt-1 text-xs text-gray-500">
+                    Enviado automaticamente após o fechamento da comanda (se ativado abaixo).
+                    Placeholders: <code class="bg-gray-100 px-1 rounded">{customer_name}</code>,
+                    <code class="bg-gray-100 px-1 rounded">{restaurant_name}</code>,
+                    <code class="bg-gray-100 px-1 rounded">{items}</code>,
+                    <code class="bg-gray-100 px-1 rounded">{comanda}</code>.
+                    Só envia se a comanda tiver cliente com telefone.
+                </p>
+            @endif
         </div>
     @endforeach
+
+    <div class="rounded-lg border border-amber-100 bg-amber-50/60 p-4 space-y-4">
+        <div>
+            <h3 class="text-sm font-semibold text-amber-950">Feedback pós-comanda (WhatsApp)</h3>
+            <p class="mt-1 text-xs text-amber-900/80">
+                Após fechar a comanda no salão, agenda uma mensagem pedindo opinião sobre os pratos.
+                Requer Evolution ativa e o worker de fila (<code class="bg-amber-100 px-1 rounded">queue:listen</code>) rodando.
+            </p>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-800">
+            <input type="checkbox" name="comanda_feedback_enabled" value="1"
+                @checked(old('comanda_feedback_enabled', $whatsappAgent['comanda_feedback_enabled'] ?? false))
+                class="rounded border-gray-300 text-indigo-600">
+            Ativar pedido de feedback após fechar comanda
+        </label>
+        <div>
+            <label for="comanda_feedback_delay_minutes" class="block text-sm font-medium text-gray-700">
+                Aguardar (minutos) antes de enviar
+            </label>
+            <input type="number" name="comanda_feedback_delay_minutes" id="comanda_feedback_delay_minutes"
+                min="1" max="1440" required
+                value="{{ old('comanda_feedback_delay_minutes', $whatsappAgent['comanda_feedback_delay_minutes'] ?? 30) }}"
+                class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <p class="mt-1 text-xs text-gray-500">Ex.: 30 = meia hora depois do fechamento.</p>
+        </div>
+    </div>
 
     <div>
         <label for="side_options" class="block text-sm font-medium text-gray-700">Opções de acompanhamento</label>

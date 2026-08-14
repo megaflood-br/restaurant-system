@@ -54,6 +54,10 @@ tabela `settings`). O `.env` (`EVOLUTION_*`) só é fallback inicial. Depois de 
 Key, use **Gerar QR Code** e **Configurar webhook** na mesma tela. O servidor Laravel precisa
 alcançar a URL da Evolution (rede/firewall); o celular escaneia o QR normalmente.
 
+**Feedback pós-comanda:** em Agente WhatsApp, ative o pedido de feedback e o atraso (minutos).
+Ao fechar a comanda, um job atrasado é enfileirado — precisa de `php artisan queue:listen`
+(ou `composer dev`). Só envia se a comanda tiver cliente com telefone.
+
 ### Printing (thermal ESC/POS)
 - Cloud VPS cannot reach LAN printers (`192.168.1.100:9100`). Use driver **`agent`**
   plus `scripts/print-agent.php` on a restaurant PC, or **`browser`**. See README § Impressão.
