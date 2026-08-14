@@ -40,4 +40,7 @@ return [
     'schedule_min_minutes' => 30,
     'schedule_max_days' => 1,
     'schedule_message' => "Quer receber *agora* ou prefere *agendar*?\n\nResponda *agora* ou informe o horário desejado (ex.: *12:30*, *hoje às 18h*, *amanhã ao meio-dia*).",
+    'comanda_feedback_enabled' => false,
+    'comanda_feedback_delay_minutes' => 30,
+    'comanda_feedback_message' => "Oi, {customer_name}! Passando para saber como foi a experiência no *{restaurant_name}*. 🍽️\n\nO que achou de: *{items}*?\n\nSua opinião nos ajuda muito — pode responder por aqui mesmo. Obrigado!",
 ];

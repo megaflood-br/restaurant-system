@@ -96,6 +96,9 @@ class AppSettings
             'whatsapp_agent.schedule_min_minutes' => (int) Setting::get('whatsapp_agent', 'schedule_min_minutes', config('whatsapp_agent.schedule_min_minutes', 30)),
             'whatsapp_agent.schedule_max_days' => (int) Setting::get('whatsapp_agent', 'schedule_max_days', config('whatsapp_agent.schedule_max_days', 1)),
             'whatsapp_agent.schedule_message' => Setting::get('whatsapp_agent', 'schedule_message', config('whatsapp_agent.schedule_message')),
+            'whatsapp_agent.comanda_feedback_enabled' => Setting::get('whatsapp_agent', 'comanda_feedback_enabled', config('whatsapp_agent.comanda_feedback_enabled', false)),
+            'whatsapp_agent.comanda_feedback_delay_minutes' => (int) Setting::get('whatsapp_agent', 'comanda_feedback_delay_minutes', config('whatsapp_agent.comanda_feedback_delay_minutes', 30)),
+            'whatsapp_agent.comanda_feedback_message' => Setting::get('whatsapp_agent', 'comanda_feedback_message', config('whatsapp_agent.comanda_feedback_message')),
 
             'evolution.enabled' => Setting::get('evolution', 'enabled', config('evolution.enabled')),
             'evolution.base_url' => rtrim((string) Setting::get('evolution', 'base_url', config('evolution.base_url')), '/'),
@@ -216,6 +219,9 @@ class AppSettings
                 'schedule_min_minutes' => config('whatsapp_agent.schedule_min_minutes', 30),
                 'schedule_max_days' => config('whatsapp_agent.schedule_max_days', 1),
                 'schedule_message' => config('whatsapp_agent.schedule_message', ''),
+                'comanda_feedback_enabled' => config('whatsapp_agent.comanda_feedback_enabled', false),
+                'comanda_feedback_delay_minutes' => config('whatsapp_agent.comanda_feedback_delay_minutes', 30),
+                'comanda_feedback_message' => config('whatsapp_agent.comanda_feedback_message', ''),
             ],
             'evolution' => [
                 'enabled' => config('evolution.enabled', false),
@@ -349,6 +355,9 @@ class AppSettings
             'schedule_min_minutes' => config('whatsapp_agent.schedule_min_minutes'),
             'schedule_max_days' => config('whatsapp_agent.schedule_max_days'),
             'schedule_message' => config('whatsapp_agent.schedule_message'),
+            'comanda_feedback_enabled' => (bool) config('whatsapp_agent.comanda_feedback_enabled'),
+            'comanda_feedback_delay_minutes' => (int) config('whatsapp_agent.comanda_feedback_delay_minutes', 30),
+            'comanda_feedback_message' => config('whatsapp_agent.comanda_feedback_message'),
         ];
     }
 

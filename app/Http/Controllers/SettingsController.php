@@ -317,6 +317,8 @@ class SettingsController extends Controller
             'schedule_message' => ['nullable', 'string', 'max:2000'],
             'human_handoff_message' => ['nullable', 'string', 'max:2000'],
             'bot_resumed_message' => ['nullable', 'string', 'max:2000'],
+            'comanda_feedback_delay_minutes' => ['required', 'integer', 'min:1', 'max:1440'],
+            'comanda_feedback_message' => ['nullable', 'string', 'max:4000'],
         ];
 
         foreach (WeeklyMenuImages::DAYS as $day) {
@@ -364,6 +366,9 @@ class SettingsController extends Controller
             'schedule_message' => $validated['schedule_message'] ?? '',
             'human_handoff_message' => $validated['human_handoff_message'] ?? '',
             'bot_resumed_message' => $validated['bot_resumed_message'] ?? '',
+            'comanda_feedback_enabled' => $request->boolean('comanda_feedback_enabled'),
+            'comanda_feedback_delay_minutes' => $validated['comanda_feedback_delay_minutes'],
+            'comanda_feedback_message' => $validated['comanda_feedback_message'] ?? '',
             'menu_images' => json_encode($menuImages),
             'menu_image' => null,
         ]);

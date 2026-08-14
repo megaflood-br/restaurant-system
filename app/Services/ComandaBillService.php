@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendComandaFeedbackWhatsAppJob;
 use App\Models\Order;
 use App\Support\ElapsedTime;
 use Illuminate\Support\Collection;
@@ -150,7 +151,36 @@ class ComandaBillService
             // Fluxo de caixa é best-effort; fechamento da comanda já foi concluído.
         }
 
+        $this->scheduleFeedbackMessage($comandaNumber, $orders);
+
         return $summary;
+    }
+
+    /**
+     * @param  Collection<int, Order>  $orders
+     */
+    private function scheduleFeedbackMessage(int $comandaNumber, Collection $orders): void
+    {
+        if (! config('whatsapp_agent.comanda_feedback_enabled')) {
+            return;
+        }
+
+        $delayMinutes = max(1, (int) config('whatsapp_agent.comanda_feedback_delay_minutes', 30));
+        $orderIds = $orders->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+
+        if ($orderIds === []) {
+            return;
+        }
+
+        try {
+            SendComandaFeedbackWhatsAppJob::dispatch(
+                $comandaNumber,
+                $orderIds,
+                today()->toDateString(),
+            )->delay(now()->addMinutes($delayMinutes));
+        } catch (\Throwable) {
+            // Feedback é best-effort; não bloqueia o fechamento.
+        }
     }
 
     public function assertOpenOrderOnComanda(int $comandaNumber, Order $order): void
