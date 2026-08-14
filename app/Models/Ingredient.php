@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Ingredient extends Model
 {
@@ -141,5 +142,27 @@ class Ingredient extends Model
 
         return number_format((float) $this->package_size, 2, ',', '.').' '.$this->packageSizeLabel()
             .' · R$ '.number_format((float) $this->cost_price, 2, ',', '.');
+    }
+
+    public function lastPurchaseMovement(): ?InventoryMovement
+    {
+        if ($this->relationLoaded('lastPurchase')) {
+            return $this->getRelation('lastPurchase');
+        }
+
+        return $this->movements()
+            ->where('type', 'in')
+            ->whereNotNull('cost_price')
+            ->latest('id')
+            ->first();
+    }
+
+    public function lastPurchase(): HasOne
+    {
+        return $this->hasOne(InventoryMovement::class)
+            ->ofMany(
+                ['id' => 'max'],
+                fn ($query) => $query->where('type', 'in')->whereNotNull('cost_price')
+            );
     }
 }

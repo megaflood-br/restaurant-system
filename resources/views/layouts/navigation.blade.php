@@ -49,8 +49,11 @@
                         label="Estoque"
                         :active="request()->routeIs('ingredients.*', 'stock-categories.*')"
                     >
-                        <x-nav-dropdown-link :href="route('ingredients.index')" :active="request()->routeIs('ingredients.*')">
+                        <x-nav-dropdown-link :href="route('ingredients.index')" :active="request()->routeIs('ingredients.index', 'ingredients.create', 'ingredients.edit', 'ingredients.movement')">
                             Itens de estoque
+                        </x-nav-dropdown-link>
+                        <x-nav-dropdown-link :href="route('ingredients.prices')" :active="request()->routeIs('ingredients.prices')">
+                            Preços de compra
                         </x-nav-dropdown-link>
                         <x-nav-dropdown-link :href="route('stock-categories.index')" :active="request()->routeIs('stock-categories.*')">
                             Categorias de estoque
@@ -152,8 +155,11 @@
             </x-responsive-nav-link>
 
             <div class="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Estoque</div>
-            <x-responsive-nav-link :href="route('ingredients.index')" :active="request()->routeIs('ingredients.*')">
+            <x-responsive-nav-link :href="route('ingredients.index')" :active="request()->routeIs('ingredients.index', 'ingredients.create', 'ingredients.edit', 'ingredients.movement')">
                 Itens de estoque
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('ingredients.prices')" :active="request()->routeIs('ingredients.prices')">
+                Preços de compra
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('stock-categories.index')" :active="request()->routeIs('stock-categories.*')">
                 Categorias de estoque

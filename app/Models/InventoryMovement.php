@@ -13,6 +13,7 @@ class InventoryMovement extends Model
         'type',
         'reason',
         'quantity',
+        'cost_price',
         'notes',
         'user_id',
     ];
@@ -21,6 +22,7 @@ class InventoryMovement extends Model
     {
         return [
             'quantity' => 'decimal:2',
+            'cost_price' => 'decimal:2',
         ];
     }
 

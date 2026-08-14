@@ -28,6 +28,32 @@ class IngredientController extends Controller
         return view('ingredients.index', compact('ingredients', 'stockCategories'));
     }
 
+    public function prices(Request $request): View
+    {
+        $query = Ingredient::with(['stockCategory', 'lastPurchase'])
+            ->orderBy('name');
+
+        if ($request->filled('stock_category')) {
+            $query->where('stock_category_id', $request->integer('stock_category'));
+        }
+
+        if ($request->filled('q')) {
+            $query->where('name', 'like', '%'.$request->string('q').'%');
+        }
+
+        $sort = $request->string('sort')->toString();
+        if ($sort === 'cost_desc') {
+            $query->reorder()->orderByDesc('cost_price')->orderBy('name');
+        } elseif ($sort === 'cost_asc') {
+            $query->reorder()->orderBy('cost_price')->orderBy('name');
+        }
+
+        $ingredients = $query->paginate(50)->withQueryString();
+        $stockCategories = StockCategory::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
+
+        return view('ingredients.prices', compact('ingredients', 'stockCategories'));
+    }
+
     public function create(): View
     {
         return view('ingredients.create', $this->formData());
@@ -101,8 +127,14 @@ class IngredientController extends Controller
         $validated = $request->validate([
             'type' => ['required', 'in:in,out'],
             'quantity' => ['required', 'numeric', 'min:0.01'],
+            'cost_price' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ]);
+
+        $costPrice = null;
+        if ($validated['type'] === 'in' && $request->filled('cost_price')) {
+            $costPrice = (float) $validated['cost_price'];
+        }
 
         try {
             $inventory->manualMovement(
@@ -111,14 +143,20 @@ class IngredientController extends Controller
                 (float) $validated['quantity'],
                 $validated['notes'] ?? null,
                 $request->user()->id,
+                $costPrice,
             );
         } catch (\Throwable $exception) {
             return back()->with('error', $exception->getMessage());
         }
 
+        $message = 'Movimentação registrada com sucesso.';
+        if ($costPrice !== null) {
+            $message = 'Entrada registrada e preço de compra atualizado.';
+        }
+
         return redirect()
             ->route('ingredients.movement', $ingredient)
-            ->with('success', 'Movimentação registrada com sucesso.');
+            ->with('success', $message);
     }
 
     /** @return array<string, mixed> */

@@ -113,12 +113,17 @@ class InventoryService
         float $quantity,
         ?string $notes,
         ?int $userId = null,
+        ?float $costPrice = null,
     ): void {
         if ($type === 'out' && $ingredient->current_stock < $quantity) {
             throw new RuntimeException('Estoque insuficiente para esta saída.');
         }
 
-        DB::transaction(function () use ($ingredient, $type, $quantity, $notes, $userId) {
+        if ($type === 'out') {
+            $costPrice = null;
+        }
+
+        DB::transaction(function () use ($ingredient, $type, $quantity, $notes, $userId, $costPrice) {
             $this->recordMovement(
                 $ingredient,
                 $type,
@@ -127,7 +132,12 @@ class InventoryService
                 $notes,
                 null,
                 $userId,
+                $costPrice,
             );
+
+            if ($type === 'in' && $costPrice !== null && $costPrice >= 0) {
+                $ingredient->update(['cost_price' => round($costPrice, 2)]);
+            }
         });
     }
 
@@ -139,6 +149,7 @@ class InventoryService
         ?string $notes,
         ?int $orderId,
         ?int $userId,
+        ?float $costPrice = null,
     ): void {
         InventoryMovement::create([
             'ingredient_id' => $ingredient->id,
@@ -146,6 +157,7 @@ class InventoryService
             'type' => $type,
             'reason' => $reason,
             'quantity' => $quantity,
+            'cost_price' => $costPrice,
             'notes' => $notes,
             'user_id' => $userId,
         ]);
