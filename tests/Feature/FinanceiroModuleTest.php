@@ -145,6 +145,89 @@ class FinanceiroModuleTest extends TestCase
         $this->assertDatabaseHas('cash_movements', ['id' => $auto->id]);
     }
 
+    public function test_delivered_dine_in_order_creates_cash_entrada(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin);
+
+        $order = $this->createDineInOrder(comanda: 5, total: 40);
+        $order->update(['status' => 'preparing']);
+
+        $this->patch(route('orders.status', $order), ['status' => 'delivered'])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('cash_movements', [
+            'type' => 'entrada',
+            'category' => 'venda_comanda',
+            'order_id' => $order->id,
+            'source' => 'order',
+            'source_key' => 'order:'.$order->id,
+        ]);
+        $this->assertEquals(40.0, (float) CashMovement::query()->sum('amount'));
+    }
+
+    public function test_comanda_close_does_not_double_count_already_recorded_orders(): void
+    {
+        $this->actingAs($this->admin());
+
+        $order = $this->createDineInOrder(comanda: 9, total: 30);
+        $order->update(['status' => 'delivered']);
+
+        app(CashFlowService::class)->recordOrderSale($order);
+
+        $this->assertSame(1, CashMovement::query()->count());
+        $this->assertEquals(30.0, (float) CashMovement::query()->sum('amount'));
+
+        app(CashFlowService::class)->recordComandaClose([
+            'comanda_number' => 9,
+            'total' => 30,
+            'payment_method' => 'pix',
+            'orders' => collect([$order]),
+        ], null);
+
+        $this->assertSame(1, CashMovement::query()->count());
+        $this->assertEquals(30.0, (float) CashMovement::query()->sum('amount'));
+    }
+
+    public function test_sync_sales_backfills_missing_delivered_orders(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin);
+
+        $missing = $this->createDineInOrder(comanda: 2, total: 55);
+        $missing->update(['status' => 'delivered']);
+
+        $already = Order::create([
+            'order_number' => Order::generateOrderNumber(),
+            'type' => 'delivery',
+            'status' => 'delivered',
+            'customer_name' => 'Já no caixa',
+            'customer_phone' => '11988887777',
+            'delivery_fee' => 0,
+            'total' => 20,
+            'payment_method' => 'cash',
+            'user_id' => $admin->id,
+        ]);
+        app(CashFlowService::class)->recordOrderSale($already);
+
+        $this->assertSame(1, CashMovement::query()->count());
+
+        $this->post(route('financeiro.sync-sales'), ['date' => today()->toDateString()])
+            ->assertRedirect(route('financeiro.index', ['date' => today()->toDateString()]));
+
+        $this->assertDatabaseHas('cash_movements', [
+            'order_id' => $missing->id,
+            'source' => 'order',
+            'source_key' => 'order:'.$missing->id,
+        ]);
+        $this->assertEquals(75.0, (float) CashMovement::query()->sum('amount'));
+
+        // Idempotent
+        $this->post(route('financeiro.sync-sales'), ['date' => today()->toDateString()])
+            ->assertRedirect();
+        $this->assertSame(2, CashMovement::query()->count());
+    }
+
     private function admin(): User
     {
         return User::factory()->create([

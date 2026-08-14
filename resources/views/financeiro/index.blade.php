@@ -31,6 +31,17 @@
                             Filtrar
                         </button>
                     </form>
+                    <form method="POST" action="{{ route('financeiro.sync-sales') }}" class="mt-3"
+                        onsubmit="return confirm('Lançar no caixa os pedidos já fechados deste dia que ainda não entraram?');">
+                        @csrf
+                        <input type="hidden" name="date" value="{{ $date }}">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-amber-700">
+                            Sincronizar vendas do dia
+                        </button>
+                        <p class="mt-2 text-xs text-gray-500">
+                            Use se o faturamento do dashboard estiver maior que as entradas do caixa (ex.: pedidos de salão marcados como conta fechada sem fechar a comanda).
+                        </p>
+                    </form>
                 </div>
             </div>
 

@@ -100,11 +100,23 @@ class CashFlowService
             return CashMovement::query()->where('source', 'comanda')->where('source_key', $sourceKey)->first();
         }
 
+        // Evita duplicar se pedidos da comanda já entraram individualmente no caixa.
+        $alreadyRecorded = (float) CashMovement::query()
+            ->where('source', 'order')
+            ->whereIn('order_id', $orderIds)
+            ->sum('amount');
+
+        $amount = round($total - $alreadyRecorded, 2);
+
+        if ($amount <= 0) {
+            return null;
+        }
+
         try {
             return $this->record([
                 'type' => 'entrada',
                 'category' => 'venda_comanda',
-                'amount' => $total,
+                'amount' => $amount,
                 'payment_method' => $paymentMethod,
                 'description' => 'Fechamento da comanda '.str_pad((string) $comandaNumber, 3, '0', STR_PAD_LEFT),
                 'comanda_number' => $comandaNumber,
@@ -115,6 +127,7 @@ class CashFlowService
                 'meta' => [
                     'order_ids' => $orderIds,
                     'orders_count' => count($orderIds),
+                    'already_recorded_orders' => $alreadyRecorded,
                 ],
             ]);
         } catch (\Throwable $exception) {
@@ -139,9 +152,13 @@ class CashFlowService
             return null;
         }
 
-        // Comanda: entrada única no fechamento da comanda (não por pedido).
+        // Se a comanda já foi fechada no caixa, não lança de novo o pedido de salão.
         if ($order->type === 'dine_in' && $order->comanda_number) {
-            return null;
+            $comandaKey = 'comanda:'.($order->created_at?->toDateString() ?? today()->toDateString()).':'.$order->comanda_number;
+
+            if (CashMovement::query()->where('source', 'comanda')->where('source_key', $comandaKey)->exists()) {
+                return CashMovement::query()->where('source', 'comanda')->where('source_key', $comandaKey)->first();
+            }
         }
 
         $sourceKey = 'order:'.$order->id;
@@ -153,12 +170,14 @@ class CashFlowService
         $category = match ($order->type) {
             'delivery' => 'venda_delivery',
             'takeaway' => 'venda_retirada',
+            'dine_in' => 'venda_comanda',
             default => 'venda',
         };
 
         $label = match ($order->type) {
             'delivery' => 'Delivery',
             'takeaway' => 'Retirada',
+            'dine_in' => 'Salão / comanda '.str_pad((string) ($order->comanda_number ?? 0), 3, '0', STR_PAD_LEFT),
             default => 'Pedido',
         };
 
@@ -188,6 +207,58 @@ class CashFlowService
 
             return null;
         }
+    }
+
+    /**
+     * Cria lançamentos faltantes para pedidos já entregues/fechados no dia.
+     *
+     * @return array{created: int, amount: float}
+     */
+    public function syncDeliveredSalesForDate(CarbonInterface $date, ?int $userId = null): array
+    {
+        $date = $date->timezone(config('app.timezone'))->startOfDay();
+
+        $orders = Order::query()
+            ->whereDate('created_at', $date->toDateString())
+            ->where('status', 'delivered')
+            ->orderBy('id')
+            ->get();
+
+        $created = 0;
+        $amount = 0.0;
+
+        foreach ($orders as $order) {
+            if ($this->hasSaleRecorded($order)) {
+                continue;
+            }
+
+            $movement = $this->recordOrderSale($order, $userId);
+
+            if ($movement && $movement->wasRecentlyCreated) {
+                $created++;
+                $amount += (float) $movement->amount;
+            }
+        }
+
+        return [
+            'created' => $created,
+            'amount' => round($amount, 2),
+        ];
+    }
+
+    public function hasSaleRecorded(Order $order): bool
+    {
+        if (CashMovement::query()->where('source', 'order')->where('source_key', 'order:'.$order->id)->exists()) {
+            return true;
+        }
+
+        if ($order->type === 'dine_in' && $order->comanda_number) {
+            $comandaKey = 'comanda:'.($order->created_at?->toDateString() ?? today()->toDateString()).':'.$order->comanda_number;
+
+            return CashMovement::query()->where('source', 'comanda')->where('source_key', $comandaKey)->exists();
+        }
+
+        return false;
     }
 
     public function deleteManual(CashMovement $movement): void
