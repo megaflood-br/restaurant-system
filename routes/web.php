@@ -126,6 +126,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::get('financeiro', [FinanceiroController::class, 'index'])->name('financeiro.index');
         Route::get('financeiro/create', [FinanceiroController::class, 'create'])->name('financeiro.create');
         Route::post('financeiro', [FinanceiroController::class, 'store'])->name('financeiro.store');
+        Route::post('financeiro/sync-sales', [FinanceiroController::class, 'syncSales'])->name('financeiro.sync-sales');
         Route::delete('financeiro/{financeiro}', [FinanceiroController::class, 'destroy'])->name('financeiro.destroy');
 
         Route::post('customers/quick', [CustomerController::class, 'quickStore'])->name('customers.quick-store');

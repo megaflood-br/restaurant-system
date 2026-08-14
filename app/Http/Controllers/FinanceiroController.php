@@ -90,4 +90,25 @@ class FinanceiroController extends Controller
             ->route('financeiro.index', ['date' => $date])
             ->with('success', 'Lançamento manual excluído.');
     }
+
+    public function syncSales(Request $request, CashFlowService $cashFlow): RedirectResponse
+    {
+        $date = $request->filled('date')
+            ? Carbon::parse($request->string('date'))->timezone(config('app.timezone'))
+            : today();
+
+        $result = $cashFlow->syncDeliveredSalesForDate($date, $request->user()->id);
+
+        $message = $result['created'] === 0
+            ? 'Nenhuma venda faltando no caixa para este dia.'
+            : sprintf(
+                'Sincronizadas %d venda(s) — R$ %s adicionados às entradas.',
+                $result['created'],
+                number_format($result['amount'], 2, ',', '.')
+            );
+
+        return redirect()
+            ->route('financeiro.index', ['date' => $date->toDateString()])
+            ->with('success', $message);
+    }
 }
