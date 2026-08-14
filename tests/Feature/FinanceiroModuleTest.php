@@ -228,6 +228,37 @@ class FinanceiroModuleTest extends TestCase
         $this->assertSame(2, CashMovement::query()->count());
     }
 
+    public function test_sync_backfills_dine_in_not_included_in_comanda_close(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin);
+
+        // Pedido já marcado como fechado (fora do fechamento da comanda).
+        $orphan = $this->createDineInOrder(comanda: 1, total: 80);
+        $orphan->update(['status' => 'delivered']);
+
+        // Pedido ainda aberto — entra no fechamento da comanda.
+        $closed = $this->createDineInOrder(comanda: 1, total: 54);
+        app(ComandaBillService::class)->closeComanda(1, 'debit');
+
+        $this->assertDatabaseHas('cash_movements', [
+            'source' => 'comanda',
+            'comanda_number' => 1,
+        ]);
+        $this->assertEquals(54.0, (float) CashMovement::query()->sum('amount'));
+        $this->assertFalse(app(CashFlowService::class)->hasSaleRecorded($orphan->fresh()));
+
+        $this->post(route('financeiro.sync-sales'), ['date' => today()->toDateString()])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('cash_movements', [
+            'source' => 'order',
+            'source_key' => 'order:'.$orphan->id,
+            'amount' => 80,
+        ]);
+        $this->assertEquals(134.0, (float) CashMovement::query()->sum('amount'));
+    }
+
     private function admin(): User
     {
         return User::factory()->create([
