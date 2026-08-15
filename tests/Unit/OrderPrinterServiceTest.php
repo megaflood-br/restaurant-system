@@ -91,6 +91,73 @@ class OrderPrinterServiceTest extends TestCase
         $this->assertStringContainsString('COZINHA', $text);
         $this->assertStringContainsString('Strogonoff', $text);
         $this->assertStringContainsString(str_repeat('=', 48), $text);
+        // Preços ocultos: sem TOTAL na seção de itens
+        $this->assertStringNotContainsString('TOTAL', $text);
+        $this->assertStringContainsString('ENTREGA / PAGAMENTO', $text);
+    }
+
+    public function test_kitchen_receipt_shows_prices_by_default(): void
+    {
+        config([
+            'printing.paper_width' => 32,
+            'printing.restaurant_name' => 'Bella Bistro',
+            'printing.kitchen_hide_prices' => false,
+        ]);
+
+        $category = Category::create([
+            'name' => 'Pratos',
+            'description' => 'Teste',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Strogonoff',
+            'description' => 'Teste',
+            'price' => 25,
+            'is_available' => true,
+        ]);
+
+        $order = Order::create([
+            'order_number' => 'PED-TEST-PRICE',
+            'type' => 'takeaway',
+            'status' => 'pending',
+            'customer_name' => 'Carlos',
+            'customer_phone' => '11999999999',
+            'payment_method' => 'pix',
+            'delivery_fee' => 0,
+            'total' => 25,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'product_name' => 'Strogonoff',
+            'quantity' => 1,
+            'unit_price' => 25,
+            'subtotal' => 25,
+        ]);
+
+        $text = app(OrderPrinterService::class)->buildReceiptText($order->fresh('items'), 'kitchen');
+
+        $this->assertStringContainsString('ITENS / VALOR', $text);
+        $this->assertStringContainsString('R$ 25,00', $text);
+        $this->assertStringContainsString('TOTAL', $text);
+        $this->assertStringContainsString('ENTREGA / PAGAMENTO', $text);
+        $this->assertStringContainsString('Pagamento: PIX', $text);
+
+        $itensPos = strpos($text, 'ITENS / VALOR');
+        $totalPos = strpos($text, 'TOTAL');
+        $entregaPos = strpos($text, 'ENTREGA / PAGAMENTO');
+        $pagamentoPos = strpos($text, 'Pagamento:');
+
+        $this->assertNotFalse($itensPos);
+        $this->assertNotFalse($totalPos);
+        $this->assertNotFalse($entregaPos);
+        $this->assertNotFalse($pagamentoPos);
+        $this->assertTrue($itensPos < $totalPos);
+        $this->assertTrue($totalPos < $entregaPos);
+        $this->assertTrue($entregaPos < $pagamentoPos);
     }
 
     public function test_delivery_receipt_includes_address(): void
@@ -98,7 +165,7 @@ class OrderPrinterServiceTest extends TestCase
         config([
             'printing.paper_width' => 48,
             'printing.restaurant_name' => 'Bella Bistro',
-            'printing.kitchen_hide_prices' => true,
+            'printing.kitchen_hide_prices' => false,
         ]);
 
         $category = Category::create([
@@ -139,10 +206,16 @@ class OrderPrinterServiceTest extends TestCase
         $text = app(OrderPrinterService::class)->buildReceiptText($order->fresh('items'), 'kitchen');
 
         $this->assertStringContainsString('Delivery', $text);
-        $this->assertStringContainsString('ENTREGA', $text);
+        $this->assertStringContainsString('ENTREGA / PAGAMENTO', $text);
         $this->assertStringContainsString('Endereco:', $text);
         $this->assertStringContainsString('Rua das Flores', $text);
         $this->assertStringContainsString('Pagamento: PIX', $text);
+        $this->assertStringContainsString('Taxa entrega', $text);
+        $this->assertStringContainsString('TOTAL', $text);
+
+        $itensPos = strpos($text, 'ITENS / VALOR');
+        $entregaPos = strpos($text, 'ENTREGA / PAGAMENTO');
+        $this->assertTrue($itensPos < $entregaPos);
     }
 
     public function test_delivery_receipt_falls_back_to_customer_address(): void

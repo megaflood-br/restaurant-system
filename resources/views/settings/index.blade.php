@@ -280,6 +280,7 @@
                             <div class="flex items-center gap-2">
                                 <input type="checkbox" name="kitchen_hide_prices" id="kitchen_hide_prices" value="1" @checked(old('kitchen_hide_prices', $printing['kitchen_hide_prices'])) class="rounded border-gray-300 text-indigo-600">
                                 <label for="kitchen_hide_prices" class="text-sm text-gray-700">Ocultar preços na via cozinha</label>
+                                <p class="text-xs text-gray-500 ml-6">Por padrão os preços e o total aparecem. Marque só se a cozinha não deve ver valores.</p>
                             </div>
 
                             <div class="border-t border-gray-200 pt-6">
