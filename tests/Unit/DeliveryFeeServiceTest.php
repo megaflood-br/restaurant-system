@@ -199,4 +199,89 @@ class DeliveryFeeServiceTest extends TestCase
         $this->assertNotNull($distance);
         Http::assertSentCount(1);
     }
+
+    public function test_geocode_strips_reference_and_store_name_from_query(): void
+    {
+        config([
+            'digital_menu.city' => 'São Paulo',
+            'digital_menu.state' => 'SP',
+            'general.delivery_origin_lat' => '-23.5505',
+            'general.delivery_origin_lng' => '-46.6333',
+        ]);
+
+        $queries = [];
+
+        Http::fake(function (Request $request) use (&$queries) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $q = (string) ($query['q'] ?? '');
+            $queries[] = $q;
+
+            $this->assertStringNotContainsStringIgnoringCase('Mercado', $q);
+            $this->assertStringNotContainsStringIgnoringCase('referência', $q);
+            $this->assertStringContainsStringIgnoringCase('Machado', $q);
+
+            return Http::response([
+                [
+                    'lat' => '-23.589',
+                    'lon' => '-46.634',
+                    'display_name' => 'Rua Machado de Assis, Vila Mariana, São Paulo, SP, Brasil',
+                    'address' => [
+                        'road' => 'Rua Machado de Assis',
+                        'suburb' => 'Vila Mariana',
+                        'city' => 'São Paulo',
+                    ],
+                ],
+            ], 200);
+        });
+
+        $distance = app(DeliveryFeeService::class)->distanceFromAddress(
+            'Rua Machado de Assis, 465, Vila Mariana, referência: Mercado X'
+        );
+
+        $this->assertNotNull($distance);
+        $this->assertNotEmpty($queries);
+        $this->assertStringContainsStringIgnoringCase('Vila Mariana', $queries[0]);
+    }
+
+    public function test_geocode_strips_same_line_landmark_without_commas(): void
+    {
+        config([
+            'digital_menu.city' => 'São Paulo',
+            'digital_menu.state' => 'SP',
+            'general.delivery_origin_lat' => '-23.5505',
+            'general.delivery_origin_lng' => '-46.6333',
+        ]);
+
+        $queries = [];
+
+        Http::fake(function (Request $request) use (&$queries) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $q = (string) ($query['q'] ?? '');
+            $queries[] = $q;
+
+            $this->assertStringNotContainsStringIgnoringCase('em frente', $q);
+            $this->assertStringNotContainsStringIgnoringCase('Padaria', $q);
+
+            return Http::response([
+                [
+                    'lat' => '-23.589',
+                    'lon' => '-46.634',
+                    'display_name' => 'Rua Machado de Assis, Vila Mariana, São Paulo, SP, Brasil',
+                    'address' => [
+                        'road' => 'Rua Machado de Assis',
+                        'suburb' => 'Vila Mariana',
+                        'city' => 'São Paulo',
+                    ],
+                ],
+            ], 200);
+        });
+
+        $distance = app(DeliveryFeeService::class)->distanceFromAddress(
+            'Rua Machado de Assis 465 Vila Mariana em frente a Padaria Sol'
+        );
+
+        $this->assertNotNull($distance);
+        $this->assertStringContainsString('465', $queries[0]);
+        $this->assertStringContainsStringIgnoringCase('Vila Mariana', $queries[0]);
+    }
 }

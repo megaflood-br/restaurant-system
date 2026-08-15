@@ -125,6 +125,7 @@ class OpenAiWhatsAppAgentService
             'Se o estado da sessão for "side", e o cliente escolher fritas/legumes, use set_side. Se em vez disso pedir OUTRO prato (ex.: "quero mais um strogonoff"), use add_to_cart.',
             'Se o estado for address/extras/schedule/payment e o cliente pedir mais itens ou nomear um prato, NÃO insista no endereço/pagamento: chame add_to_cart (ou diga para informar o prato) e só depois finalize_items.',
             'NUNCA chame quote_delivery com texto que seja nome de prato (ex.: "strogonoff P"). Isso não é endereço.',
+            'Ao chamar quote_delivery, passe o endereço completo que o cliente escreveu (pode incluir referência/loja na mesma linha — o sistema limpa para calcular a taxa).',
             'Nunca diga que "houve um erro ao adicionar" se a ferramenta não retornou erro real (ok=false).',
             'Se o cliente já tiver endereço cadastrado, após set_extras a ferramenta devolve a confirmação. Se o cliente disser sim/mesmo, chame quote_delivery com "sim". Se disser não/outro, peça o endereço novo e depois quote_delivery.',
             'Depois de quote_delivery/set_schedule, se already_sent_to_customer=true, NÃO chame set_payment e NÃO invente Pix — apenas OK. O PHP já perguntou horário ou forma de pagamento.',
