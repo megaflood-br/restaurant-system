@@ -68,6 +68,9 @@ para pratos completos (ex.: feijoada). A IA responde dúvidas de ingredientes s�
 segunda se domingo estiver desmarcado). Se a sessão tiver `delivery_address`, o pedido é gravado
 como **delivery** mesmo se `order_type` se perder.
 
+**Cardápio por dia:** `send_menu_image` / pedido “cardápio de segunda” usa a imagem daquele dia
+(`whatsapp_agent.menu_images`). Fechado sem dia explícito → cardápio do próximo expediente.
+
 ### Printing (thermal ESC/POS)
 - Cloud VPS cannot reach LAN printers (`192.168.1.100:9100`). Use driver **`agent`**
   plus `scripts/print-agent.php` on a restaurant PC, or **`browser`**. See README § Impressão.

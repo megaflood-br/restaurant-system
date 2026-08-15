@@ -2,7 +2,7 @@
 
 namespace App\Support;
 
-use App\Support\DigitalMenu;
+use Illuminate\Support\Str;
 
 class WeeklyMenuImages
 {
@@ -33,7 +33,12 @@ class WeeklyMenuImages
 
     public static function todayKey(): string
     {
-        return match ((int) now()->dayOfWeekIso) {
+        return self::keyForDate(now());
+    }
+
+    public static function keyForDate(\Carbon\CarbonInterface $date): string
+    {
+        return match ((int) $date->dayOfWeekIso) {
             1 => 'monday',
             2 => 'tuesday',
             3 => 'wednesday',
@@ -42,6 +47,60 @@ class WeeklyMenuImages
             6 => 'saturday',
             default => 'sunday',
         };
+    }
+
+    /**
+     * Resolve a day key from tool args / free text: monday, "segunda", "amanhã", "hoje".
+     * Returns null when no day is mentioned (caller chooses today vs next open day).
+     */
+    public static function dayKeyFromText(?string $text): ?string
+    {
+        if ($text === null) {
+            return null;
+        }
+
+        $normalized = Str::lower(Str::ascii(trim($text)));
+        $normalized = preg_replace('/[^\p{L}\p{N}\s\-]+/u', ' ', $normalized) ?? $normalized;
+        $normalized = trim(preg_replace('/\s+/u', ' ', $normalized) ?? $normalized);
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (in_array($normalized, self::DAYS, true)) {
+            return $normalized;
+        }
+
+        if (preg_match('/\b(hoje|do dia|de hoje)\b/u', $normalized) === 1) {
+            return self::todayKey();
+        }
+
+        if (preg_match('/\bamanh[aã]\b/u', $normalized) === 1) {
+            return self::keyForDate(now()->timezone(config('app.timezone'))->addDay());
+        }
+
+        $map = [
+            'segunda' => 'monday',
+            'terca' => 'tuesday',
+            'quarta' => 'wednesday',
+            'quinta' => 'thursday',
+            'sexta' => 'friday',
+            'sabado' => 'saturday',
+            'domingo' => 'sunday',
+        ];
+
+        foreach ($map as $name => $key) {
+            if (preg_match('/\b'.preg_quote($name, '/').'(?:-feira)?\b/u', $normalized) === 1) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
+    public static function labelFor(string $day): string
+    {
+        return self::labels()[$day] ?? $day;
     }
 
     /** @return array<string, string|null> */
@@ -75,7 +134,12 @@ class WeeklyMenuImages
     /** @param  array<string, string|null>|null  $images */
     public static function pathForDay(?string $day = null, ?array $images = null): ?string
     {
-        $day = $day ?? self::todayKey();
+        if ($day === null || trim($day) === '') {
+            $day = self::todayKey();
+        } else {
+            $day = self::dayKeyFromText($day) ?? self::todayKey();
+        }
+
         $images = self::normalize($images ?? config('whatsapp_agent.menu_images'));
 
         if (filled($images[$day] ?? null)) {

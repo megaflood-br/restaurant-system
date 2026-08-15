@@ -43,5 +43,6 @@ class OpenAiWhatsAppAgentPromptTest extends TestCase
         $this->assertStringNotContainsString('também chame send_menu_image junto com uma mensagem curta de boas-vindas', $system);
         $this->assertStringContainsString('use SOMENTE o campo description', $system);
         $this->assertStringContainsString('requires_side=true', $system);
+        $this->assertStringContainsString('cardápio de segunda', $system);
     }
 }
