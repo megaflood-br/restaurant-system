@@ -206,3 +206,12 @@
         @checked(old('is_available', $product->is_available ?? true)) class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
     <label for="is_available" class="text-sm text-gray-700">Disponível no cardápio</label>
 </div>
+
+<div class="flex items-start gap-2">
+    <input type="checkbox" name="requires_side" id="requires_side" value="1"
+        @checked(old('requires_side', $product->requires_side ?? true)) class="mt-0.5 rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+    <div>
+        <label for="requires_side" class="text-sm text-gray-700">Pede acompanhamento no WhatsApp</label>
+        <p class="text-xs text-gray-500">Desmarque para pratos que já vêm completos (ex.: feijoada). Se o pedido só tiver esses pratos, o bot não pergunta fritas/legumes.</p>
+    </div>
+</div>

@@ -43,6 +43,7 @@ class ProductController extends Controller
         $validated = $this->validateProduct($request);
 
         $validated['is_available'] = $request->boolean('is_available', true);
+        $validated['requires_side'] = $request->boolean('requires_side', true);
 
         if ($request->boolean('has_variants')) {
             $validated['recipe_id'] = null;
@@ -89,6 +90,7 @@ class ProductController extends Controller
         $validated = $this->validateProduct($request, updating: true);
 
         $validated['is_available'] = $request->boolean('is_available');
+        $validated['requires_side'] = $request->boolean('requires_side');
 
         if ($request->boolean('has_variants')) {
             $validated['recipe_id'] = null;
@@ -245,6 +247,7 @@ class ProductController extends Controller
             'description' => ['nullable', 'string'],
             'price' => [Rule::excludeIf($hasVariants), 'required', 'numeric', 'min:0'],
             'is_available' => ['boolean'],
+            'requires_side' => ['boolean'],
             'has_variants' => ['boolean'],
             'variants' => [Rule::requiredIf($hasVariants), 'array', 'min:1'],
             'variants.*.id' => ['nullable', 'integer'],

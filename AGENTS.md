@@ -58,6 +58,11 @@ alcançar a URL da Evolution (rede/firewall); o celular escaneia o QR normalment
 Ao fechar a comanda, um job atrasado é enfileirado — precisa de `php artisan queue:listen`
 (ou `composer dev`). Só envia se a comanda tiver cliente com telefone.
 
+**Acompanhamento / descrição do prato:** em Produtos, o checkbox *Pede acompanhamento no
+WhatsApp* (`requires_side`, default true) controla se fritas/legumes entram no fluxo. Desmarque
+para pratos completos (ex.: feijoada). A IA responde dúvidas de ingredientes só pela
+**Descrição** do produto (`get_menu` / `menuSnapshot`) — não lê a ficha técnica/estoque da receita.
+
 ### Printing (thermal ESC/POS)
 - Cloud VPS cannot reach LAN printers (`192.168.1.100:9100`). Use driver **`agent`**
   plus `scripts/print-agent.php` on a restaurant PC, or **`browser`**. See README § Impressão.
