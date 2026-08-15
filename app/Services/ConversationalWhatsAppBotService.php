@@ -59,7 +59,23 @@ class ConversationalWhatsAppBotService
         }
 
         if (WhatsAppMenuIntent::matches($command)) {
+            $session = $this->getSession($phone);
             $this->sendMenuImage($phone, $customer);
+
+            // Pediu cardápio no meio do checkout → volta a aceitar itens.
+            if ($this->isCheckoutInterruptibleState($session['state'] ?? null) && ($session['cart'] ?? []) !== []) {
+                $this->setSession($phone, array_merge($session, [
+                    'state' => 'ordering',
+                    'saved_address_prompt' => false,
+                    'delivery_fee' => null,
+                    'delivery_address' => null,
+                    'delivery_area_id' => null,
+                    'distance_km' => null,
+                    'order_type' => null,
+                    'scheduled_for' => null,
+                    'scheduled_label' => null,
+                ]));
+            }
 
             return;
         }
@@ -78,6 +94,13 @@ class ConversationalWhatsAppBotService
         }
 
         $session = $this->getSession($phone);
+
+        // Cliente pediu mais itens no meio do checkout (endereço/extras/etc.): voltar ao carrinho.
+        if ($this->shouldResumeOrderingForMoreItems($session, $text)) {
+            $this->resumeOrderingForMoreItems($phone, $text, $customer);
+
+            return;
+        }
 
         // Acompanhamento (fritas/legumes): tratar antes da OpenAI para evitar add_to_cart errado.
         if (($session['state'] ?? '') === 'side' && SideOptions::resolve($text) !== null) {
@@ -359,8 +382,10 @@ class ConversationalWhatsAppBotService
 
     private function askSideOrExtras(string $phone, ?Customer $customer): void
     {
-        if (SideOptions::enabled()) {
-            $this->setSession($phone, array_merge($this->getSession($phone), ['state' => 'side']));
+        $session = $this->getSession($phone);
+
+        if (SideOptions::enabled() && blank($session['side'] ?? null)) {
+            $this->setSession($phone, array_merge($session, ['state' => 'side']));
             $this->replyText($phone, $this->render($this->message('side_message'), [
                 'options' => SideOptions::listForMessage(),
             ]), $customer);
@@ -368,8 +393,14 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        $this->setSession($phone, array_merge($this->getSession($phone), ['state' => 'extras']));
-        $this->replyText($phone, $this->message('extras_message'), $customer);
+        if (! ($session['extras_completed'] ?? false)) {
+            $this->setSession($phone, array_merge($session, ['state' => 'extras']));
+            $this->replyText($phone, $this->message('extras_message'), $customer);
+
+            return;
+        }
+
+        $this->askForAddress($phone, $customer);
     }
 
     private function handleSide(string $phone, string $text, ?Customer $customer): void
@@ -400,6 +431,7 @@ class ConversationalWhatsAppBotService
 
         $this->setSession($phone, array_merge($session, [
             'extras_notes' => trim($text),
+            'extras_completed' => true,
         ]));
 
         $this->askForAddress($phone, $customer);
@@ -1039,6 +1071,8 @@ class ConversationalWhatsAppBotService
 
         $patterns = [
             '/^(me\s+)?(vê|ve|vei|manda|quero|gostaria\s+de|preciso\s+de|pode\s+ser|vou\s+querer|vou\s+de|desejo)\s+/iu',
+            '/^(também|tambem)\s+(quero|gostaria\s+de|manda|pede)\s+/iu',
+            '/^(quero\s+mais|mais\s+um|mais\s+uma|mais)\s+/iu',
             '/^(um|uma|uns|umas)\s+/iu',
             '/^(de|do|da|dos|das)\s+/iu',
         ];
@@ -1571,6 +1605,121 @@ class ConversationalWhatsAppBotService
         return false;
     }
 
+    /** @param  array<string, mixed>  $session */
+    private function shouldResumeOrderingForMoreItems(array $session, string $text): bool
+    {
+        if (! $this->isCheckoutInterruptibleState($session['state'] ?? null)) {
+            return false;
+        }
+
+        // Confirmação explícita de endereço salvo não é "quero mais itens".
+        if (($session['state'] ?? '') === 'address' && ($session['saved_address_prompt'] ?? false) === true) {
+            $command = mb_strtolower(trim($text));
+
+            if ($this->confirmsSavedAddress($command)
+                || $this->declinesSavedAddress($command)
+                || $this->matchesIntent($command, ['retirada', 'retirar', 'balcão', 'balcao', 'buscar', 'pegar'])) {
+                return false;
+            }
+        }
+
+        // Resposta de pagamento válida não é interrupção.
+        if (($session['state'] ?? '') === 'payment' && PaymentMethod::detect($text) !== null) {
+            return false;
+        }
+
+        // Resposta válida de acompanhamento não é interrupção.
+        if (($session['state'] ?? '') === 'side' && SideOptions::resolve($text) !== null) {
+            return false;
+        }
+
+        if ($this->parseProductsFromText($text) !== []) {
+            return true;
+        }
+
+        return $this->wantsMoreItemsWithoutNamingThem($text);
+    }
+
+    private function isCheckoutInterruptibleState(?string $state): bool
+    {
+        return in_array($state, ['side', 'extras', 'address', 'schedule', 'payment'], true);
+    }
+
+    private function wantsMoreItemsWithoutNamingThem(string $text): bool
+    {
+        $command = mb_strtolower(trim($text));
+
+        if ($command === '') {
+            return false;
+        }
+
+        $phrases = [
+            'quero mais',
+            'mais um',
+            'mais uma',
+            'mais itens',
+            'mais item',
+            'adicionar',
+            'incluir',
+            'também quero',
+            'tambem quero',
+            'e mais',
+            'colocar mais',
+            'pedir mais',
+            'mudar o pedido',
+            'alterar o pedido',
+            'voltar pro cardapio',
+            'voltar pro cardápio',
+            'voltar ao cardapio',
+            'voltar ao cardápio',
+        ];
+
+        foreach ($phrases as $phrase) {
+            if ($command === $phrase || str_starts_with($command, $phrase.' ') || str_contains($command, ' '.$phrase)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function resumeOrderingForMoreItems(string $phone, string $text, ?Customer $customer): void
+    {
+        $session = $this->getSession($phone);
+
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'ordering',
+            'saved_address_prompt' => false,
+            'delivery_fee' => null,
+            'delivery_address' => null,
+            'delivery_area_id' => null,
+            'distance_km' => null,
+            'order_type' => null,
+            'scheduled_for' => null,
+            'scheduled_label' => null,
+            'payment_method' => null,
+        ]));
+
+        if ($this->parseProductsFromText($text) === []) {
+            $this->replyText(
+                $phone,
+                'Claro! Me diga o que mais você quer incluir. Quando terminar, digite *pronto*.',
+                $customer
+            );
+
+            return;
+        }
+
+        $this->handleOrdering($phone, $text, $customer);
+    }
+
+    /** Usado pelo agente OpenAI para não tratar prato como endereço. */
+    public function messageLooksLikeMenuItems(string $text): bool
+    {
+        return $this->parseProductsFromText($text) !== []
+            || $this->wantsMoreItemsWithoutNamingThem($text);
+    }
+
     public function replyToCustomer(string $phone, string $message, ?string $pushName = null): void
     {
         $this->replyText($phone, $message, $this->resolveCustomer($phone, $pushName));
@@ -1805,7 +1954,7 @@ class ConversationalWhatsAppBotService
             return ['ok' => false, 'error' => 'Carrinho vazio.'];
         }
 
-        if (SideOptions::enabled()) {
+        if (SideOptions::enabled() && blank($session['side'] ?? null)) {
             $this->setSession($phone, array_merge($session, ['state' => 'side']));
             $message = $this->render($this->message('side_message'), [
                 'options' => SideOptions::listForMessage(),
@@ -1814,9 +1963,25 @@ class ConversationalWhatsAppBotService
             return ['ok' => true, 'next' => 'side', 'message' => $message, 'side_options' => SideOptions::all()];
         }
 
-        $this->setSession($phone, array_merge($session, ['state' => 'extras']));
+        if (! ($session['extras_completed'] ?? false)) {
+            $this->setSession($phone, array_merge($session, ['state' => 'extras']));
 
-        return ['ok' => true, 'next' => 'extras', 'message' => $this->message('extras_message')];
+            return ['ok' => true, 'next' => 'extras', 'message' => $this->message('extras_message')];
+        }
+
+        $customer = $this->resolveCustomer($phone, $pushName);
+        $this->askForAddress($phone, $customer);
+        $session = $this->getSession($phone);
+
+        return [
+            'ok' => true,
+            'next' => 'address',
+            'message' => ($session['saved_address_prompt'] ?? false)
+                ? $this->render($this->message('address_confirm_message'), [
+                    'address' => (string) ($session['saved_address'] ?? ''),
+                ])
+                : $this->message('address_message'),
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -1860,6 +2025,7 @@ class ConversationalWhatsAppBotService
 
         $payload = [
             'extras_notes' => trim($notes),
+            'extras_completed' => true,
             'state' => 'address',
         ];
 
