@@ -3,9 +3,8 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
-use App\Models\Category;
-use App\Models\Product;
 use App\Services\CartService;
+use App\Support\MenuCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,15 +18,8 @@ class MenuController extends Controller
             $cart->setContext((int) $request->query('comanda'), $request->query('tipo', 'dine_in'));
         }
 
-        $categories = Category::query()
-            ->where('is_active', true)
-            ->with(['products' => fn ($query) => $query->where('is_available', true)->withMenuRelations()->orderBy('name')])
-            ->orderBy('name')
-            ->get()
-            ->filter(fn ($category) => $category->products->isNotEmpty());
-
         return view('public.menu', [
-            'categories' => $categories,
+            'categories' => MenuCatalog::categories(),
             'cartCount' => $cart->count(),
             'cartTotal' => $cart->total(),
             'comandaNumber' => $cart->all()['comanda_number'],
@@ -58,6 +50,7 @@ class MenuController extends Controller
 
         $product = \App\Support\ProductVariants::loadProduct((int) $validated['product_id']);
         \App\Support\ProductSellable::resolve($product, $validated['variant_id'] ?? null);
+        \App\Support\ProductSellable::assertAvailableToday($product);
 
         $cart->add(
             (int) $validated['product_id'],

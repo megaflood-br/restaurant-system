@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Category;
+use App\Support\WeeklyMenuImages;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class CategoryController extends Controller
@@ -21,18 +23,14 @@ class CategoryController extends Controller
 
     public function create(): View
     {
-        return view('categories.create');
+        return view('categories.create', [
+            'weekdayLabels' => WeeklyMenuImages::labels(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
-        ]);
-
-        $validated['is_active'] = $request->boolean('is_active');
+        $validated = $this->validatedCategory($request);
 
         Category::create($validated);
 
@@ -41,18 +39,15 @@ class CategoryController extends Controller
 
     public function edit(Category $category): View
     {
-        return view('categories.edit', compact('category'));
+        return view('categories.edit', [
+            'category' => $category,
+            'weekdayLabels' => WeeklyMenuImages::labels(),
+        ]);
     }
 
     public function update(Request $request, Category $category): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
-        ]);
-
-        $validated['is_active'] = $request->boolean('is_active');
+        $validated = $this->validatedCategory($request);
 
         $category->update($validated);
 
@@ -88,5 +83,24 @@ class CategoryController extends Controller
         }
 
         return $this->bulkResultRedirect('categories.index', $deleted, $skipped, 'categoria', 'categorias');
+    }
+
+    /** @return array{name: string, description: ?string, is_active: bool, available_days: ?array} */
+    private function validatedCategory(Request $request): array
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'is_active' => ['boolean'],
+            'available_days' => ['nullable', 'array'],
+            'available_days.*' => ['string', Rule::in(WeeklyMenuImages::DAYS)],
+        ]);
+
+        return [
+            'name' => $validated['name'],
+            'description' => $validated['description'] ?? null,
+            'is_active' => $request->boolean('is_active'),
+            'available_days' => Category::normalizeDaysInput($validated['available_days'] ?? null),
+        ];
     }
 }

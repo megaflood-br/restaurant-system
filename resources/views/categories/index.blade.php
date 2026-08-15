@@ -21,6 +21,7 @@
                                     <tr>
                                         <x-bulk-select-all />
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dias</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produtos</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
@@ -36,6 +37,7 @@
                                                     <p class="text-sm text-gray-500">{{ Str::limit($category->description, 60) }}</p>
                                                 @endif
                                             </td>
+                                            <td class="px-4 py-3 text-sm text-gray-700">{{ $category->availableDaysLabel() }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-700">{{ $category->products_count }}</td>
                                             <td class="px-4 py-3">
                                                 <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $category->is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }}">
@@ -53,7 +55,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="5" class="px-4 py-8 text-center text-gray-500">Nenhuma categoria cadastrada.</td>
+                                            <td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhuma categoria cadastrada.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
