@@ -797,7 +797,7 @@ class ConversationalWhatsAppBotService
 
             $order = DB::transaction(function () use ($cart, $customer, $phone, $session, $awaitingPixProof) {
                 $deliveryFee = (float) ($session['delivery_fee'] ?? 0);
-                $orderType = $session['order_type'] ?? 'takeaway';
+                $orderType = $this->resolveOrderType($session);
                 $notes = $this->buildOrderNotes($session);
                 if ($awaitingPixProof) {
                     $notes = trim($notes."\nAguardando comprovante PIX");
@@ -808,8 +808,8 @@ class ConversationalWhatsAppBotService
                     'order_number' => Order::generateOrderNumber(),
                     'customer_id' => $customer?->id,
                     'type' => $orderType,
-                    'delivery_area_id' => $session['delivery_area_id'] ?? null,
-                    'delivery_fee' => $deliveryFee,
+                    'delivery_area_id' => $orderType === 'delivery' ? ($session['delivery_area_id'] ?? null) : null,
+                    'delivery_fee' => $orderType === 'delivery' ? $deliveryFee : 0,
                     'delivery_address' => $orderType === 'delivery'
                         ? ($session['delivery_address'] ?? null)
                         : null,
@@ -836,7 +836,7 @@ class ConversationalWhatsAppBotService
                     $itemsTotal += (float) $attrs['subtotal'];
                 }
 
-                $order->update(['total' => $itemsTotal + $deliveryFee]);
+                $order->update(['total' => $itemsTotal + (float) $order->delivery_fee]);
 
                 if ($customer && $orderType === 'delivery' && filled($session['delivery_address'] ?? null)) {
                     $customer->update(['address' => $session['delivery_address']]);
@@ -849,6 +849,8 @@ class ConversationalWhatsAppBotService
                 'phone' => $phone,
                 'order_id' => $order->id,
                 'order_number' => $order->order_number,
+                'order_type' => $order->type,
+                'delivery_address' => $order->delivery_address,
                 'payment_method' => $order->payment_method,
                 'awaiting_pix_proof' => $awaitingPixProof,
             ]);
@@ -1379,7 +1381,7 @@ class ConversationalWhatsAppBotService
         $cart = $session['cart'] ?? [];
         $lines = ['*Pedido:*', $this->cartSummary($cart, detailed: true), ''];
 
-        $orderType = $session['order_type'] ?? 'takeaway';
+        $orderType = $this->resolveOrderType($session);
 
         if ($orderType === 'delivery') {
             $lines[] = '*Entrega:* '.($session['delivery_address'] ?? '—');
@@ -1419,7 +1421,7 @@ class ConversationalWhatsAppBotService
             $parts[] = 'Obs: '.$session['extras_notes'];
         }
 
-        if (($session['order_type'] ?? '') === 'takeaway') {
+        if ($this->resolveOrderType($session) === 'takeaway') {
             $parts[] = 'Retirada no balcão';
         }
 
@@ -1428,6 +1430,21 @@ class ConversationalWhatsAppBotService
         }
 
         return implode(' | ', $parts);
+    }
+
+    /**
+     * Prefer an explicit order_type, but never drop a quoted delivery address
+     * into takeaway just because the session lost order_type.
+     */
+    private function resolveOrderType(array $session): string
+    {
+        if (filled($session['delivery_address'] ?? null)) {
+            return 'delivery';
+        }
+
+        $type = $session['order_type'] ?? null;
+
+        return $type === 'delivery' || $type === 'takeaway' ? $type : 'takeaway';
     }
 
     private function cartSummary(array $cart, bool $detailed = false): string
@@ -2192,7 +2209,7 @@ class ConversationalWhatsAppBotService
 
             return [
                 'ok' => true,
-                'order_type' => $session['order_type'] ?? 'takeaway',
+                'order_type' => $this->resolveOrderType($session),
                 'next' => 'schedule',
                 'message' => $message,
                 'already_sent_to_customer' => $sendToCustomer,
@@ -2209,11 +2226,14 @@ class ConversationalWhatsAppBotService
             $this->sendPaymentSummary($phone, $customer);
         }
 
+        $session = $this->getSession($phone);
+
         return [
             'ok' => true,
-            'order_type' => $session['order_type'] ?? 'takeaway',
+            'order_type' => $this->resolveOrderType($session),
             'next' => 'payment',
-            'summary' => $this->buildSummary($this->getSession($phone)),
+            'message' => implode("\n\n", $parts),
+            'summary' => $this->buildSummary($session),
             'already_sent_to_customer' => $sendToCustomer,
             'ask_payment_method' => true,
         ];
@@ -2279,6 +2299,18 @@ class ConversationalWhatsAppBotService
                 'error' => 'Carrinho vazio — não posso finalizar. Peça os itens de novo com add_to_cart.',
             ];
         }
+
+        if (! in_array($session['order_type'] ?? null, ['delivery', 'takeaway'], true)
+            && blank($session['delivery_address'] ?? null)) {
+            return [
+                'ok' => false,
+                'error' => 'Ainda não sei se é *entrega* ou *retirada*. Peça o endereço ou *retirada* com quote_delivery antes do pagamento.',
+                'next' => 'address',
+            ];
+        }
+
+        // Normalize inferred delivery before createOrder.
+        $session['order_type'] = $this->resolveOrderType($session);
 
         if ($method === 'pix') {
             $pixKey = config('whatsapp_agent.pix_key');

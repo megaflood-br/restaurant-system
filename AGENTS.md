@@ -63,6 +63,11 @@ WhatsApp* (`requires_side`, default true) controla se fritas/legumes entram no f
 para pratos completos (ex.: feijoada). A IA responde dúvidas de ingredientes só pela
 **Descrição** do produto (`get_menu` / `menuSnapshot`) — não lê a ficha técnica/estoque da receita.
 
+**Dias de funcionamento / tipo do pedido:** Configurações → Geral → *Dias de funcionamento*
+(`general.open_days`, default seg–sáb). WhatsApp agenda o próximo dia aberto (sábado à noite →
+segunda se domingo estiver desmarcado). Se a sessão tiver `delivery_address`, o pedido é gravado
+como **delivery** mesmo se `order_type` se perder.
+
 ### Printing (thermal ESC/POS)
 - Cloud VPS cannot reach LAN printers (`192.168.1.100:9100`). Use driver **`agent`**
   plus `scripts/print-agent.php` on a restaurant PC, or **`browser`**. See README § Impressão.

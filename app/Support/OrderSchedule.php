@@ -30,7 +30,7 @@ class OrderSchedule
                     'datetime' => null,
                     'error' => 'No momento estamos *fechados*. Não dá para entregar agora. '
                         ."Abrimos *{$status['next_open_day_label']}* às *{$status['opening_label']}*. "
-                        .'Informe um horário nesse período (ex.: *amanhã às 11h*).',
+                        .'Informe um horário nesse período (ex.: *'.$status['next_open_day_label'].' às 11h*).',
                     'label' => null,
                 ];
             }
@@ -43,7 +43,7 @@ class OrderSchedule
         if ($parsed === null) {
             return [
                 'datetime' => null,
-                'error' => 'Não entendi o horário. Ex.: *agora*, *12:30*, *hoje às 11h* ou *amanhã ao meio-dia*.',
+                'error' => 'Não entendi o horário. Ex.: *agora*, *12:30*, *hoje às 11h*, *amanhã ao meio-dia* ou *segunda às 12h*.',
                 'label' => null,
             ];
         }
@@ -74,6 +74,12 @@ class OrderSchedule
             return "amanhã às {$time}";
         }
 
+        $weekday = Str::lower(WeeklyMenuImages::labels()[OpeningHours::dayKey($datetime)] ?? '');
+
+        if ($weekday !== '') {
+            return "{$weekday} às {$time}";
+        }
+
         return $datetime->format('d/m/Y')." às {$time}";
     }
 
@@ -91,7 +97,7 @@ class OrderSchedule
         $text = mb_strtolower(trim($text));
 
         return (bool) preg_match(
-            '/\b(agendar|agendamento|programar|marcar|para\s+(hoje|amanhã|amanha|depois|mais\s+tarde)|às\s+\d|as\s+\d|\d{1,2}[:h]\d{0,2}|meio[\s-]?dia|daqui\s+\d+\s+(hora|minuto))\b/u',
+            '/\b(agendar|agendamento|programar|marcar|para\s+(hoje|amanhã|amanha|segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo|depois|mais\s+tarde)|às\s+\d|as\s+\d|\d{1,2}[:h]\d{0,2}|meio[\s-]?dia|daqui\s+\d+\s+(hora|minuto))\b/u',
             $text
         );
     }
@@ -132,6 +138,9 @@ class OrderSchedule
         } elseif (preg_match('/\bhoje\b/u', $text)) {
             $day = $reference->copy();
             $explicitDay = true;
+        } elseif (($weekdayOffset = self::parseWeekdayOffset($text, $reference)) !== null) {
+            $day = $reference->copy()->startOfDay()->addDays($weekdayOffset);
+            $explicitDay = true;
         }
 
         if (preg_match('/\bmeio[\s-]?dia\b/u', $text)) {
@@ -168,28 +177,63 @@ class OrderSchedule
         return null;
     }
 
+    /** Days from reference startOfDay until the named weekday (1–7). */
+    private static function parseWeekdayOffset(string $text, Carbon $reference): ?int
+    {
+        $map = [
+            'segunda' => 1,
+            'terca' => 2,
+            'terça' => 2,
+            'quarta' => 3,
+            'quinta' => 4,
+            'sexta' => 5,
+            'sabado' => 6,
+            'sábado' => 6,
+            'domingo' => 7,
+        ];
+
+        foreach ($map as $name => $iso) {
+            if (preg_match('/\b'.preg_quote($name, '/').'(?:-feira)?\b/u', $text) !== 1) {
+                continue;
+            }
+
+            $currentIso = (int) $reference->dayOfWeekIso;
+            $offset = ($iso - $currentIso + 7) % 7;
+
+            return $offset === 0 ? 7 : $offset;
+        }
+
+        return null;
+    }
+
     private static function rollForwardIfPast(Carbon $parsed, Carbon $reference, bool $explicitDay): Carbon
     {
+        $candidate = $parsed->copy();
+
         if ($explicitDay) {
-            return $parsed;
+            // Keep the chosen calendar day; validateDateTime rejects closed weekdays.
+            return $candidate;
         }
 
-        // Horário já passou hoje → amanhã.
-        if ($parsed->lessThanOrEqualTo($reference)) {
-            return $parsed->copy()->addDay();
+        if ($candidate->lessThanOrEqualTo($reference)) {
+            $candidate->addDay();
         }
 
-        // Fechados e o próximo expediente é amanhã: "12hs" sem "hoje" = amanhã 12h
-        // (mesmo que o relógio ainda não tenha chegado nesse horário hoje).
-        if (! OpeningHours::isOpenForWhatsApp($reference) && $parsed->isSameDay($reference)) {
-            $status = OpeningHours::forWhatsApp($reference);
+        // Fechados: horário sem "hoje/amanhã" deve ir para o próximo dia de expediente.
+        if (! OpeningHours::isOpenForWhatsApp($reference) && $candidate->isSameDay($reference)) {
+            $next = OpeningHours::nextOpenDate($reference);
+            $candidate->setDate($next->year, $next->month, $next->day);
+        }
 
-            if (($status['next_open_day'] ?? '') === 'tomorrow') {
-                return $parsed->copy()->addDay();
+        // Pula dias em que o restaurante não abre (ex.: domingo).
+        for ($i = 0; $i < 8; $i++) {
+            if (OpeningHours::isOpenOnDate($candidate)) {
+                break;
             }
+            $candidate->addDay();
         }
 
-        return $parsed;
+        return $candidate;
     }
 
     private static function buildTime(Carbon $day, int $hour, int $minute): Carbon
@@ -202,7 +246,7 @@ class OrderSchedule
 
     /**
      * "Somente hoje" (max_days=0) não pode bloquear o próximo expediente
-     * quando já estamos fechados e o bot pediu para agendar amanhã.
+     * quando já estamos fechados e o bot pediu para agendar.
      */
     private static function effectiveMaxDays(Carbon $reference): int
     {
@@ -212,8 +256,7 @@ class OrderSchedule
             return $configured;
         }
 
-        $status = OpeningHours::forWhatsApp($reference);
-        $neededForNextOpen = ($status['next_open_day'] ?? '') === 'tomorrow' ? 1 : 0;
+        $neededForNextOpen = OpeningHours::daysUntilNextOpen($reference);
 
         return max($configured, $neededForNextOpen);
     }
@@ -222,6 +265,18 @@ class OrderSchedule
     {
         $minMinutes = max(15, (int) config('whatsapp_agent.schedule_min_minutes', 30));
         $maxDays = self::effectiveMaxDays($reference);
+        $status = OpeningHours::forWhatsApp($reference);
+        $hintDay = $status['next_open_day_label'];
+
+        if (! OpeningHours::isOpenOnDate($datetime)) {
+            $labels = WeeklyMenuImages::labels();
+            $dayName = Str::lower($labels[OpeningHours::dayKey($datetime)] ?? 'esse dia');
+
+            return "Não abrimos *{$dayName}*. Pode agendar para *{$hintDay}* "
+                ."entre *{$status['opening_label']}* e *{$status['closing_label']}* "
+                ."(ex.: *{$hintDay} às {$status['opening_label']}*).";
+        }
+
         $hours = OpeningHours::forWhatsApp($datetime);
 
         [$oh, $om] = array_pad(explode(':', $hours['opening']), 2, '0');
@@ -230,9 +285,6 @@ class OrderSchedule
         $closeAt = $datetime->copy()->setTime((int) $ch, (int) $cm, 0);
 
         if ($datetime->lessThan($openAt) || $datetime->greaterThanOrEqualTo($closeAt)) {
-            $status = OpeningHours::forWhatsApp($reference);
-            $hintDay = ($status['next_open_day'] ?? '') === 'tomorrow' ? 'amanhã' : 'hoje';
-
             return "Nesse dia funcionamos das *{$hours['opening_label']}* às *{$hours['closing_label']}*. "
                 ."Escolha um horário nesse intervalo (ex.: *{$hintDay} às {$hours['opening_label']}*).";
         }
@@ -240,7 +292,7 @@ class OrderSchedule
         if ($datetime->lessThan($reference->copy()->addMinutes($minMinutes))) {
             $hint = OpeningHours::isOpenForWhatsApp($reference)
                 ? ' Escolha um horário mais tarde ou digite *agora*.'
-                : ' Escolha um horário no próximo expediente (ex.: *amanhã às 11h*).';
+                : " Escolha um horário no próximo expediente (ex.: *{$hintDay} às 11h*).";
 
             return "Preciso de pelo menos {$minMinutes} minutos de antecedência.".$hint;
         }
