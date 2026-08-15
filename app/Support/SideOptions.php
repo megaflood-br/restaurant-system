@@ -17,6 +17,29 @@ class SideOptions
         return self::all() !== [];
     }
 
+    /**
+     * True if at least one cart product asks for acompanhamento.
+     *
+     * @param  list<array{product_id?: int}>  $cart
+     */
+    public static function neededForCart(array $cart): bool
+    {
+        if (! self::enabled() || $cart === []) {
+            return false;
+        }
+
+        $ids = collect($cart)->pluck('product_id')->filter()->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return false;
+        }
+
+        return \App\Models\Product::query()
+            ->whereIn('id', $ids)
+            ->where('requires_side', true)
+            ->exists();
+    }
+
     /** @return list<string> */
     public static function normalize(mixed $options): array
     {

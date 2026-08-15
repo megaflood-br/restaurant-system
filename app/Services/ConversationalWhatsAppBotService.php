@@ -384,7 +384,7 @@ class ConversationalWhatsAppBotService
     {
         $session = $this->getSession($phone);
 
-        if (SideOptions::enabled() && blank($session['side'] ?? null)) {
+        if (SideOptions::neededForCart($session['cart'] ?? []) && blank($session['side'] ?? null)) {
             $this->setSession($phone, array_merge($session, ['state' => 'side']));
             $this->replyText($phone, $this->render($this->message('side_message'), [
                 'options' => SideOptions::listForMessage(),
@@ -1788,10 +1788,12 @@ class ConversationalWhatsAppBotService
             $entry = [
                 'id' => $product->id,
                 'name' => $product->name,
+                'description' => filled($product->description) ? (string) $product->description : null,
                 'category' => $product->category->name,
                 'price' => (float) $product->displayPrice(),
                 'price_label' => $product->priceLabel(),
                 'has_variants' => $product->hasVariants(),
+                'requires_side' => (bool) $product->requires_side,
             ];
 
             if ($product->hasVariants()) {
@@ -1954,7 +1956,7 @@ class ConversationalWhatsAppBotService
             return ['ok' => false, 'error' => 'Carrinho vazio.'];
         }
 
-        if (SideOptions::enabled() && blank($session['side'] ?? null)) {
+        if (SideOptions::neededForCart($session['cart'] ?? []) && blank($session['side'] ?? null)) {
             $this->setSession($phone, array_merge($session, ['state' => 'side']));
             $message = $this->render($this->message('side_message'), [
                 'options' => SideOptions::listForMessage(),

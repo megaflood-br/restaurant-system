@@ -513,6 +513,76 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         );
     }
 
+    public function test_finalize_items_skips_side_when_product_does_not_require_it(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $category = Category::create([
+            'name' => 'Pratos',
+            'description' => 'Teste',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Feijoada',
+            'description' => 'Feijão preto, carne seca, linguiça e farofa',
+            'price' => 45,
+            'is_available' => true,
+            'requires_side' => false,
+        ]);
+
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->zeroOrMoreTimes();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000430';
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $method->invoke($bot, $phone, [
+            'state' => 'ordering',
+            'cart' => [[
+                'product_id' => $product->id,
+                'quantity' => 1,
+                'unit_price' => 45,
+            ]],
+        ]);
+
+        $result = $bot->toolFinalizeItems($phone, 'Carlos');
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('extras', $result['next']);
+        $this->assertArrayNotHasKey('side_options', $result);
+    }
+
+    public function test_menu_snapshot_includes_description_and_requires_side(): void
+    {
+        $category = Category::create([
+            'name' => 'Pratos',
+            'description' => 'Teste',
+            'is_active' => true,
+        ]);
+
+        Product::create([
+            'category_id' => $category->id,
+            'name' => 'Feijoada',
+            'description' => 'Feijão preto com carnes',
+            'price' => 45,
+            'is_available' => true,
+            'requires_side' => false,
+        ]);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $menu = $bot->menuSnapshot();
+
+        $this->assertNotEmpty($menu);
+        $item = collect($menu)->firstWhere('name', 'Feijoada');
+        $this->assertNotNull($item);
+        $this->assertSame('Feijão preto com carnes', $item['description']);
+        $this->assertFalse($item['requires_side']);
+    }
+
     private function createStrogonoff(): Product
     {
         $category = Category::create([

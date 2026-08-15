@@ -2,12 +2,17 @@
 
 namespace Tests\Unit;
 
+use App\Models\Category;
+use App\Models\Product;
 use App\Support\SideOptions;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class SideOptionsTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_it_lists_default_side_options(): void
     {
         config(['whatsapp_agent.side_options' => ['Batata frita', 'Legumes']]);
@@ -31,6 +36,59 @@ class SideOptionsTest extends TestCase
         config(['whatsapp_agent.side_options' => ['Batata frita', 'Legumes']]);
 
         $this->assertNull(SideOptions::resolve('arroz'));
+    }
+
+    public function test_needed_for_cart_skips_products_without_side(): void
+    {
+        config(['whatsapp_agent.side_options' => ['Batata frita', 'Legumes']]);
+
+        $category = Category::create([
+            'name' => 'Pratos',
+            'is_active' => true,
+        ]);
+
+        $feijoada = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Feijoada',
+            'price' => 45,
+            'is_available' => true,
+            'requires_side' => false,
+        ]);
+
+        $this->assertFalse(SideOptions::neededForCart([
+            ['product_id' => $feijoada->id, 'quantity' => 1],
+        ]));
+    }
+
+    public function test_needed_for_cart_true_when_any_product_requires_side(): void
+    {
+        config(['whatsapp_agent.side_options' => ['Batata frita', 'Legumes']]);
+
+        $category = Category::create([
+            'name' => 'Pratos',
+            'is_active' => true,
+        ]);
+
+        $feijoada = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Feijoada',
+            'price' => 45,
+            'is_available' => true,
+            'requires_side' => false,
+        ]);
+
+        $strogonoff = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Strogonoff',
+            'price' => 30,
+            'is_available' => true,
+            'requires_side' => true,
+        ]);
+
+        $this->assertTrue(SideOptions::neededForCart([
+            ['product_id' => $feijoada->id, 'quantity' => 1],
+            ['product_id' => $strogonoff->id, 'quantity' => 1],
+        ]));
     }
 
     /** @return array<string, array{0: string, 1: string}> */

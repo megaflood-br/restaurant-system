@@ -20,6 +20,7 @@ class Product extends Model
         'image',
         'price',
         'is_available',
+        'requires_side',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class Product extends Model
         return [
             'price' => 'decimal:2',
             'is_available' => 'boolean',
+            'requires_side' => 'boolean',
         ];
     }
 
