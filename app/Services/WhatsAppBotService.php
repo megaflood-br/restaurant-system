@@ -388,7 +388,7 @@ class WhatsAppBotService
     {
         return Product::with('category')
             ->where('is_available', true)
-            ->whereHas('category', fn ($query) => $query->where('is_active', true))
+            ->whereHas('category', fn ($query) => $query->where('is_active', true)->availableOnDay())
             ->get()
             ->sortBy(fn ($product) => $product->category->name.'|'.$product->name)
             ->values();

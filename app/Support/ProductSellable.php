@@ -54,6 +54,23 @@ class ProductSellable
         ];
     }
 
+    public static function assertAvailableToday(Product $product): void
+    {
+        $product->loadMissing('category');
+
+        if (! $product->is_available || ! $product->category?->is_active) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Este produto não está disponível no momento.',
+            ]);
+        }
+
+        if ($product->category && ! $product->category->isAvailableOnDay()) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Este produto não faz parte do cardápio de hoje.',
+            ]);
+        }
+    }
+
     /** @return array<string, mixed> */
     public static function orderItemAttributes(Product $product, int $quantity, ?int $variantId = null, ?string $notes = null): array
     {
