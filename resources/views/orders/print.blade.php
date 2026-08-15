@@ -57,10 +57,20 @@
 <body>
     @php
         $typeLabels = ['dine_in' => 'Salão', 'delivery' => 'Delivery', 'takeaway' => 'Retirada'];
-        $hidePrices = $template === 'kitchen' && config('printing.kitchen_hide_prices', true);
+        $hidePrices = $template === 'kitchen' && config('printing.kitchen_hide_prices', false);
+        $printAddress = filled($order->delivery_address)
+            ? $order->delivery_address
+            : trim(collect([
+                $order->customer?->address,
+                $order->customer?->neighborhood,
+                $order->customer?->city,
+                $order->customer?->state,
+                $order->customer?->zip_code,
+            ])->filter()->implode(', '));
     @endphp
 
     <div class="ticket">
+        {{-- Seção 1: Cozinha --}}
         <div class="center bold large">{{ config('printing.restaurant_name') }}</div>
         <div class="center bold">{{ $template === 'kitchen' ? '*** COZINHA ***' : '*** VIA CLIENTE ***' }}</div>
         <div class="divider"></div>
@@ -71,39 +81,16 @@
             <div class="large center" style="margin: 6px 0; padding: 4px; border: 2px solid #000;">*** AGENDADO: {{ strtoupper($order->scheduledLabel()) }} ***</div>
         @endif
         <div><strong>Tipo:</strong> {{ $typeLabels[$order->type] ?? $order->type }}</div>
-        <div class="large"><strong>Pagamento:</strong> {{ \App\Support\PaymentMethod::label($order->payment_method) }}</div>
 
         @if ($order->type === 'dine_in')
             <div class="large">Comanda: {{ $order->comanda_number ? str_pad((string) $order->comanda_number, 3, '0', STR_PAD_LEFT) : '—' }}</div>
             @if ($order->user)
                 <div><strong>Garçom:</strong> {{ $order->user->name }}</div>
             @endif
-        @else
-            <div><strong>Cliente:</strong> {{ $order->displayCustomerName() ?? '—' }}</div>
-            @if ($order->customer_phone)
-                <div><strong>Tel:</strong> {{ $order->customer_phone }}</div>
-            @endif
-            @if ($order->type === 'delivery')
-                @if ($order->deliveryArea)
-                    <div><strong>Bairro:</strong> {{ $order->deliveryArea->name }}</div>
-                @endif
-                @php
-                    $printAddress = filled($order->delivery_address)
-                        ? $order->delivery_address
-                        : trim(collect([
-                            $order->customer?->address,
-                            $order->customer?->neighborhood,
-                            $order->customer?->city,
-                            $order->customer?->state,
-                            $order->customer?->zip_code,
-                        ])->filter()->implode(', '));
-                @endphp
-                <div class="divider"></div>
-                <div class="center bold">*** ENTREGA ***</div>
-                <div class="large"><strong>Endereço:</strong> {{ $printAddress !== '' ? $printAddress : '(não informado)' }}</div>
-            @endif
         @endif
 
+        <div class="divider"></div>
+        <div class="bold">{{ $hidePrices ? 'ITENS' : 'ITENS / VALOR' }}</div>
         <div class="divider"></div>
 
         @foreach ($order->items as $item)
@@ -129,6 +116,31 @@
             @endif
             <div class="total">TOTAL: R$ {{ number_format($order->total, 2, ',', '.') }}</div>
         @endif
+
+        {{-- Seção 2: Entrega / pagamento --}}
+        <div class="divider"></div>
+        <div class="center bold">*** ENTREGA / PAGAMENTO ***</div>
+        <div class="divider"></div>
+
+        @if ($order->type !== 'dine_in')
+            <div><strong>Cliente:</strong> {{ $order->displayCustomerName() ?? '—' }}</div>
+            @if ($order->customer_phone)
+                <div><strong>Tel:</strong> {{ $order->customer_phone }}</div>
+            @endif
+        @endif
+
+        @if ($order->type === 'delivery')
+            @if ($order->deliveryArea)
+                <div><strong>Bairro:</strong> {{ $order->deliveryArea->name }}</div>
+            @endif
+            <div class="large"><strong>Endereço:</strong> {{ $printAddress !== '' ? $printAddress : '(não informado)' }}</div>
+        @elseif ($order->type === 'takeaway')
+            <div>Retirada no local</div>
+        @else
+            <div>Consumo no salão</div>
+        @endif
+
+        <div class="large"><strong>Pagamento:</strong> {{ \App\Support\PaymentMethod::label($order->payment_method) }}</div>
 
         <div class="divider"></div>
         <div class="center" style="margin-top:8px;">{{ now()->format('d/m/Y H:i:s') }}</div>

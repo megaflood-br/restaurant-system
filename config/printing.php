@@ -12,5 +12,5 @@ return [
         'timeout' => 5,
     ],
     'paper_width' => 32,
-    'kitchen_hide_prices' => true,
+    'kitchen_hide_prices' => false,
 ];

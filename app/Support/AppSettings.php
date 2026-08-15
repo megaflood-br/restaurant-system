@@ -160,7 +160,7 @@ class AppSettings
                 'network_port' => config('printing.network.port', 9100),
                 'network_timeout' => config('printing.network.timeout', 5),
                 'paper_width' => config('printing.paper_width', 32),
-                'kitchen_hide_prices' => config('printing.kitchen_hide_prices', true),
+                'kitchen_hide_prices' => config('printing.kitchen_hide_prices', false),
             ],
             'integration' => [
                 'api_token' => config('integration.api_token', ''),

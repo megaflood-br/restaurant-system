@@ -178,8 +178,9 @@ class OrderPrinterService
         $width = (int) config('printing.paper_width', 32);
         $lines = [];
         $typeLabels = ['dine_in' => 'Salao', 'delivery' => 'Delivery', 'takeaway' => 'Retirada'];
-        $hidePrices = $template === 'kitchen' && config('printing.kitchen_hide_prices', true);
+        $hidePrices = $template === 'kitchen' && config('printing.kitchen_hide_prices', false);
 
+        // --- Seção 1: Cozinha (pedido + itens + valores) ---
         $lines[] = str_repeat('=', $width);
         $lines[] = $this->center((string) config('printing.restaurant_name'), $width);
         $lines[] = $template === 'kitchen' ? $this->center('*** COZINHA ***', $width) : $this->center('*** CLIENTE ***', $width);
@@ -187,33 +188,11 @@ class OrderPrinterService
         $lines[] = 'Pedido: '.$order->order_number;
         $lines[] = 'Data: '.$order->created_at->format('d/m/Y H:i');
         $lines[] = 'Tipo: '.($typeLabels[$order->type] ?? $order->type);
-        $lines[] = 'Pagamento: '.PaymentMethod::label($order->payment_method);
 
         if ($order->type === 'dine_in') {
             $lines[] = 'Comanda: '.($order->comanda_number ?? '-');
             if ($order->user) {
                 $lines[] = 'Garcom: '.$order->user->name;
-            }
-        } else {
-            $lines[] = 'Cliente: '.($order->displayCustomerName() ?? '-');
-            if ($order->customer_phone) {
-                $lines[] = 'Tel: '.$order->customer_phone;
-            }
-            if ($order->type === 'delivery') {
-                if ($order->deliveryArea) {
-                    $lines[] = 'Bairro: '.$order->deliveryArea->name;
-                }
-
-                $address = $this->deliveryAddressForPrint($order);
-                $lines[] = str_repeat('-', $width);
-                $lines[] = $this->center('*** ENTREGA ***', $width);
-                if ($address !== '') {
-                    foreach ($this->wrapLabelledText('Endereco', $address, $width) as $line) {
-                        $lines[] = $line;
-                    }
-                } else {
-                    $lines[] = 'Endereco: (nao informado)';
-                }
             }
         }
 
@@ -246,6 +225,38 @@ class OrderPrinterService
             $lines[] = $this->padLine('TOTAL', 'R$ '.number_format((float) $order->total, 2, ',', '.'), $width);
         }
 
+        // --- Seção 2: Entrega + pagamento ---
+        $lines[] = str_repeat('=', $width);
+        $lines[] = $this->center('*** ENTREGA / PAGAMENTO ***', $width);
+        $lines[] = str_repeat('-', $width);
+
+        if ($order->type !== 'dine_in') {
+            $lines[] = 'Cliente: '.($order->displayCustomerName() ?? '-');
+            if ($order->customer_phone) {
+                $lines[] = 'Tel: '.$order->customer_phone;
+            }
+        }
+
+        if ($order->type === 'delivery') {
+            if ($order->deliveryArea) {
+                $lines[] = 'Bairro: '.$order->deliveryArea->name;
+            }
+
+            $address = $this->deliveryAddressForPrint($order);
+            if ($address !== '') {
+                foreach ($this->wrapLabelledText('Endereco', $address, $width) as $line) {
+                    $lines[] = $line;
+                }
+            } else {
+                $lines[] = 'Endereco: (nao informado)';
+            }
+        } elseif ($order->type === 'takeaway') {
+            $lines[] = 'Retirada no local';
+        } elseif ($order->type === 'dine_in') {
+            $lines[] = 'Consumo no salao';
+        }
+
+        $lines[] = 'Pagamento: '.PaymentMethod::label($order->payment_method);
         $lines[] = str_repeat('=', $width);
         $lines[] = '';
 
