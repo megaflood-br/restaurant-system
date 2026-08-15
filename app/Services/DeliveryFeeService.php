@@ -159,14 +159,14 @@ class DeliveryFeeService
     }
 
     /**
-     * Builds progressive queries: full address → without number → neighbourhood/city → CEP.
+     * Builds progressive queries: cleaned address → without number → neighbourhood/city → CEP.
      * Many Brazilian streets are missing from OSM; bairro/CEP still yield a usable point.
+     * Clients often append loja/referência on the same line — strip that for geocode only.
      *
      * @return list<string>
      */
     private function geocodeCandidates(string $address): array
     {
-        $normalized = $this->normalizeAddressQuery($address);
         $context = $this->geocodeContextSuffix();
         $candidates = [];
 
@@ -178,32 +178,45 @@ class DeliveryFeeService
             $candidates[] = $value;
         };
 
-        // City-scoped query first (more precise for Nominatim).
-        if ($context !== '') {
-            $push($normalized.', '.$context);
-        }
-        $push($normalized);
+        $bases = [];
+        $cleaned = $this->stripReferenceNoise($address);
+        $structured = $this->structureSameLineAddress($cleaned);
 
-        $withoutNumber = $this->stripLeadingStreetNumber($normalized);
-        if ($withoutNumber !== $normalized) {
+        foreach ([$structured, $cleaned, $address] as $variant) {
+            $normalized = $this->normalizeAddressQuery($variant);
+            if ($normalized !== '' && ! in_array($normalized, $bases, true)) {
+                $bases[] = $normalized;
+            }
+        }
+
+        foreach ($bases as $normalized) {
+            // City-scoped query first (more precise for Nominatim).
             if ($context !== '') {
-                $push($withoutNumber.', '.$context);
+                $push($normalized.', '.$context);
             }
-            $push($withoutNumber);
+            $push($normalized);
+
+            $withoutNumber = $this->stripLeadingStreetNumber($normalized);
+            if ($withoutNumber !== $normalized) {
+                if ($context !== '') {
+                    $push($withoutNumber.', '.$context);
+                }
+                $push($withoutNumber);
+            }
+
+            $areaQuery = $this->neighbourhoodCityQuery($normalized);
+            if ($areaQuery !== null) {
+                if ($context !== '' && ! str_contains(
+                    $this->normalizePlaceName($areaQuery),
+                    $this->normalizePlaceName($this->restaurantCity())
+                )) {
+                    $push($areaQuery.', '.$context);
+                }
+                $push($areaQuery);
+            }
         }
 
-        $areaQuery = $this->neighbourhoodCityQuery($normalized);
-        if ($areaQuery !== null) {
-            if ($context !== '' && ! str_contains(
-                $this->normalizePlaceName($areaQuery),
-                $this->normalizePlaceName($this->restaurantCity())
-            )) {
-                $push($areaQuery.', '.$context);
-            }
-            $push($areaQuery);
-        }
-
-        $cep = $this->extractCep($normalized) ?? $this->extractCep($address);
+        $cep = $this->extractCep($bases[0] ?? '') ?? $this->extractCep($address);
         if ($cep !== null) {
             if ($context !== '') {
                 $push($cep.', '.$context);
@@ -212,6 +225,81 @@ class DeliveryFeeService
         }
 
         return $candidates;
+    }
+
+    /**
+     * Removes landmarks / store names / "referência" notes that break Nominatim.
+     * The full original string is still kept on the order for the driver.
+     */
+    private function stripReferenceNoise(string $address): string
+    {
+        $value = trim(preg_replace('/\s+/', ' ', $address) ?? $address);
+
+        $cutFromMarkers = [
+            '/\b(?:refer[eê]ncia|referencia|ref\.?)\s*[:\-]?\s*.+$/iu',
+            '/\b(?:em frente)\b.+$/iu',
+            '/\b(?:pr[oó]ximo)\b.+$/iu',
+            '/\b(?:perto)\b.+$/iu',
+            '/\b(?:ao lado)\b.+$/iu',
+            '/\b(?:atr[aá]s)\b.+$/iu',
+            '/\b(?:esquina)\b.+$/iu',
+            '/\b(?:ponto de refer[eê]ncia)\b.+$/iu',
+        ];
+
+        foreach ($cutFromMarkers as $pattern) {
+            $value = preg_replace($pattern, '', $value) ?? $value;
+        }
+
+        // "Rua X, 10 - Mercado Y" / "Rua X, 10 / loja Z"
+        $value = preg_replace(
+            '/\s*[-–—\/]\s*(?:loja|mercado|padaria|farm[aá]cia|supermercado|shopping|posto|igreja|escola|condom[ií]nio|ponto|local|pr[oó]ximo|refer).+$/iu',
+            '',
+            $value
+        ) ?? $value;
+
+        // Parenthetical notes with landmark words
+        $value = preg_replace(
+            '/\s*\([^)]*(?:loja|mercado|padaria|refer|pr[oó]ximo|frente|shopping|farm[aá]cia)[^)]*\)\s*/iu',
+            ' ',
+            $value
+        ) ?? $value;
+
+        // Same line after house number: "... 465 Vila Mariana Mercado X"
+        if (preg_match('/^(.+?\b\d+[A-Za-z\-\/]*)\b(.*)$/u', $value, $matches) === 1) {
+            $head = rtrim($matches[1], " \t,");
+            $tail = ltrim($matches[2], " \t,");
+            $tailClean = preg_replace(
+                '/\b(?:loja|mercado|padaria|farm[aá]cia|supermercado|shopping|posto|igreja|escola|condom[ií]nio)\b.+$/iu',
+                '',
+                $tail
+            ) ?? $tail;
+            $tailClean = trim($tailClean, " \t,;-–—/");
+            $value = $tailClean !== '' ? $head.' '.$tailClean : $head;
+        }
+
+        return trim(preg_replace('/\s+/', ' ', $value) ?? $value, " \t,");
+    }
+
+    /**
+     * "Rua Foo 123 Bairro Bar" → "Rua Foo, 123, Bairro Bar" so neighbourhood fallback works.
+     */
+    private function structureSameLineAddress(string $address): string
+    {
+        $value = trim(preg_replace('/\s+/', ' ', $address) ?? $address);
+
+        if ($value === '' || substr_count($value, ',') >= 1) {
+            return $value;
+        }
+
+        if (preg_match(
+            '/^((?:rua|r\.?|avenida|av\.?|alameda|al\.?|travessa|tv\.?|estrada|rodovia|praça|praca|largo|viela|beco)\s+.+?)\s+(\d+[A-Za-z\-\/]*)\s+(.+)$/iu',
+            $value,
+            $matches
+        ) === 1) {
+            return trim($matches[1]).', '.$matches[2].', '.trim($matches[3]);
+        }
+
+        return $value;
     }
 
     private function normalizeAddressQuery(string $address): string

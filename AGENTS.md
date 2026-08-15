@@ -63,6 +63,9 @@ WhatsApp* (`requires_side`, default true) controla se fritas/legumes entram no f
 para pratos completos (ex.: feijoada). A IA responde dúvidas de ingredientes só pela
 **Descrição** do produto (`get_menu` / `menuSnapshot`) — não lê a ficha técnica/estoque da receita.
 
+**Endereço com referência:** `DeliveryFeeService` remove loja/referência/`em frente a` etc. só
+para geocode; o texto original do cliente continua salvo no pedido para o entregador.
+
 ### Printing (thermal ESC/POS)
 - Cloud VPS cannot reach LAN printers (`192.168.1.100:9100`). Use driver **`agent`**
   plus `scripts/print-agent.php` on a restaurant PC, or **`browser`**. See README § Impressão.
