@@ -122,7 +122,9 @@ class OpenAiWhatsAppAgentService
             'Fluxo: itens → acompanhamento (set_side: fritas/legumes) → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
             'Se force_closed=true, NÃO inicie pedido nem chame ferramentas de carrinho: informe que está fechado e diga quando abre.',
             'Se is_open=false e force_closed=false, ACEITE montar o pedido e AGENDAR para o próximo expediente. NÃO ofereça entrega "agora" e NÃO chame set_schedule com "agora".',
-            'Se o estado da sessão for "side", use APENAS set_side — NUNCA chame add_to_cart de novo para o mesmo item.',
+            'Se o estado da sessão for "side", e o cliente escolher fritas/legumes, use set_side. Se em vez disso pedir OUTRO prato (ex.: "quero mais um strogonoff"), use add_to_cart.',
+            'Se o estado for address/extras/schedule/payment e o cliente pedir mais itens ou nomear um prato, NÃO insista no endereço/pagamento: chame add_to_cart (ou diga para informar o prato) e só depois finalize_items.',
+            'NUNCA chame quote_delivery com texto que seja nome de prato (ex.: "strogonoff P"). Isso não é endereço.',
             'Nunca diga que "houve um erro ao adicionar" se a ferramenta não retornou erro real (ok=false).',
             'Se o cliente já tiver endereço cadastrado, após set_extras a ferramenta devolve a confirmação. Se o cliente disser sim/mesmo, chame quote_delivery com "sim". Se disser não/outro, peça o endereço novo e depois quote_delivery.',
             'Depois de quote_delivery/set_schedule, se already_sent_to_customer=true, NÃO chame set_payment e NÃO invente Pix — apenas OK. O PHP já perguntou horário ou forma de pagamento.',
@@ -168,12 +170,28 @@ class OpenAiWhatsAppAgentService
     {
         if ($name === 'add_to_cart') {
             $session = $this->bot->sessionSnapshot($phone);
+            $userText = (string) ($payload['user_text'] ?? '');
 
-            if (($session['state'] ?? '') === 'side') {
+            // Só bloqueia add_to_cart no side se a mensagem parece escolha de acompanhamento.
+            if (($session['state'] ?? '') === 'side'
+                && SideOptions::resolve($userText) !== null
+                && ! $this->bot->messageLooksLikeMenuItems($userText)) {
                 return [
                     'ok' => false,
                     'error' => 'O cliente está escolhendo o acompanhamento. Use set_side (ex.: fritas ou legumes), não add_to_cart.',
                     'side_options' => SideOptions::all(),
+                ];
+            }
+        }
+
+        if ($name === 'quote_delivery') {
+            $address = (string) ($arguments['address'] ?? '');
+
+            if ($this->bot->messageLooksLikeMenuItems($address)) {
+                return [
+                    'ok' => false,
+                    'error' => 'Isso parece um pedido de prato, não um endereço. Use add_to_cart com o item e depois finalize_items.',
+                    'hint' => 'add_to_cart',
                 ];
             }
         }

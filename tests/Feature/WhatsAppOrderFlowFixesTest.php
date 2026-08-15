@@ -364,6 +364,155 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         $this->assertSame('ordering', $snapshot['state']);
     }
 
+    public function test_adding_items_while_waiting_for_address_does_not_insist_on_address(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $product = $this->createStrogonoff();
+        $phone = '5511999000420';
+
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()
+            ->once()
+            ->withArgs(function (string $to, string $message) {
+                $lower = mb_strtolower($message);
+
+                return ! str_contains($lower, 'endereço')
+                    && ! str_contains($lower, 'endereco');
+            });
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $fee = Mockery::mock(\App\Services\DeliveryFeeService::class);
+        $fee->shouldReceive('quoteForAddress')->never();
+        $this->app->instance(\App\Services\DeliveryFeeService::class, $fee);
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $variant = $product->variants->first();
+        $method->invoke($bot, $phone, [
+            'state' => 'address',
+            'saved_address_prompt' => false,
+            'cart' => [[
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => 1,
+            ]],
+            'side' => 'Batata frita',
+            'extras_notes' => 'sem cebola',
+            'extras_completed' => true,
+        ]);
+
+        $bot->process($phone, 'quero mais um strogonoff P', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertSame('ordering', $snapshot['state']);
+        $this->assertCount(1, $snapshot['cart']);
+        $this->assertSame(2, (int) $snapshot['cart'][0]['quantity']);
+    }
+
+    public function test_quero_mais_while_waiting_for_address_returns_to_ordering(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $product = $this->createStrogonoff();
+        $phone = '5511999000421';
+
+        $replies = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()
+            ->once()
+            ->andReturnUsing(function (string $to, string $message) use (&$replies) {
+                $replies[] = $message;
+
+                return Mockery::mock(\App\Models\WhatsAppMessage::class);
+            });
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $variant = $product->variants->first();
+        $method->invoke($bot, $phone, [
+            'state' => 'address',
+            'cart' => [[
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => 1,
+            ]],
+            'extras_completed' => true,
+            'side' => 'Batata frita',
+        ]);
+
+        $bot->process($phone, 'quero mais', 'Carlos');
+
+        $this->assertSame('ordering', $bot->sessionSnapshot($phone)['state']);
+        $this->assertNotEmpty($replies);
+        $this->assertStringContainsString('pronto', mb_strtolower($replies[0]));
+    }
+
+    public function test_pronto_after_interrupt_skips_completed_side_and_extras(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $product = $this->createStrogonoff();
+        $phone = '5511999000422';
+
+        $replies = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()
+            ->once()
+            ->andReturnUsing(function (string $to, string $message) use (&$replies) {
+                $replies[] = $message;
+
+                return Mockery::mock(\App\Models\WhatsAppMessage::class);
+            });
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $variant = $product->variants->first();
+        $method->invoke($bot, $phone, [
+            'state' => 'ordering',
+            'cart' => [[
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => 2,
+            ]],
+            'side' => 'Batata frita',
+            'extras_notes' => 'sem cebola',
+            'extras_completed' => true,
+        ]);
+
+        $bot->process($phone, 'pronto', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertSame('address', $snapshot['state']);
+        $joined = mb_strtolower(implode("\n", $replies));
+        $this->assertStringNotContainsString('acompanhamento', $joined);
+        $this->assertTrue(
+            str_contains($joined, 'endereço')
+            || str_contains($joined, 'endereco')
+            || str_contains($joined, 'retirada')
+        );
+    }
+
     private function createStrogonoff(): Product
     {
         $category = Category::create([
