@@ -23,6 +23,9 @@ class AppSettings
             'general.address' => Setting::get('general', 'address', config('general.address')),
             'general.opening_time' => Setting::get('general', 'opening_time', config('general.opening_time')),
             'general.closing_time' => Setting::get('general', 'closing_time', config('general.closing_time')),
+            'general.open_days' => OpeningHours::normalizeOpenDays(
+                Setting::get('general', 'open_days', config('general.open_days'))
+            ),
             'general.delivery_origin_lat' => Setting::get('general', 'delivery_origin_lat', config('general.delivery_origin_lat')),
             'general.delivery_origin_lng' => Setting::get('general', 'delivery_origin_lng', config('general.delivery_origin_lng')),
             'general.logo_image' => Setting::get('general', 'logo_image', config('general.logo_image')),
@@ -141,6 +144,7 @@ class AppSettings
                 'address' => config('general.address', ''),
                 'opening_time' => config('general.opening_time', '09:00'),
                 'closing_time' => config('general.closing_time', '22:00'),
+                'open_days' => json_encode(OpeningHours::normalizeOpenDays(config('general.open_days'))),
                 'delivery_origin_lat' => config('general.delivery_origin_lat', ''),
                 'delivery_origin_lng' => config('general.delivery_origin_lng', ''),
                 'logo_image' => config('general.logo_image'),
@@ -257,10 +261,12 @@ class AppSettings
             'address' => config('general.address'),
             'opening_time' => config('general.opening_time'),
             'closing_time' => config('general.closing_time'),
+            'open_days' => OpeningHours::normalizeOpenDays(config('general.open_days')),
             'delivery_origin_lat' => config('general.delivery_origin_lat'),
             'delivery_origin_lng' => config('general.delivery_origin_lng'),
             'logo_image' => config('general.logo_image'),
             'logo_url' => DigitalMenu::assetUrl(config('general.logo_image')),
+            'weekday_labels' => WeeklyMenuImages::labels(),
         ];
     }
 

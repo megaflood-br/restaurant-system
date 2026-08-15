@@ -74,9 +74,60 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         $this->assertNotNull($order);
         $this->assertSame('pending', $order->status);
         $this->assertSame('pix', $order->payment_method);
+        $this->assertSame('delivery', $order->type);
+        $this->assertSame('rua buenos aires, 1036', $order->delivery_address);
         $this->assertStringContainsString('Aguardando comprovante PIX', (string) $order->notes);
         $this->assertSame(1, $order->items()->count());
         $this->assertSame('pix_wait', $bot->sessionSnapshot($phone)['state']);
+    }
+
+    public function test_payment_keeps_delivery_when_order_type_missing_but_address_present(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 12:00:00', 'America/Sao_Paulo'));
+
+        $product = $this->createStrogonoff();
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->atLeast()->once();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000444';
+        $variant = $product->variants->first();
+
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $method->invoke($bot, $phone, [
+            'state' => 'payment',
+            'cart' => [[
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => 1,
+                'name' => 'Strogonoff de Frango (P)',
+                'unit_price' => 20.0,
+            ]],
+            'side' => 'Batata frita',
+            'extras_notes' => 'sem talher',
+            'order_type' => null,
+            'delivery_address' => 'Rua das Flores, 100, Centro',
+            'delivery_fee' => 6.0,
+            'delivery_area_id' => null,
+            'scheduled_for' => null,
+            'scheduled_label' => 'o mais breve possível',
+            'payment_method' => null,
+            'order_claimed' => false,
+        ]);
+
+        $result = $bot->toolSetPayment($phone, 'dinheiro', 'Carlos');
+
+        $this->assertTrue($result['ok'], json_encode($result));
+        $this->assertTrue($result['order_created'] ?? false);
+
+        $order = Order::query()->latest('id')->first();
+        $this->assertNotNull($order);
+        $this->assertSame('delivery', $order->type);
+        $this->assertSame('Rua das Flores, 100, Centro', $order->delivery_address);
+        $this->assertEquals(6.0, (float) $order->delivery_fee);
+        $this->assertStringNotContainsString('Retirada no balcão', (string) $order->notes);
     }
 
     public function test_cash_payment_creates_order_and_does_not_lie_on_failure(): void

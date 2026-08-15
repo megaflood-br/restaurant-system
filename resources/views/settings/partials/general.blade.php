@@ -41,6 +41,25 @@
         </div>
     </div>
 
+    <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Dias de funcionamento</label>
+        <p class="text-xs text-gray-500 mb-3">Usado no WhatsApp para agendar o próximo expediente (ex.: sábado à noite → segunda, se domingo estiver desmarcado).</p>
+        <div class="flex flex-wrap gap-3">
+            @php
+                $selectedDays = old('open_days', $general['open_days'] ?? []);
+            @endphp
+            @foreach ($general['weekday_labels'] as $dayKey => $dayLabel)
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" name="open_days[]" value="{{ $dayKey }}"
+                        @checked(in_array($dayKey, $selectedDays, true))
+                        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                    {{ $dayLabel }}
+                </label>
+            @endforeach
+        </div>
+        @error('open_days') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
             <label for="delivery_origin_lat" class="block text-sm font-medium text-gray-700">Latitude (origem entrega)</label>

@@ -16,6 +16,9 @@ class OrderScheduleTest extends TestCase
             'app.timezone' => 'America/Sao_Paulo',
             'general.opening_time' => '11:00',
             'general.closing_time' => '15:00',
+            'general.open_days' => [
+                'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+            ],
             'digital_menu.force_closed' => false,
             'whatsapp_agent.scheduling_enabled' => true,
             'whatsapp_agent.schedule_min_minutes' => 15,
@@ -151,5 +154,46 @@ class OrderScheduleTest extends TestCase
         $this->assertNull($resolved['error'], (string) $resolved['error']);
         $this->assertSame('2026-08-10', $resolved['datetime']?->format('Y-m-d'));
         $this->assertSame('12:00', $resolved['datetime']?->format('H:i'));
+    }
+
+    public function test_saturday_night_schedules_monday_when_sunday_closed(): void
+    {
+        config([
+            'general.open_days' => [
+                'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+            ],
+            'whatsapp_agent.schedule_max_days' => 1,
+        ]);
+
+        Carbon::setTestNow(Carbon::parse('2026-08-15 16:30:00', 'America/Sao_Paulo'));
+
+        $prompt = OrderSchedule::schedulePrompt();
+        $this->assertStringContainsStringIgnoringCase('segunda-feira', $prompt);
+        $this->assertStringNotContainsStringIgnoringCase('amanhã', $prompt);
+
+        $resolved = OrderSchedule::resolve('12hs');
+
+        $this->assertNull($resolved['error'], (string) $resolved['error']);
+        $this->assertSame('2026-08-17', $resolved['datetime']?->format('Y-m-d'));
+        $this->assertSame('12:00', $resolved['datetime']?->format('H:i'));
+        $this->assertStringContainsString('segunda-feira', (string) $resolved['label']);
+    }
+
+    public function test_explicit_sunday_is_rejected_when_closed(): void
+    {
+        config([
+            'general.open_days' => [
+                'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+            ],
+            'whatsapp_agent.schedule_max_days' => 3,
+        ]);
+
+        Carbon::setTestNow(Carbon::parse('2026-08-15 16:30:00', 'America/Sao_Paulo'));
+
+        $resolved = OrderSchedule::resolve('domingo às 12h');
+
+        $this->assertNull($resolved['datetime']);
+        $this->assertNotNull($resolved['error']);
+        $this->assertStringContainsStringIgnoringCase('domingo', (string) $resolved['error']);
     }
 }

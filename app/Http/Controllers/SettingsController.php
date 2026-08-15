@@ -8,6 +8,7 @@ use App\Services\EvolutionApiService;
 use App\Services\OrderPrinterService;
 use App\Support\AppSettings;
 use App\Support\MenuTheme;
+use App\Support\OpeningHours;
 use App\Support\SideOptions;
 use App\Support\WeeklyMenuImages;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +16,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class SettingsController extends Controller
@@ -51,6 +53,8 @@ class SettingsController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
             'opening_time' => ['required', 'date_format:H:i'],
             'closing_time' => ['required', 'date_format:H:i'],
+            'open_days' => ['nullable', 'array'],
+            'open_days.*' => ['string', Rule::in(WeeklyMenuImages::DAYS)],
             'delivery_origin_lat' => ['nullable', 'numeric', 'between:-90,90'],
             'delivery_origin_lng' => ['nullable', 'numeric', 'between:-180,180'],
             'logo_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
@@ -67,6 +71,8 @@ class SettingsController extends Controller
             $logoPath = $request->file('logo_image')->store('general', 'public');
         }
 
+        $openDays = OpeningHours::normalizeOpenDays($validated['open_days'] ?? []);
+
         Setting::setMany('general', [
             'app_name' => $validated['app_name'],
             'app_url' => rtrim($validated['app_url'], '/'),
@@ -74,6 +80,7 @@ class SettingsController extends Controller
             'address' => $validated['address'] ?? '',
             'opening_time' => $validated['opening_time'],
             'closing_time' => $validated['closing_time'],
+            'open_days' => json_encode($openDays),
             'delivery_origin_lat' => $validated['delivery_origin_lat'] ?? '',
             'delivery_origin_lng' => $validated['delivery_origin_lng'] ?? '',
             'logo_image' => $logoPath,
