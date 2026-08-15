@@ -38,7 +38,19 @@ class WhatsAppMenuIntent
             return true;
         }
 
-        return preg_match('/\bmenu\b.*\b(hoje|dia)\b|\b(hoje|dia)\b.*\bmenu\b/u', $normalized) === 1;
+        return preg_match('/\bmenu\b.*\b(hoje|dia|segunda|terca|quarta|quinta|sexta|sabado|domingo|amanha)\b|\b(hoje|dia|segunda|terca|quarta|quinta|sexta|sabado|domingo|amanha)\b.*\bmenu\b/u', $normalized) === 1;
+    }
+
+    /**
+     * Weekday key when the client asked for a specific day's menu; null = no day named.
+     */
+    public static function requestedDay(string $text): ?string
+    {
+        if (! self::matches($text)) {
+            return null;
+        }
+
+        return WeeklyMenuImages::dayKeyFromText($text);
     }
 
     public static function normalize(string $text): string

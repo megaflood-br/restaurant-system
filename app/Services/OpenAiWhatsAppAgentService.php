@@ -137,7 +137,8 @@ class OpenAiWhatsAppAgentService
             'Se o produto tiver variações e o cliente NÃO disse o tamanho, NÃO chame add_to_cart com P/M/G inventado: pergunte o tamanho e só então adicione.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
             'Nunca invente pratos ou preços — consulte get_menu.',
-            'Quando o cliente pedir cardápio/menu (ex.: "cardápio", "cardápio de hoje", "manda o menu"), chame OBRIGATORIAMENTE send_menu_image.',
+            'Quando o cliente pedir cardápio/menu (ex.: "cardápio", "cardápio de hoje", "cardápio de segunda", "manda o menu"), chame OBRIGATORIAMENTE send_menu_image.',
+            'Se o cliente pedir cardápio de um dia (segunda, amanhã, etc.), passe day nesse dia (monday/tuesday/... ou "segunda"/"amanhã"). Se estiver fechado e pedir só "cardápio" sem dia, passe o próximo expediente (next_open_day_label / weekday).',
             'NÃO liste o cardápio completo em texto (nomes e preços). A resposta ao pedido de cardápio é a imagem do dia.',
             'get_menu serve para montar/confirmar itens e responder dúvidas com a description cadastrada — nunca para listar o cardápio inteiro ao cliente.',
             'Após finalizar os itens (finalize_items), só chame set_side se a ferramenta pedir next=side (há pratos que pedem acompanhamento). Se next=extras ou address, siga o next retornado.',
@@ -200,7 +201,7 @@ class OpenAiWhatsAppAgentService
         return match ($name) {
             'get_menu' => ['ok' => true, 'menu' => $this->bot->menuSnapshot()],
             'get_opening_hours' => ['ok' => true, 'hours' => $this->bot->openingHoursSnapshot()],
-            'send_menu_image' => $this->bot->toolSendMenuImage($phone, $pushName),
+            'send_menu_image' => $this->bot->toolSendMenuImage($phone, $pushName, isset($arguments['day']) ? (string) $arguments['day'] : null),
             'add_to_cart' => $this->bot->toolAddToCart($phone, $arguments, $pushName, $payload['user_text'] ?? null),
             'view_cart' => $this->bot->toolViewCart($phone),
             'finalize_items' => $this->bot->toolFinalizeItems($phone, $pushName),
@@ -230,8 +231,16 @@ class OpenAiWhatsAppAgentService
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'send_menu_image',
-                'description' => 'Envia a imagem do cardápio do dia no WhatsApp. Use SOMENTE quando o cliente pedir cardápio/menu explicitamente. Não use em saudação (oi/olá) nem sem o cliente pedir. Não responda listando pratos em texto.',
-                'parameters' => ['type' => 'object', 'properties' => new \stdClass],
+                'description' => 'Envia a imagem do cardápio no WhatsApp. Use SOMENTE quando o cliente pedir cardápio/menu explicitamente. Passe day quando pedir um dia (segunda, amanhã, monday…). Não use em saudação. Não liste pratos em texto.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'day' => [
+                            'type' => 'string',
+                            'description' => 'Dia do cardápio: monday…sunday, segunda, amanhã, hoje. Omita para hoje (ou próximo expediente se fechado).',
+                        ],
+                    ],
+                ],
             ]],
             ['type' => 'function', 'function' => [
                 'name' => 'add_to_cart',

@@ -60,7 +60,8 @@ class ConversationalWhatsAppBotService
 
         if (WhatsAppMenuIntent::matches($command)) {
             $session = $this->getSession($phone);
-            $this->sendMenuImage($phone, $customer);
+            $day = $this->resolveMenuImageDay(WhatsAppMenuIntent::requestedDay($command));
+            $this->sendMenuImage($phone, $customer, sendFollowup: true, day: $day);
 
             // Pediu cardápio no meio do checkout → volta a aceitar itens.
             if ($this->isCheckoutInterruptibleState($session['state'] ?? null) && ($session['cart'] ?? []) !== []) {
@@ -919,15 +920,21 @@ class ConversationalWhatsAppBotService
         ]), $customer);
     }
 
-    private function sendMenuImage(string $phone, ?Customer $customer, bool $sendFollowup = true): void
+    private function sendMenuImage(string $phone, ?Customer $customer, bool $sendFollowup = true, ?string $day = null): void
     {
-        $url = $this->menuImageUrl();
+        $day = $this->resolveMenuImageDay($day);
+        $url = $this->menuImageUrl($day);
+        $dayLabel = WeeklyMenuImages::labelFor($day);
 
         if (! $url) {
-            Log::warning('WhatsApp menu image missing for today', [
-                'day' => WeeklyMenuImages::todayKey(),
+            Log::warning('WhatsApp menu image missing for day', [
+                'day' => $day,
             ]);
-            $this->replyText($phone, 'O cardápio em imagem de hoje ainda não foi configurado. Me diga o prato que você quer (ex.: *strogonoff P*).', $customer);
+            $this->replyText(
+                $phone,
+                "O cardápio em imagem de *{$dayLabel}* ainda não foi configurado. Me diga o prato que você quer (ex.: *strogonoff P*).",
+                $customer
+            );
 
             return;
         }
@@ -935,15 +942,37 @@ class ConversationalWhatsAppBotService
         try {
             $this->whatsAppService->sendImageToPhone($phone, $url, null, $customer, null, null, logInteraction: false, sentByBot: true);
         } catch (\Throwable $exception) {
-            Log::warning('Failed to send WhatsApp menu image', ['error' => $exception->getMessage()]);
+            Log::warning('Failed to send WhatsApp menu image', ['error' => $exception->getMessage(), 'day' => $day]);
             $this->replyText($phone, 'Não consegui enviar a imagem do cardápio agora. Me diga o prato que você quer (ex.: *strogonoff P*).', $customer);
 
             return;
         }
 
         if ($sendFollowup) {
-            $this->replyText($phone, $this->message('menu_followup_message'), $customer);
+            $followup = $this->message('menu_followup_message');
+            if ($day !== WeeklyMenuImages::todayKey()) {
+                $followup = "Cardápio de *{$dayLabel}*:\n\n".$followup;
+            }
+            $this->replyText($phone, $followup, $customer);
         }
+    }
+
+    /**
+     * Explicit day wins; when closed and no day named, use the next open day's menu.
+     */
+    private function resolveMenuImageDay(?string $day = null): string
+    {
+        $resolved = WeeklyMenuImages::dayKeyFromText($day);
+
+        if ($resolved !== null) {
+            return $resolved;
+        }
+
+        if (! OpeningHours::isOpenForWhatsApp()) {
+            return WeeklyMenuImages::keyForDate(OpeningHours::nextOpenDate());
+        }
+
+        return WeeklyMenuImages::todayKey();
     }
 
     private function sendOrderStatus(string $phone, ?Customer $customer): void
@@ -1518,9 +1547,9 @@ class ConversationalWhatsAppBotService
             ->values();
     }
 
-    private function menuImageUrl(): ?string
+    private function menuImageUrl(?string $day = null): ?string
     {
-        return WeeklyMenuImages::urlForToday();
+        return WeeklyMenuImages::urlForDay($day ?? WeeklyMenuImages::todayKey());
     }
 
     private function message(string $key): string
@@ -1825,16 +1854,24 @@ class ConversationalWhatsAppBotService
     }
 
     /** @return array<string, mixed> */
-    public function toolSendMenuImage(string $phone, ?string $pushName): array
+    public function toolSendMenuImage(string $phone, ?string $pushName, ?string $day = null): array
     {
         $customer = $this->resolveCustomer($phone, $pushName);
-        $this->sendMenuImage($phone, $customer, sendFollowup: false);
+        $resolvedDay = $this->resolveMenuImageDay($day);
+        $this->sendMenuImage($phone, $customer, sendFollowup: false, day: $resolvedDay);
         $this->setSession($phone, array_merge($this->getSession($phone), [
             'state' => 'ordering',
             'cart' => $this->getSession($phone)['cart'] ?? [],
         ]));
 
-        return ['ok' => true, 'sent' => $this->menuImageUrl() !== null];
+        $url = $this->menuImageUrl($resolvedDay);
+
+        return [
+            'ok' => true,
+            'sent' => $url !== null,
+            'day' => $resolvedDay,
+            'day_label' => WeeklyMenuImages::labelFor($resolvedDay),
+        ];
     }
 
     /** @param  array<string, mixed>  $arguments */
