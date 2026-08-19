@@ -13,6 +13,7 @@ use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
 use App\Support\ProductSellable;
 use App\Support\ProductVariants;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,9 +26,22 @@ class OrderController extends Controller
 
     public function index(Request $request): View
     {
+        $date = $request->filled('date')
+            ? Carbon::parse($request->string('date'))->timezone(config('app.timezone'))
+            : today();
+
         $orders = Order::with('items.product', 'user', 'customer')
+            ->whereDate('created_at', $date)
             ->latest()
-            ->paginate(10);
+            ->paginate(10)
+            ->withQueryString();
+
+        $dayQuery = Order::query()->whereDate('created_at', $date);
+        $dailyStats = [
+            'orders_count' => (clone $dayQuery)->count(),
+            'revenue' => (float) (clone $dayQuery)->where('status', '!=', 'cancelled')->sum('total'),
+            'cancelled_count' => (clone $dayQuery)->where('status', 'cancelled')->count(),
+        ];
 
         $with = ['category', 'recipe'];
         if (ProductVariants::enabled()) {
@@ -39,15 +53,17 @@ class OrderController extends Controller
             ->orderBy('name')
             ->get();
 
-        $customers = Customer::where('is_active', true)
-            ->orderBy('name')
-            ->get();
-
         $selectedCustomer = $request->filled('customer_id')
             ? Customer::find($request->integer('customer_id'))
             : null;
 
-        return view('orders.index', compact('orders', 'products', 'customers', 'selectedCustomer'));
+        return view('orders.index', [
+            'orders' => $orders,
+            'products' => $products,
+            'selectedCustomer' => $selectedCustomer,
+            'date' => $date->toDateString(),
+            'dailyStats' => $dailyStats,
+        ]);
     }
 
     public function create(Request $request): View
@@ -62,10 +78,6 @@ class OrderController extends Controller
             ->orderBy('name')
             ->get();
 
-        $customers = Customer::where('is_active', true)
-            ->orderBy('name')
-            ->get();
-
         $selectedCustomer = $request->filled('customer_id')
             ? Customer::find($request->integer('customer_id'))
             : null;
@@ -74,7 +86,7 @@ class OrderController extends Controller
             ? $request->integer('comanda')
             : null;
 
-        return view('orders.create', compact('products', 'customers', 'selectedCustomer', 'comandaNumber'));
+        return view('orders.create', compact('products', 'selectedCustomer', 'comandaNumber'));
     }
 
     public function deliveryQuote(Customer $customer, DeliveryFeeService $deliveryFee): JsonResponse

@@ -1,23 +1,26 @@
 @props([
     'products',
-    'customers',
     'selectedCustomer' => null,
     'comandaNumber' => null,
     'modal' => false,
 ])
 
 @php
-    $customerOptions = $customers->map(fn ($customer) => [
-        'id' => (string) $customer->id,
-        'label' => $customer->name.($customer->phone ? ' — '.$customer->phone : ''),
-    ])->values()->all();
+    $initialCustomerLabel = $selectedCustomer
+        ? $selectedCustomer->name.($selectedCustomer->phone ? ' — '.$selectedCustomer->phone : '')
+        : '';
 @endphp
 
 <form method="POST" action="{{ route('orders.store') }}"
     x-data="{
         type: '{{ old('type', $selectedCustomer ? 'delivery' : 'dine_in') }}',
         customerId: '{{ old('customer_id', $selectedCustomer?->id ?? '') }}',
-        customerOptions: @js($customerOptions),
+        customerSearchQuery: @js($initialCustomerLabel),
+        customerResults: [],
+        showCustomerDropdown: false,
+        customerSearchLoading: false,
+        customerSearchTimer: null,
+        customerSearchUrl: @js(route('customers.search')),
         showNewCustomer: false,
         savingCustomer: false,
         customerError: '',
@@ -37,11 +40,64 @@
             this.showNewCustomer = true;
             this.customerError = '';
             this.customerId = '';
+            this.customerSearchQuery = '';
+            this.customerResults = [];
+            this.showCustomerDropdown = false;
         },
         cancelNewCustomer() {
             this.showNewCustomer = false;
             this.customerError = '';
             this.newCustomer = { name: '', phone: '', email: '', address: '', neighborhood: '', city: '', state: '', zip_code: '' };
+        },
+        selectCustomer(customer) {
+            this.customerId = String(customer.id);
+            this.customerSearchQuery = customer.label;
+            this.customerResults = [];
+            this.showCustomerDropdown = false;
+        },
+        clearCustomer() {
+            this.customerId = '';
+            this.customerSearchQuery = '';
+            this.customerResults = [];
+        },
+        onCustomerSearchInput() {
+            clearTimeout(this.customerSearchTimer);
+            if (this.showNewCustomer) {
+                return;
+            }
+            if (this.customerId && this.customerSearchQuery.trim() === '') {
+                this.clearCustomer();
+            }
+            if (this.customerSearchQuery.trim().length < 2) {
+                this.customerResults = [];
+                this.showCustomerDropdown = false;
+                return;
+            }
+            this.customerSearchTimer = setTimeout(() => this.fetchCustomers(), 250);
+        },
+        async fetchCustomers() {
+            const q = this.customerSearchQuery.trim();
+            if (q.length < 2) {
+                return;
+            }
+            this.customerSearchLoading = true;
+            try {
+                const res = await fetch(this.customerSearchUrl + '?search=' + encodeURIComponent(q), {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
+                const json = await res.json();
+                this.customerResults = json.data || [];
+                this.showCustomerDropdown = this.customerResults.length > 0;
+            } catch (e) {
+                this.customerResults = [];
+                this.showCustomerDropdown = false;
+            } finally {
+                this.customerSearchLoading = false;
+            }
         },
         async saveNewCustomer() {
             this.customerError = '';
@@ -69,8 +125,7 @@
                     return;
                 }
                 const created = json.data;
-                this.customerOptions = [...this.customerOptions, { id: String(created.id), label: created.label }];
-                this.customerId = String(created.id);
+                this.selectCustomer(created);
                 this.cancelNewCustomer();
             } catch (e) {
                 this.customerError = 'Falha de conexão ao cadastrar o cliente.';
@@ -124,6 +179,7 @@
     }"
     class="space-y-6">
     @csrf
+    <input type="hidden" name="customer_id" x-model="customerId">
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -142,15 +198,28 @@
         </div>
         <div x-show="type !== 'dine_in'" class="md:col-span-2 space-y-3">
             <div class="flex flex-col sm:flex-row sm:items-end gap-3">
-                <div class="flex-1">
-                    <label for="customer_id" class="block text-sm font-medium text-gray-700">Cliente cadastrado</label>
-                    <select name="customer_id" id="customer_id" x-model="customerId" :disabled="showNewCustomer"
+                <div class="flex-1 relative" @click.away="showCustomerDropdown = false">
+                    <label for="customer_search" class="block text-sm font-medium text-gray-700">Cliente cadastrado</label>
+                    <input type="text" id="customer_search" x-model="customerSearchQuery"
+                        @input="customerId = ''; onCustomerSearchInput()"
+                        @focus="onCustomerSearchInput()"
+                        :disabled="showNewCustomer"
+                        autocomplete="off"
+                        placeholder="Buscar por nome, telefone ou e-mail..."
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100">
-                        <option value="">Selecionar cliente ou preencher manualmente...</option>
-                        <template x-for="customer in customerOptions" :key="customer.id">
-                            <option :value="customer.id" x-text="customer.label" :selected="customerId === customer.id"></option>
+                    <p class="mt-1 text-xs text-gray-500" x-show="customerSearchLoading" x-cloak>Buscando...</p>
+                    <div x-show="showCustomerDropdown && customerResults.length > 0" x-cloak
+                        class="absolute z-20 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg max-h-56 overflow-y-auto">
+                        <template x-for="customer in customerResults" :key="customer.id">
+                            <button type="button" @click="selectCustomer(customer)"
+                                class="block w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-indigo-50 border-b border-gray-100 last:border-0"
+                                x-text="customer.label"></button>
                         </template>
-                    </select>
+                    </div>
+                    <p class="mt-1 text-xs text-indigo-700" x-show="customerId" x-cloak>
+                        Cliente selecionado.
+                        <button type="button" @click="clearCustomer()" class="underline hover:text-indigo-900">Limpar</button>
+                    </p>
                 </div>
                 <button type="button" x-show="!showNewCustomer" @click="openNewCustomer()"
                     class="inline-flex items-center justify-center px-4 py-2 bg-white border border-indigo-300 text-indigo-700 text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-indigo-50 whitespace-nowrap">
