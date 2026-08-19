@@ -53,7 +53,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="8" class="px-4 py-8 text-center text-gray-500">Nenhum pedido registrado.</td>
+                <td colspan="8" class="px-4 py-8 text-center text-gray-500">Nenhum pedido neste dia.</td>
             </tr>
         @endforelse
     </tbody>

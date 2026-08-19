@@ -37,6 +37,35 @@ class CustomerController extends Controller
         return view('customers.index', compact('customers'));
     }
 
+    public function search(Request $request): JsonResponse
+    {
+        $search = trim($request->string('search')->toString());
+
+        if (mb_strlen($search) < 2) {
+            return response()->json(['data' => []]);
+        }
+
+        $customers = Customer::query()
+            ->where('is_active', true)
+            ->where(function ($query) use ($search) {
+                $query->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
+            })
+            ->orderBy('name')
+            ->limit(20)
+            ->get()
+            ->map(fn (Customer $customer) => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'label' => $customer->name.($customer->phone ? ' — '.$customer->phone : ''),
+            ])
+            ->values();
+
+        return response()->json(['data' => $customers]);
+    }
+
     public function create(): View
     {
         return view('customers.create');

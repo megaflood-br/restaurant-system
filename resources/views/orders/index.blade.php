@@ -10,7 +10,44 @@
     </x-slot>
 
     <div class="py-6 sm:py-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-4 sm:p-6">
+                    <form method="GET" action="{{ route('orders.index') }}" class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label for="date" class="block text-sm font-medium text-gray-700">Dia</label>
+                            <input type="date" name="date" id="date" value="{{ $date }}"
+                                class="mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-indigo-700">
+                            Filtrar
+                        </button>
+                        @if (request()->filled('customer_id'))
+                            <input type="hidden" name="customer_id" value="{{ request('customer_id') }}">
+                        @endif
+                        @if (request()->boolean('new'))
+                            <input type="hidden" name="new" value="1">
+                        @endif
+                    </form>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-white shadow-sm sm:rounded-lg p-5 border border-indigo-100">
+                    <p class="text-sm text-gray-500">Pedidos do dia</p>
+                    <p class="mt-1 text-2xl font-semibold text-gray-900">{{ $dailyStats['orders_count'] }}</p>
+                </div>
+                <div class="bg-white shadow-sm sm:rounded-lg p-5 border border-emerald-100">
+                    <p class="text-sm text-gray-500">Vendas do dia</p>
+                    <p class="mt-1 text-2xl font-semibold text-emerald-700">R$ {{ number_format($dailyStats['revenue'], 2, ',', '.') }}</p>
+                    <p class="mt-1 text-xs text-gray-500">Sem pedidos cancelados</p>
+                </div>
+                <div class="bg-white shadow-sm sm:rounded-lg p-5 border border-gray-200">
+                    <p class="text-sm text-gray-500">Cancelados</p>
+                    <p class="mt-1 text-2xl font-semibold text-gray-600">{{ $dailyStats['cancelled_count'] }}</p>
+                </div>
+            </div>
+
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-4 sm:p-6">
                     <x-flash-messages />
@@ -53,7 +90,7 @@
                                     </div>
                                 </div>
                             @empty
-                                <p class="text-center text-gray-500 py-8">Nenhum pedido registrado.</p>
+                                <p class="text-center text-gray-500 py-8">Nenhum pedido neste dia.</p>
                             @endforelse
                         </div>
                     </x-bulk-select>
@@ -69,7 +106,6 @@
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Novo pedido</h3>
             @include('orders._form', [
                 'products' => $products,
-                'customers' => $customers,
                 'selectedCustomer' => $selectedCustomer,
                 'modal' => true,
             ])
