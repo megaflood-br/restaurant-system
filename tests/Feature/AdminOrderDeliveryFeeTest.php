@@ -170,4 +170,66 @@ class AdminOrderDeliveryFeeTest extends TestCase
         $this->assertNull($order->delivery_area_id);
         $this->assertEquals(25, (float) $order->total);
     }
+
+    public function test_manual_delivery_fee_overrides_automatic_quote(): void
+    {
+        $this->fakeNearbyGeocode();
+
+        $admin = User::factory()->admin()->create();
+        $product = $this->seedCatalog();
+        DeliveryArea::create([
+            'name' => 'Até 5km',
+            'min_km' => 0,
+            'max_km' => 5,
+            'fee' => 8.50,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+        $customer = Customer::create([
+            'name' => 'Maria',
+            'phone' => '5511999990002',
+            'address' => 'Rua A, 100',
+            'neighborhood' => 'Vila Mariana',
+            'city' => 'São Paulo',
+            'state' => 'SP',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin)->post(route('orders.store'), [
+            'type' => 'delivery',
+            'customer_id' => $customer->id,
+            'delivery_fee' => 15,
+            'items' => [
+                ['product_id' => $product->id, 'quantity' => 1],
+            ],
+        ]);
+
+        $order = $customer->orders()->latest('id')->first();
+        $this->assertEquals(15, (float) $order->delivery_fee);
+        $this->assertNull($order->delivery_area_id);
+        $this->assertEquals(40, (float) $order->total);
+    }
+
+    public function test_manual_delivery_fee_without_registered_customer(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $product = $this->seedCatalog();
+
+        $this->actingAs($admin)->post(route('orders.store'), [
+            'type' => 'delivery',
+            'customer_name' => 'Visitante',
+            'customer_phone' => '5511999888777',
+            'delivery_fee' => 12,
+            'items' => [
+                ['product_id' => $product->id, 'quantity' => 2],
+            ],
+        ]);
+
+        $order = \App\Models\Order::query()->latest('id')->first();
+        $this->assertSame('delivery', $order->type);
+        $this->assertEquals(12, (float) $order->delivery_fee);
+        $this->assertNull($order->delivery_area_id);
+        $this->assertNull($order->delivery_address);
+        $this->assertEquals(62, (float) $order->total);
+    }
 }
