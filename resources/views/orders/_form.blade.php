@@ -348,6 +348,8 @@
         <textarea name="notes" id="notes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('notes') }}</textarea>
     </div>
 
+    <x-payment-method-select :required="false" :selected="old('payment_method')" />
+
     <div>
         <div class="flex justify-between items-center mb-3">
             <h3 class="text-lg font-semibold text-gray-800">Itens do pedido</h3>

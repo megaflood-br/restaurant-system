@@ -11,6 +11,7 @@ use App\Services\CashFlowService;
 use App\Services\DeliveryFeeService;
 use App\Services\InventoryService;
 use App\Services\OrderPrinterService;
+use App\Support\PaymentMethod;
 use App\Support\ProductSellable;
 use App\Support\ProductVariants;
 use Carbon\Carbon;
@@ -146,6 +147,7 @@ class OrderController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.notes' => ['nullable', 'string'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'payment_method' => ['nullable', 'in:'.implode(',', PaymentMethod::keys())],
         ]);
 
         $customer = isset($validated['customer_id'])
@@ -194,6 +196,7 @@ class OrderController extends Controller
                 'delivery_fee' => $deliveryFeeAmount,
                 'delivery_address' => $deliveryAddress,
                 'notes' => $validated['notes'] ?? null,
+                'payment_method' => ($validated['payment_method'] ?? null) ?: null,
                 'status' => 'pending',
                 'user_id' => $request->user()->id,
             ]);
@@ -266,6 +269,7 @@ class OrderController extends Controller
             'customer_phone' => ['nullable', 'string', 'max:20'],
             'delivery_address' => ['nullable', 'string', 'max:500'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'payment_method' => ['nullable', 'in:'.implode(',', PaymentMethod::keys())],
         ]);
 
         $customer = isset($validated['customer_id'])
@@ -283,6 +287,9 @@ class OrderController extends Controller
             'delivery_fee' => $order->type === 'delivery' && array_key_exists('delivery_fee', $validated)
                 ? (float) ($validated['delivery_fee'] ?? 0)
                 : $order->delivery_fee,
+            'payment_method' => array_key_exists('payment_method', $validated)
+                ? ($validated['payment_method'] ?: null)
+                : $order->payment_method,
         ]);
 
         $order->recalculateTotal();
