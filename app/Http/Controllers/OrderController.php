@@ -145,6 +145,7 @@ class OrderController extends Controller
             'items.*.variant_id' => ProductVariants::variantIdRules(),
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.notes' => ['nullable', 'string'],
+            'delivery_fee' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $customer = isset($validated['customer_id'])
@@ -157,10 +158,14 @@ class OrderController extends Controller
         $deliveryAreaId = null;
         $deliveryAddress = null;
 
-        if ($validated['type'] === 'delivery' && $customer) {
-            $deliveryAddress = $customer->resolvedDeliveryAddress();
+        if ($validated['type'] === 'delivery') {
+            if ($customer) {
+                $deliveryAddress = $customer->resolvedDeliveryAddress();
+            }
 
-            if ($deliveryAddress !== null) {
+            if ($request->filled('delivery_fee')) {
+                $deliveryFeeAmount = (float) $validated['delivery_fee'];
+            } elseif ($deliveryAddress !== null) {
                 $quote = $deliveryFee->quoteForAddress($deliveryAddress);
 
                 if ($quote) {

@@ -29,6 +29,8 @@
         deliveryQuote: null,
         deliveryQuoteLoading: false,
         deliveryQuoteError: null,
+        deliveryFeeInput: @js(old('delivery_fee', '')),
+        deliveryFeeTouched: @js(filled(old('delivery_fee'))),
         quoteUrlTemplate: @js(route('customers.delivery-quote', ['customer' => '__CUSTOMER__'])),
         addItem() { this.items.push({ variantId: '' }); },
         removeItem(index) { this.items.splice(index, 1); },
@@ -154,6 +156,9 @@
 
                 if (data.ok) {
                     this.deliveryQuote = data;
+                    if (!this.deliveryFeeTouched && data.delivery_fee != null) {
+                        this.deliveryFeeInput = String(data.delivery_fee);
+                    }
                 } else {
                     this.deliveryQuoteError = data.message || 'Não foi possível calcular a taxa.';
                     if (data.delivery_address) {
@@ -171,8 +176,17 @@
                 this.deliveryQuoteLoading = false;
             }
         },
+        onDeliveryFeeInput() {
+            this.deliveryFeeTouched = true;
+        },
         init() {
-            this.$watch('type', () => this.refreshDeliveryQuote());
+            this.$watch('type', (value) => {
+                if (value !== 'delivery') {
+                    this.deliveryFeeInput = '';
+                    this.deliveryFeeTouched = false;
+                }
+                this.refreshDeliveryQuote();
+            });
             this.$watch('customerId', () => this.refreshDeliveryQuote());
             this.refreshDeliveryQuote();
         },
@@ -294,6 +308,16 @@
             <label for="customer_phone" class="block text-sm font-medium text-gray-700">Telefone</label>
             <input type="text" name="customer_phone" id="customer_phone" value="{{ old('customer_phone') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
         </div>
+    </div>
+
+    <div x-show="type === 'delivery'" x-cloak class="max-w-xs">
+        <label for="delivery_fee" class="block text-sm font-medium text-gray-700">Taxa de entrega (R$)</label>
+        <input type="number" step="0.01" min="0" name="delivery_fee" id="delivery_fee"
+            x-model="deliveryFeeInput"
+            @input="onDeliveryFeeInput()"
+            placeholder="Automático"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        <p class="mt-1 text-xs text-gray-500">Deixe em branco para calcular pelo endereço do cliente. Preencha para usar um valor manual.</p>
     </div>
 
     <div x-show="type === 'delivery' && customerId" x-cloak class="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
