@@ -7,7 +7,7 @@
 
 <fieldset {{ $attributes->merge(['class' => 'space-y-2']) }}>
     <legend class="block text-sm font-medium text-gray-700 mb-2">
-        Forma de pagamento@if ($required) *@endif
+        Forma de pagamento{{ $required ? ' *' : '' }}
     </legend>
     <div @class([
         'grid gap-2',
@@ -29,7 +29,8 @@
         @endif
         @foreach ($methods as $value => $label)
             <label class="cursor-pointer">
-                <input type="radio" name="payment_method" value="{{ $value }}" class="peer sr-only" @if ($required) required @endif
+                <input type="radio" name="payment_method" value="{{ $value }}" class="peer sr-only"
+                    @if ($required) required @endif
                     @checked($current === $value)>
                 <span @class([
                     'flex items-center justify-center text-center rounded-xl border-2 px-3 py-3 text-sm font-semibold transition',
