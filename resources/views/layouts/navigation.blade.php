@@ -64,6 +64,10 @@
                         Financeiro
                     </x-nav-link>
 
+                    <x-nav-link :href="route('motoboy.index')" :active="request()->routeIs('motoboy.*')">
+                        Motoboy
+                    </x-nav-link>
+
                     <x-nav-link :href="route('settings.index')" :active="request()->routeIs('settings.*') || request()->routeIs('whatsapp.*')">
                         Configurações
                     </x-nav-link>
@@ -167,6 +171,10 @@
 
             <x-responsive-nav-link :href="route('financeiro.index')" :active="request()->routeIs('financeiro.*')">
                 Financeiro
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('motoboy.index')" :active="request()->routeIs('motoboy.*')">
+                Motoboy
             </x-responsive-nav-link>
 
             <x-responsive-nav-link :href="route('settings.index')" :active="request()->routeIs('settings.*') || request()->routeIs('whatsapp.*')">

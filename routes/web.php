@@ -6,7 +6,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryAreaController;
 use App\Http\Controllers\FinanceiroController;
-use App\Http\Controllers\IngredientController;
+use App\Http\Controllers\MotoboySettlementController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderPrintController;
 use App\Http\Controllers\ProductController;
@@ -129,6 +129,9 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::post('financeiro', [FinanceiroController::class, 'store'])->name('financeiro.store');
         Route::post('financeiro/sync-sales', [FinanceiroController::class, 'syncSales'])->name('financeiro.sync-sales');
         Route::delete('financeiro/{financeiro}', [FinanceiroController::class, 'destroy'])->name('financeiro.destroy');
+
+        Route::get('motoboy', [MotoboySettlementController::class, 'index'])->name('motoboy.index');
+        Route::post('motoboy', [MotoboySettlementController::class, 'store'])->name('motoboy.store');
 
         Route::post('customers/quick', [CustomerController::class, 'quickStore'])->name('customers.quick-store');
         Route::get('customers/search', [CustomerController::class, 'search'])->name('customers.search');
