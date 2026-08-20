@@ -653,6 +653,7 @@ class ConversationalWhatsAppBotService
         if ($this->matchesIntent($command, [
             'sem bebida', 'sem bebidas', 'sem sobremesa', 'sem sobremesas',
             'só o prato', 'so o prato', 'so o prato mesmo', 'só o prato mesmo',
+            'nao', 'não', 'n',
         ])) {
             return true;
         }
@@ -888,6 +889,7 @@ class ConversationalWhatsAppBotService
 
         return $this->matchesIntent($command, [
             'só isso', 'so isso', 'pronto', 'finalizar', 'continuar', 'fechar', 'acabou', 'só', 'so',
+            'nao', 'não', 'n',
         ]);
     }
 
