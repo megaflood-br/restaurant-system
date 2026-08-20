@@ -122,6 +122,8 @@ class OpenAiWhatsAppAgentService
             'Fluxo: itens → acompanhamento (set_side, só se o pedido tiver pratos com requires_side=true) → observações → endereço/retirada → horário (set_schedule) → pagamento → confirmação.',
             'Se force_closed=true, NÃO inicie pedido nem chame ferramentas de carrinho: informe que está fechado e diga quando abre.',
             'Se is_open=false e force_closed=false, ACEITE montar o pedido e AGENDAR para o próximo expediente (use next_open_day_label do get_opening_hours — pode ser segunda-feira se domingo estiver fechado). NÃO ofereça entrega "agora" e NÃO chame set_schedule com "agora".',
+            'O sistema PHP registra os itens corretos em session.cart antes de você responder. NUNCA cite um prato diferente dos itens listados em session.cart ao confirmar, agendar ou resumir o pedido.',
+            'Se session.cart já contiver itens, use SOMENTE esses nomes — não substitua por outro prato do cardápio resumido.',
             'Se o estado da sessão for "side", e o cliente escolher fritas/legumes, use set_side. Se em vez disso pedir OUTRO prato (ex.: "quero mais um strogonoff"), use add_to_cart.',
             'Se o estado for address/extras/schedule/payment e o cliente pedir mais itens ou nomear um prato, NÃO insista no endereço/pagamento: chame add_to_cart (ou diga para informar o prato) e só depois finalize_items.',
             'NUNCA chame quote_delivery com texto que seja nome de prato (ex.: "strogonoff P"). Isso não é endereço.',
