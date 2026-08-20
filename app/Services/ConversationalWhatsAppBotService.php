@@ -104,9 +104,21 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        // Acompanhamento (fritas/legumes): tratar antes da OpenAI para evitar add_to_cart errado.
-        if (($session['state'] ?? '') === 'side' && SideOptions::resolve($text) !== null) {
+        // Checkout: PHP controla antes da OpenAI (evita despedida ou fluxo errado).
+        if (($session['state'] ?? '') === 'side') {
             $this->handleSide($phone, $text, $customer);
+
+            return;
+        }
+
+        if (($session['state'] ?? '') === 'extras') {
+            $this->handleExtras($phone, $text, $customer);
+
+            return;
+        }
+
+        if (($session['state'] ?? '') === 'address' && ($session['saved_address_prompt'] ?? false) !== true) {
+            $this->handleAddress($phone, $text, $customer);
 
             return;
         }
@@ -167,6 +179,16 @@ class ConversationalWhatsAppBotService
 
         if ($this->shouldFinalizeItemsInPhp($session, $command)) {
             $this->handleOrdering($phone, $text, $customer);
+
+            return;
+        }
+
+        if (($session['state'] ?? '') === 'ordering' && $this->declinesDrinkOrDessertUpsell($text)) {
+            $this->replyText(
+                $phone,
+                'Tudo bem! Se quiser incluir mais alguma coisa, é só dizer. Quando terminar, digite *pronto*.',
+                $customer
+            );
 
             return;
         }
@@ -589,13 +611,59 @@ class ConversationalWhatsAppBotService
     private function handleExtras(string $phone, string $text, ?Customer $customer): void
     {
         $session = $this->getSession($phone);
+        $command = mb_strtolower(trim($text));
+        $notes = $this->declinesExtrasNotes($command) ? '' : trim($text);
 
         $this->setSession($phone, array_merge($session, [
-            'extras_notes' => trim($text),
+            'extras_notes' => $notes !== '' ? $notes : null,
             'extras_completed' => true,
         ]));
 
         $this->askForAddress($phone, $customer);
+    }
+
+    private function declinesExtrasNotes(string $command): bool
+    {
+        if ($command === '') {
+            return true;
+        }
+
+        if ($this->matchesIntent($command, [
+            'nao', 'não', 'n', 'no', 'sem', 'nenhuma', 'nenhum', 'nada',
+            'nao preciso', 'não preciso', 'sem observacao', 'sem observação',
+            'sem obs', 'sem talher', 'nao preciso de talher', 'não preciso de talher',
+        ])) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/^(nao|não|sem|nenhum|nenhuma|nada)\b/u',
+            $command
+        );
+    }
+
+    private function declinesDrinkOrDessertUpsell(string $text): bool
+    {
+        $command = mb_strtolower(trim($text));
+
+        if ($command === '') {
+            return false;
+        }
+
+        if ($this->matchesIntent($command, [
+            'sem bebida', 'sem bebidas', 'sem sobremesa', 'sem sobremesas',
+            'só o prato', 'so o prato', 'so o prato mesmo', 'só o prato mesmo',
+        ])) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/\b(sem|nao|não)\s+(bebida|bebidas|sobremesa|sobremesas|refrigerante|suco|drink)\b/u',
+            $command
+        ) || (bool) preg_match(
+            '/\b(nao|não)\s+quero\s+(bebida|bebidas|sobremesa|sobremesas|nada)\b/u',
+            $command
+        );
     }
 
     private function askForAddress(string $phone, ?Customer $customer): void

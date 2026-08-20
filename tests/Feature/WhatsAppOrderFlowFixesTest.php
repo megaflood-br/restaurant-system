@@ -634,6 +634,71 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         $this->assertFalse($item['requires_side']);
     }
 
+    public function test_closed_hours_checkout_handles_sem_bebida_and_extras_nao_in_php(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:10:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $category = Category::create([
+            'name' => 'Pratos',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Cupim Assado',
+            'price' => 28,
+            'is_available' => true,
+            'requires_side' => true,
+        ]);
+
+        foreach (['P', 'M', 'G'] as $index => $label) {
+            ProductVariant::create([
+                'product_id' => $product->id,
+                'label' => $label,
+                'price' => 28 + ($index * 10),
+                'sort_order' => $index + 1,
+                'is_available' => true,
+            ]);
+        }
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000500';
+
+        $bot->process($phone, 'Quero meu cupim', 'Carlos');
+        $bot->process($phone, 'P', 'Carlos');
+        $bot->process($phone, 'Sem bebida', 'Carlos');
+        $bot->process($phone, 'Pode agendar para as 12hs', 'Carlos');
+        $bot->process($phone, 'Pronto', 'Carlos');
+        $bot->process($phone, '1', 'Carlos');
+        $bot->process($phone, 'Nao', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertSame('address', $snapshot['state']);
+        $this->assertSame('hoje às 12:00', $snapshot['scheduled_label']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringNotContainsString('Posso agendar seu pedido', $combined);
+        $this->assertStringNotContainsString('Estou aqui para ajudar', $combined);
+        $this->assertStringContainsString('endereço', mb_strtolower($combined));
+    }
+
     private function createStrogonoff(): Product
     {
         $category = Category::create([
