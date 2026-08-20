@@ -737,6 +737,65 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         $this->assertStringNotContainsString('Olá, Carlos', $combined);
     }
 
+    public function test_editar_pedido_at_payment_returns_to_ordering_in_php(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:23:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $product = $this->createStrogonoff();
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000502';
+        $variant = $product->variants->first();
+
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $method->invoke($bot, $phone, [
+            'state' => 'payment',
+            'cart' => [[
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => 2,
+                'name' => 'Strogonoff de Frango (P)',
+                'unit_price' => 20.0,
+            ]],
+            'side' => 'Batata frita',
+            'extras_notes' => null,
+            'extras_completed' => true,
+            'order_type' => 'delivery',
+            'delivery_address' => 'Rua Machado de Assis, 465',
+            'delivery_fee' => 4.0,
+            'scheduled_label' => 'hoje às 12:00',
+            'scheduled_for' => Carbon::parse('2026-08-20 12:00:00', 'America/Sao_Paulo')->toIso8601String(),
+        ]);
+
+        $bot->process($phone, 'editar o pedido', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertSame('ordering', $snapshot['state']);
+        $this->assertSame('hoje às 12:00', $snapshot['scheduled_label']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringContainsString('pedido até agora', mb_strtolower($combined));
+        $this->assertStringNotContainsString('Posso agendar', $combined);
+        $this->assertStringNotContainsString('Abriremos', $combined);
+    }
+
     private function createStrogonoff(): Product
     {
         $category = Category::create([
