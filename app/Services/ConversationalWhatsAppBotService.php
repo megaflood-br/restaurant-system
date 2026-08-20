@@ -171,16 +171,16 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        if (OrderSchedule::enabled() && $this->isMenuOrderingState($session) && OrderSchedule::mentionsScheduling($text)) {
-            if ($this->captureScheduleIntent($phone, $text, $customer, $session)) {
-                return;
-            }
-        }
-
         if ($this->shouldFinalizeItemsInPhp($session, $command)) {
             $this->handleOrdering($phone, $text, $customer);
 
             return;
+        }
+
+        if (OrderSchedule::enabled() && $this->isMenuOrderingState($session) && OrderSchedule::mentionsScheduling($text)) {
+            if ($this->captureScheduleIntent($phone, $text, $customer, $session)) {
+                return;
+            }
         }
 
         if (($session['state'] ?? '') === 'ordering' && $this->declinesDrinkOrDessertUpsell($text)) {
@@ -244,7 +244,7 @@ class ConversationalWhatsAppBotService
             'cart' => [],
         ]);
 
-        if ($this->parseProductsFromText($text) !== []) {
+        if ($this->parseProductsFromText($text) !== [] || (OrderSchedule::enabled() && OrderSchedule::mentionsScheduling($text))) {
             $this->handleOrdering($phone, $text, $customer);
         }
     }
@@ -258,7 +258,7 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        if ($this->matchesIntent($command, ['só isso', 'so isso', 'pronto', 'finalizar', 'continuar', 'fechar', 'acabou', 'só', 'so', 'nao', 'não', 'n'])) {
+        if ($this->matchesFinalizeIntent($command)) {
             if (($session['cart'] ?? []) === []) {
                 $this->replyText($phone, 'Seu pedido ainda está vazio. Me diga o que você gostaria de pedir!', $customer);
 
@@ -963,18 +963,111 @@ class ConversationalWhatsAppBotService
             return true;
         }
 
-        $this->setSession($phone, array_merge($session, [
+        $parsed = $this->parseProductsFromTextIgnoringSchedule($text);
+
+        foreach ($parsed as $item) {
+            if ($item['needs_variant'] ?? false) {
+                $this->setSession($phone, array_merge($session, [
+                    'state' => 'ordering',
+                    'scheduled_for' => $resolved['datetime']?->toIso8601String(),
+                    'scheduled_label' => $resolved['label'],
+                    'pending_variant' => [
+                        'product_id' => $item['product_id'],
+                        'quantity' => $item['quantity'],
+                        'product_name' => $item['product_name'] ?? $item['name'],
+                    ],
+                ]));
+                $sizes = $item['available_sizes'] ?? 'P, M ou G';
+                $this->replyText($phone, implode("\n", [
+                    'Horário anotado: *'.$resolved['label'].'*.',
+                    "O *{$item['product_name']}* tem tamanhos {$sizes}. Qual você prefere? Responda *P*, *M* ou *G*.",
+                ]), $customer);
+
+                return true;
+            }
+        }
+
+        $updates = [
+            'state' => 'ordering',
             'scheduled_for' => $resolved['datetime']?->toIso8601String(),
             'scheduled_label' => $resolved['label'],
-        ]));
+        ];
 
-        $this->replyText(
-            $phone,
-            'Horário anotado: *'.$resolved['label'].'*. Continue montando o pedido e digite *pronto* quando terminar.',
-            $customer
-        );
+        if ($parsed !== []) {
+            $updates['cart'] = $this->mergeParsedItemsIntoCart($session['cart'] ?? [], $parsed, false);
+        }
+
+        $this->setSession($phone, array_merge($session, $updates));
+
+        $lines = ['Horário anotado: *'.$resolved['label'].'*.'];
+
+        if ($parsed !== []) {
+            $added = collect($parsed)
+                ->map(fn (array $item) => "{$item['quantity']}x {$item['name']}")
+                ->implode(', ');
+            $lines[] = 'Anotei: *'.$added.'*.';
+        }
+
+        $lines[] = 'Digite *pronto* ou *terminar* quando terminar.';
+
+        $this->replyText($phone, implode("\n", $lines), $customer);
 
         return true;
+    }
+
+    /** @return array<int, array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string}> */
+    private function parseProductsFromTextIgnoringSchedule(string $text): array
+    {
+        if (! OrderSchedule::mentionsScheduling($text)) {
+            return $this->parseProductsFromText($text);
+        }
+
+        $parsedFromStripped = $this->parseProductsFromText($this->textWithoutSchedulingPhrases($text));
+
+        if ($this->parsedItemsAreCartReady($parsedFromStripped)) {
+            return $parsedFromStripped;
+        }
+
+        $parsed = $this->parseProductsFromText($text);
+
+        if ($this->parsedItemsAreCartReady($parsed)) {
+            return $parsed;
+        }
+
+        return $parsedFromStripped !== [] ? $parsedFromStripped : $parsed;
+    }
+
+    /** @param  array<int, array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool}>  $parsed */
+    private function parsedItemsAreCartReady(array $parsed): bool
+    {
+        if ($parsed === []) {
+            return false;
+        }
+
+        foreach ($parsed as $item) {
+            if ($item['needs_variant'] ?? false) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function textWithoutSchedulingPhrases(string $text): string
+    {
+        $text = mb_strtolower(trim($text));
+        $patterns = [
+            '/\bpara\s+(?:as|às)\s+\d{1,2}\s*h(?:s|rs)?(?:\s*\d{2})?\b/iu',
+            '/\b(?:as|às)\s+\d{1,2}\s*h(?:s|rs)?(?:\s*\d{2})?\b/iu',
+            '/\b(?:agendar|agendamento|programar|marcar)\s+(?:para\s+)?/iu',
+            '/\b(?:hoje|amanhã|amanha)\s+(?:as|às)\s+\d{1,2}\s*h(?:s|rs)?\b/iu',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $text = preg_replace($pattern, ' ', $text) ?? $text;
+        }
+
+        return trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
     }
 
     /** @param  array<string, mixed>  $session */
@@ -988,9 +1081,17 @@ class ConversationalWhatsAppBotService
             return false;
         }
 
+        return $this->matchesFinalizeIntent($command);
+    }
+
+    private function matchesFinalizeIntent(string $command): bool
+    {
+        $command = mb_strtolower(trim($command));
+
         return $this->matchesIntent($command, [
-            'só isso', 'so isso', 'pronto', 'finalizar', 'continuar', 'fechar', 'acabou', 'só', 'so',
-            'nao', 'não', 'n',
+            'só isso', 'so isso', 'pronto', 'finalizar', 'finalizar pedido', 'continuar',
+            'fechar', 'fechar pedido', 'acabou', 'terminar', 'terminei', 'concluir',
+            'só', 'so', 'nao', 'não', 'n',
         ]);
     }
 
@@ -1457,7 +1558,9 @@ class ConversationalWhatsAppBotService
         $segment = mb_strtolower(trim($segment));
 
         $patterns = [
+            '/^(oi|olá|ola|bom\s+dia|boa\s+tarde|boa\s+noite)\s+/iu',
             '/^(me\s+)?(vê|ve|vei|manda|quero|gostaria\s+de|preciso\s+de|pode\s+ser|vou\s+querer|vou\s+de|desejo)\s+/iu',
+            '/^(quero\s+)?pedir\s+/iu',
             '/^(também|tambem)\s+(quero|gostaria\s+de|manda|pede)\s+/iu',
             '/^(quero\s+mais|mais\s+um|mais\s+uma|mais)\s+/iu',
             '/^(apenas|somente|só|so)\s+/iu',
@@ -1844,17 +1947,27 @@ class ConversationalWhatsAppBotService
             return false;
         }
 
+        return ! $this->hasWhatsAppOrderInProgress($session);
+    }
+
+    /** @param  array<string, mixed>  $session */
+    private function hasWhatsAppOrderInProgress(array $session): bool
+    {
         $state = (string) ($session['state'] ?? '');
 
         if (in_array($state, ['side', 'extras', 'address', 'schedule', 'payment', 'pix_wait'], true)) {
-            return false;
+            return true;
         }
 
-        if ($state === 'ordering' && ($session['cart'] ?? []) !== []) {
-            return false;
+        if (($session['cart'] ?? []) !== []) {
+            return true;
         }
 
-        return true;
+        if (filled($session['scheduled_label'] ?? null) && in_array($state, ['ordering', 'welcome', ''], true)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function replyClosed(string $phone, ?Customer $customer): void
