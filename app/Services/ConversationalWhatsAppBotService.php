@@ -81,8 +81,9 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        if ($this->matchesIntent($command, ['cancelar', 'sair', 'cancel'])) {
+        if ($this->wantsToCancelOrder($command)) {
             $this->clearSession($phone);
+            WhatsAppBotPause::forgetAiHistory($phone);
             $this->replyText($phone, $this->message('cancel_message'), $customer);
 
             return;
@@ -158,16 +159,16 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        if (config('whatsapp_agent.use_openai') && $this->shouldHandleMenuItemsInPhp($session, $text)) {
+        if (config('whatsapp_agent.use_openai')) {
             $hours = OpeningHours::forWhatsApp();
 
-            if (! $hours['is_open'] && ! $hours['force_closed']) {
+            if (! $hours['is_open'] && ! $hours['force_closed'] && $this->shouldInterceptOrderWhileClosed($session, $text)) {
                 $this->handleMenuItemsOutsideHours($phone, $text, $customer);
 
                 return;
             }
 
-            if ($this->captureMenuItemsFromUserText($phone, $text, $customer)) {
+            if ($this->shouldHandleMenuItemsInPhp($session, $text) && $this->captureMenuItemsFromUserText($phone, $text, $customer)) {
                 return;
             }
         }
@@ -327,9 +328,7 @@ class ConversationalWhatsAppBotService
             return false;
         }
 
-        $state = (string) ($session['state'] ?? 'welcome');
-
-        if (! in_array($state, ['welcome', 'ordering'], true)) {
+        if (! $this->isMenuOrderingState($session)) {
             return false;
         }
 
@@ -338,6 +337,36 @@ class ConversationalWhatsAppBotService
         }
 
         return $this->messageLooksLikeMenuItems($text);
+    }
+
+    /**
+     * Fora do horário: interceptar pedidos no PHP (mesmo sem match exato no cardápio)
+     * para a OpenAI não inventar outro prato.
+     */
+    private function shouldInterceptOrderWhileClosed(array $session, string $text): bool
+    {
+        if ($this->isPureConfirmation($text)) {
+            return false;
+        }
+
+        if (! $this->isMenuOrderingState($session)) {
+            return false;
+        }
+
+        if (is_array($session['pending_variant'] ?? null) && ! empty($session['pending_variant']['product_id'])) {
+            return true;
+        }
+
+        return $this->messageLooksLikeMenuItems($text)
+            || $this->messageLooksLikeOrderIntent($text);
+    }
+
+    /** @param  array<string, mixed>  $session */
+    private function isMenuOrderingState(array $session): bool
+    {
+        $state = (string) ($session['state'] ?? 'welcome');
+
+        return in_array($state, ['welcome', 'ordering'], true);
     }
 
     /**
@@ -2037,6 +2066,48 @@ class ConversationalWhatsAppBotService
             || $this->wantsMoreItemsWithoutNamingThem($text);
     }
 
+    public function messageLooksLikeOrderIntent(string $text): bool
+    {
+        $command = mb_strtolower(trim($text));
+
+        if ($command === '') {
+            return false;
+        }
+
+        if ($this->wantsToCancelOrder($command) || WhatsAppMenuIntent::matches($command)) {
+            return false;
+        }
+
+        $patterns = [
+            '/\b(quero|gostaria|preciso|manda|pede|desejo|vou\s+(de|querer|pedir))\b/u',
+            '/^\d+\s*[xX×]?\s*\S/u',
+            '/\b(um|uma|uns|umas)\s+\S/u',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $command) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function wantsToCancelOrder(string $command): bool
+    {
+        $command = mb_strtolower(trim($command));
+
+        if ($command === '') {
+            return false;
+        }
+
+        if ($this->matchesIntent($command, ['cancelar', 'cancela', 'cancele', 'sair', 'cancel', 'desistir', 'desisto'])) {
+            return true;
+        }
+
+        return preg_match('/^cancel/u', $command) === 1;
+    }
+
     public function replyToCustomer(string $phone, string $message, ?string $pushName = null): void
     {
         $this->replyText($phone, $message, $this->resolveCustomer($phone, $pushName));
@@ -2091,6 +2162,21 @@ class ConversationalWhatsAppBotService
             'saved_address' => $session['saved_address'] ?? null,
             'saved_address_prompt' => (bool) ($session['saved_address_prompt'] ?? false),
         ];
+    }
+
+    public function ensureOrderingSession(string $phone): void
+    {
+        $session = $this->getSession($phone);
+        $state = (string) ($session['state'] ?? '');
+
+        if ($state !== '' && ! in_array($state, ['welcome', 'ordering'], true)) {
+            return;
+        }
+
+        $this->setSession($phone, array_merge($session, [
+            'state' => 'ordering',
+            'cart' => $session['cart'] ?? [],
+        ]));
     }
 
     public function savedAddressForPhone(string $phone, ?string $pushName = null): ?string

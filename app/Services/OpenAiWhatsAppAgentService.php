@@ -55,6 +55,7 @@ class OpenAiWhatsAppAgentService
                     }
 
                     if ($reply !== '') {
+                        $this->ensureOrderingSession($phone);
                         $this->bot->replyToCustomer($phone, $reply, $pushName);
                         $this->appendHistory($phone, 'assistant', $reply);
                     }
@@ -364,5 +365,10 @@ class OpenAiWhatsAppAgentService
     private function historyKey(string $phone): string
     {
         return 'whatsapp_ai_history:'.($this->bot->normalizedPhoneKey($phone));
+    }
+
+    private function ensureOrderingSession(string $phone): void
+    {
+        $this->bot->ensureOrderingSession($phone);
     }
 }

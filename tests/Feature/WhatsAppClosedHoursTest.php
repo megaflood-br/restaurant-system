@@ -176,6 +176,150 @@ class WhatsAppClosedHoursTest extends TestCase
         $this->assertStringNotContainsString('Coca Cola', $combined);
     }
 
+    public function test_cancele_clears_session_outside_hours_without_openai(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:45:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $this->seedCupimAndContraFilé();
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000305';
+
+        $bot->process($phone, 'Quero um cupim p', 'Carlos');
+        $this->assertCount(1, $bot->sessionSnapshot($phone)['cart']);
+
+        $bot->process($phone, 'Cancele', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertSame([], $snapshot['cart']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringContainsString('cancelado', mb_strtolower($combined));
+        $this->assertStringNotContainsString('Contra filé', $combined);
+    }
+
+    public function test_outside_hours_conversation_after_openai_greeting_uses_correct_dishes(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-19 23:56:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $this->seedCupimFrangoAndContraFilé();
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->once()->andReturnUsing(function (string $phone, string $text) {
+            app(ConversationalWhatsAppBotService::class)->ensureOrderingSession($phone);
+
+            return true;
+        });
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000306';
+
+        $bot->process($phone, 'ola', 'Carlos');
+        $bot->process($phone, 'Quero um cupim p', 'Carlos');
+        $bot->process($phone, 'Cancele', 'Carlos');
+        $bot->process($phone, 'Quero 1 frango grelhado p', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertCount(1, $snapshot['cart']);
+        $this->assertStringContainsString('Frango', $snapshot['cart'][0]['name']);
+        $this->assertStringNotContainsString('Contra filé', $snapshot['cart'][0]['name']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringContainsString('Cupim', $combined);
+        $this->assertStringContainsString('Frango', $combined);
+        $this->assertStringNotContainsString('Contra filé', $combined);
+        $this->assertStringNotContainsString('Posso agendar seu pedido de 1 Contra filé', $combined);
+    }
+
+    public function test_outside_hours_unknown_dish_still_blocks_openai(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:45:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $this->seedCupimAndContraFilé();
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $bot->process('5511999000307', 'Quero um prato inexistente p', 'Carlos');
+
+        $combined = implode("\n", $messages);
+        $this->assertStringContainsString('Não encontrei', $combined);
+        $this->assertStringNotContainsString('Contra filé', $combined);
+    }
+
+    private function seedCupimFrangoAndContraFilé(): void
+    {
+        $category = Category::create([
+            'name' => 'Pratos',
+            'is_active' => true,
+        ]);
+
+        foreach (['Cupim', 'Contra filé Acebolado', 'Frango Grelhado'] as $name) {
+            $product = Product::create([
+                'category_id' => $category->id,
+                'name' => $name,
+                'price' => 30,
+                'is_available' => true,
+            ]);
+
+            foreach ([['P', 30, 1], ['M', 40, 2], ['G', 50, 3]] as [$label, $price, $sort]) {
+                ProductVariant::create([
+                    'product_id' => $product->id,
+                    'label' => $label,
+                    'price' => $price,
+                    'sort_order' => $sort,
+                    'is_available' => true,
+                ]);
+            }
+        }
+    }
+
     private function seedCupimAndContraFilé(): void
     {
         $category = Category::create([
