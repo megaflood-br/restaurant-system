@@ -95,9 +95,14 @@ class OrderSchedule
     public static function mentionsScheduling(string $text): bool
     {
         $text = mb_strtolower(trim($text));
+        $text = preg_replace('/[^\p{L}\p{N}\s:]/u', ' ', $text) ?? $text;
+        $text = preg_replace('/\s+/u', ' ', trim($text)) ?? $text;
 
         return (bool) preg_match(
-            '/\b(agendar|agendamento|programar|marcar|para\s+(hoje|amanhã|amanha|segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo|depois|mais\s+tarde)|às\s+\d|as\s+\d|\d{1,2}[:h]\d{0,2}|meio[\s-]?dia|daqui\s+\d+\s+(hora|minuto))\b/u',
+            '/\b(agendar|agendamento|programar|marcar|'
+            .'para\s+(?:as|às)\s+\d{1,2}|para\s+(hoje|amanhã|amanha|segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo|depois|mais\s+tarde)|'
+            .'(?:às|as)\s+\d{1,2}|\d{1,2}\s*h(?:s|rs)?|\d{1,2}[:h]\d{0,2}|'
+            .'meio[\s-]?dia|daqui\s+\d+\s+(hora|minuto))\b/u',
             $text
         );
     }
