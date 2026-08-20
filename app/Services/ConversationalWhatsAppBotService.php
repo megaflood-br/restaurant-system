@@ -158,6 +158,20 @@ class ConversationalWhatsAppBotService
             return;
         }
 
+        if (config('whatsapp_agent.use_openai') && $this->shouldHandleMenuItemsInPhp($session, $text)) {
+            $hours = OpeningHours::forWhatsApp();
+
+            if (! $hours['is_open'] && ! $hours['force_closed']) {
+                $this->handleMenuItemsOutsideHours($phone, $text, $customer);
+
+                return;
+            }
+
+            if ($this->captureMenuItemsFromUserText($phone, $text, $customer)) {
+                return;
+            }
+        }
+
         if (config('whatsapp_agent.use_openai')) {
             $handled = app(OpenAiWhatsAppAgentService::class)->handle($phone, $text, $pushName, $payload);
 
@@ -305,6 +319,91 @@ class ConversationalWhatsAppBotService
         $this->replyText($phone, $this->render($this->message('order_added_message'), [
             'items' => $addedLines.' 🍽️',
         ]), $customer);
+    }
+
+    private function shouldHandleMenuItemsInPhp(array $session, string $text): bool
+    {
+        if ($this->isPureConfirmation($text)) {
+            return false;
+        }
+
+        $state = (string) ($session['state'] ?? 'welcome');
+
+        if (! in_array($state, ['welcome', 'ordering'], true)) {
+            return false;
+        }
+
+        if (is_array($session['pending_variant'] ?? null) && ! empty($session['pending_variant']['product_id'])) {
+            return true;
+        }
+
+        return $this->messageLooksLikeMenuItems($text);
+    }
+
+    /**
+     * Registra itens pelo PHP antes da OpenAI (fora do horário) para não trocar o prato.
+     */
+    private function handleMenuItemsOutsideHours(string $phone, string $text, ?Customer $customer): void
+    {
+        if ($this->completePendingVariantFromText($phone, $text, $customer)) {
+            return;
+        }
+
+        $parsed = $this->parseProductsFromText($text);
+
+        if ($parsed === []) {
+            $this->handleOrdering($phone, $text, $customer);
+
+            return;
+        }
+
+        foreach ($parsed as $item) {
+            if ($item['needs_variant'] ?? false) {
+                $this->handleOrdering($phone, $text, $customer);
+
+                return;
+            }
+        }
+
+        $result = $this->toolAddParsedItems($phone, $parsed, $customer);
+        $status = OpeningHours::forWhatsApp();
+        $added = implode(', ', $result['added']);
+
+        $this->replyText($phone, implode("\n", [
+            'No momento estamos *fechados*. Abrimos *'.$status['next_open_day_label'].'* às *'.$status['opening_label'].'*.',
+            '',
+            'Anotei: *'.$added.'*.',
+            '',
+            'Pode continuar pedindo ou digite *pronto* quando terminar. Seu pedido será agendado para *'.$status['next_open_day_label'].'*.',
+        ]), $customer);
+    }
+
+    /**
+     * @return bool True quando o PHP já respondeu ao cliente (não chamar OpenAI).
+     */
+    private function captureMenuItemsFromUserText(string $phone, string $text, ?Customer $customer): bool
+    {
+        if ($this->completePendingVariantFromText($phone, $text, $customer)) {
+            return true;
+        }
+
+        $parsed = $this->parseProductsFromText($text);
+
+        if ($parsed === []) {
+            return false;
+        }
+
+        foreach ($parsed as $item) {
+            if ($item['needs_variant'] ?? false) {
+                $this->handleOrdering($phone, $text, $customer);
+
+                return true;
+            }
+        }
+
+        $this->toolAddParsedItems($phone, $parsed, $customer);
+
+        return false;
     }
 
     private function completePendingVariantFromText(string $phone, string $text, ?Customer $customer): bool

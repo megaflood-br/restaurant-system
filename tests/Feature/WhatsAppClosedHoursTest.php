@@ -2,7 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Category;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Services\ConversationalWhatsAppBotService;
+use App\Services\OpenAiWhatsAppAgentService;
 use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -90,5 +94,69 @@ class WhatsAppClosedHoursTest extends TestCase
 
         $snapshot = $bot->sessionSnapshot('5511999000302');
         $this->assertSame('ordering', $snapshot['state']);
+    }
+
+    public function test_outside_hours_menu_item_is_registered_in_php_with_correct_dish(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:45:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $this->seedCupimAndContraFilé();
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $bot->process('5511999000303', 'Quero um cupim p', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot('5511999000303');
+        $this->assertCount(1, $snapshot['cart']);
+        $this->assertStringContainsString('Cupim', $snapshot['cart'][0]['name']);
+        $this->assertStringNotContainsString('Contra filé', $snapshot['cart'][0]['name']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringContainsString('fechados', mb_strtolower($combined));
+        $this->assertStringContainsString('Cupim', $combined);
+        $this->assertStringNotContainsString('Contra filé', $combined);
+    }
+
+    private function seedCupimAndContraFilé(): void
+    {
+        $category = Category::create([
+            'name' => 'Pratos',
+            'is_active' => true,
+        ]);
+
+        foreach (['Cupim', 'Contra filé Acebolado'] as $name) {
+            $product = Product::create([
+                'category_id' => $category->id,
+                'name' => $name,
+                'price' => 30,
+                'is_available' => true,
+            ]);
+
+            foreach ([['P', 30, 1], ['M', 40, 2], ['G', 50, 3]] as [$label, $price, $sort]) {
+                ProductVariant::create([
+                    'product_id' => $product->id,
+                    'label' => $label,
+                    'price' => $price,
+                    'sort_order' => $sort,
+                    'is_available' => true,
+                ]);
+            }
+        }
     }
 }
