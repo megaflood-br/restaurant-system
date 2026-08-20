@@ -159,6 +159,18 @@ class ConversationalWhatsAppBotService
             return;
         }
 
+        if (OrderSchedule::enabled() && $this->isMenuOrderingState($session) && OrderSchedule::mentionsScheduling($text)) {
+            if ($this->captureScheduleIntent($phone, $text, $customer, $session)) {
+                return;
+            }
+        }
+
+        if ($this->shouldFinalizeItemsInPhp($session, $command)) {
+            $this->handleOrdering($phone, $text, $customer);
+
+            return;
+        }
+
         if (config('whatsapp_agent.use_openai')) {
             $hours = OpeningHours::forWhatsApp();
 
@@ -357,6 +369,10 @@ class ConversationalWhatsAppBotService
             return true;
         }
 
+        if (OrderSchedule::enabled() && OrderSchedule::mentionsScheduling($text)) {
+            return false;
+        }
+
         return $this->messageLooksLikeMenuItems($text)
             || $this->messageLooksLikeOrderIntent($text);
     }
@@ -375,6 +391,12 @@ class ConversationalWhatsAppBotService
     private function handleMenuItemsOutsideHours(string $phone, string $text, ?Customer $customer): void
     {
         if ($this->completePendingVariantFromText($phone, $text, $customer)) {
+            return;
+        }
+
+        $session = $this->getSession($phone);
+
+        if ($this->captureScheduleIntent($phone, $text, $customer, $session)) {
             return;
         }
 
@@ -766,7 +788,9 @@ class ConversationalWhatsAppBotService
         $resolved = OrderSchedule::resolve($text);
 
         if ($resolved['error'] !== null) {
-            return false;
+            $this->replyText($phone, $resolved['error'], $customer);
+
+            return true;
         }
 
         $this->setSession($phone, array_merge($session, [
@@ -781,6 +805,22 @@ class ConversationalWhatsAppBotService
         );
 
         return true;
+    }
+
+    /** @param  array<string, mixed>  $session */
+    private function shouldFinalizeItemsInPhp(array $session, string $command): bool
+    {
+        if (($session['cart'] ?? []) === []) {
+            return false;
+        }
+
+        if (! $this->isMenuOrderingState($session)) {
+            return false;
+        }
+
+        return $this->matchesIntent($command, [
+            'só isso', 'so isso', 'pronto', 'finalizar', 'continuar', 'fechar', 'acabou', 'só', 'so',
+        ]);
     }
 
     private function scheduledForFromSession(array $session): ?Carbon
@@ -2078,6 +2118,10 @@ class ConversationalWhatsAppBotService
             return false;
         }
 
+        if (OrderSchedule::enabled() && OrderSchedule::mentionsScheduling($command)) {
+            return false;
+        }
+
         $patterns = [
             '/\b(quero|gostaria|preciso|manda|pede|desejo|vou\s+(de|querer|pedir))\b/u',
             '/^\d+\s*[xX×]?\s*\S/u',
@@ -2158,6 +2202,7 @@ class ConversationalWhatsAppBotService
             'order_type' => $session['order_type'] ?? null,
             'delivery_fee' => $session['delivery_fee'] ?? null,
             'payment_method' => $session['payment_method'] ?? null,
+            'scheduled_for' => $session['scheduled_for'] ?? null,
             'scheduled_label' => $session['scheduled_label'] ?? null,
             'saved_address' => $session['saved_address'] ?? null,
             'saved_address_prompt' => (bool) ($session['saved_address_prompt'] ?? false),

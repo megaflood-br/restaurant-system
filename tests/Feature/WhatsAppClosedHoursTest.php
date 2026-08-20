@@ -293,6 +293,74 @@ class WhatsAppClosedHoursTest extends TestCase
         $this->assertStringNotContainsString('Contra filé', $combined);
     }
 
+    public function test_schedule_during_ordering_before_open_is_saved_and_used_on_pronto(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:03:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $this->seedCupimProduct('Cupim Assado');
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->andReturn(false);
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000308';
+
+        $bot->process($phone, 'Quero um cupim assado p', 'Carlos');
+        $bot->process($phone, 'quero para as 12hs', 'Carlos');
+        $bot->process($phone, 'pronto', 'Carlos');
+        $bot->process($phone, 'nenhuma', 'Carlos');
+        $bot->process($phone, 'retirada', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertSame('hoje às 12:00', $snapshot['scheduled_label']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringContainsString('Horário anotado', $combined);
+        $this->assertStringContainsString('12:00', $combined);
+        $this->assertStringNotContainsString('Não encontrei esse item', $combined);
+        $this->assertStringNotContainsString('Posso agendar seu pedido', $combined);
+        $this->assertStringContainsString('hoje às 12:00', $combined);
+    }
+
+    private function seedCupimProduct(string $name = 'Cupim'): void
+    {
+        $category = Category::create([
+            'name' => 'Pratos',
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => $name,
+            'price' => 28,
+            'is_available' => true,
+        ]);
+
+        foreach ([['P', 28, 1], ['M', 38, 2], ['G', 48, 3]] as [$label, $price, $sort]) {
+            ProductVariant::create([
+                'product_id' => $product->id,
+                'label' => $label,
+                'price' => $price,
+                'sort_order' => $sort,
+                'is_available' => true,
+            ]);
+        }
+    }
+
     private function seedCupimFrangoAndContraFilé(): void
     {
         $category = Category::create([

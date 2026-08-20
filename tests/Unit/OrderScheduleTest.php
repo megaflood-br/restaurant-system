@@ -196,4 +196,18 @@ class OrderScheduleTest extends TestCase
         $this->assertNotNull($resolved['error']);
         $this->assertStringContainsStringIgnoringCase('domingo', (string) $resolved['error']);
     }
+
+    public function test_quero_para_as_12hs_is_detected_as_scheduling(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:03:00', 'America/Sao_Paulo'));
+
+        $this->assertTrue(OrderSchedule::mentionsScheduling('quero para as 12hs'));
+        $this->assertTrue(OrderSchedule::mentionsScheduling('quero para as 12hs]'));
+
+        $resolved = OrderSchedule::resolve('quero para as 12hs');
+
+        $this->assertNull($resolved['error'], (string) $resolved['error']);
+        $this->assertSame('12:00', $resolved['datetime']?->format('H:i'));
+        $this->assertStringContainsString('hoje', (string) $resolved['label']);
+    }
 }
