@@ -2093,7 +2093,8 @@ class ConversationalWhatsAppBotService
             return true;
         }
 
-        return $this->wantsMoreItemsWithoutNamingThem($text);
+        return $this->wantsToEditOrder($text)
+            || $this->wantsMoreItemsWithoutNamingThem($text);
     }
 
     private function isCheckoutInterruptibleState(?string $state): bool
@@ -2122,8 +2123,6 @@ class ConversationalWhatsAppBotService
             'e mais',
             'colocar mais',
             'pedir mais',
-            'mudar o pedido',
-            'alterar o pedido',
             'voltar pro cardapio',
             'voltar pro cardápio',
             'voltar ao cardapio',
@@ -2139,22 +2138,82 @@ class ConversationalWhatsAppBotService
         return false;
     }
 
+    private function wantsToEditOrder(string $text): bool
+    {
+        $command = mb_strtolower(trim($text));
+
+        if ($command === '') {
+            return false;
+        }
+
+        $phrases = [
+            'editar o pedido',
+            'editar pedido',
+            'editar',
+            'corrigir o pedido',
+            'corrigir pedido',
+            'corrigir',
+            'mudar o pedido',
+            'mudar pedido',
+            'alterar o pedido',
+            'alterar pedido',
+            'trocar o pedido',
+            'trocar pedido',
+        ];
+
+        foreach ($phrases as $phrase) {
+            if ($command === $phrase || str_starts_with($command, $phrase.' ') || str_contains($command, ' '.$phrase)) {
+                return true;
+            }
+        }
+
+        return (bool) preg_match(
+            '/\b(editar|corrigir|alterar|mudar|trocar)\b.*\bpedido\b/u',
+            $command
+        );
+    }
+
     private function resumeOrderingForMoreItems(string $phone, string $text, ?Customer $customer): void
     {
         $session = $this->getSession($phone);
+        $editing = $this->wantsToEditOrder($text);
 
-        $this->setSession($phone, array_merge($session, [
+        $updates = [
             'state' => 'ordering',
-            'saved_address_prompt' => false,
-            'delivery_fee' => null,
-            'delivery_address' => null,
-            'delivery_area_id' => null,
-            'distance_km' => null,
-            'order_type' => null,
-            'scheduled_for' => null,
-            'scheduled_label' => null,
             'payment_method' => null,
-        ]));
+        ];
+
+        if (! $editing) {
+            $updates = array_merge($updates, [
+                'saved_address_prompt' => false,
+                'delivery_fee' => null,
+                'delivery_address' => null,
+                'delivery_area_id' => null,
+                'distance_km' => null,
+                'order_type' => null,
+                'scheduled_for' => null,
+                'scheduled_label' => null,
+            ]);
+        }
+
+        $this->setSession($phone, array_merge($session, $updates));
+
+        if ($editing) {
+            $cart = $session['cart'] ?? [];
+            $summary = $cart !== []
+                ? $this->cartSummary($cart, detailed: true)
+                : '_(vazio)_';
+
+            $this->replyText($phone, implode("\n", [
+                'Sem problemas! Seu pedido até agora:',
+                '',
+                $summary,
+                '',
+                'Me diga o que quer *adicionar*. Digite *cancelar* para recomeçar do zero ou *pronto* quando terminar.',
+            ]), $customer);
+
+            return;
+        }
 
         if ($this->parseProductsFromText($text) === []) {
             $this->replyText(
