@@ -293,6 +293,54 @@ class WhatsAppClosedHoursTest extends TestCase
         $this->assertStringNotContainsString('Contra filé', $combined);
     }
 
+    public function test_combined_item_and_schedule_then_terminar_advances_checkout_without_openai(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:45:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $this->seedCupimProduct('Cupim Assado');
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000309';
+
+        $bot->process($phone, 'oi quero pedir um cupim P para as 12hs', 'Carlos');
+
+        $afterSchedule = $bot->sessionSnapshot($phone);
+        $this->assertSame('ordering', $afterSchedule['state']);
+        $this->assertSame('hoje às 12:00', $afterSchedule['scheduled_label']);
+        $this->assertCount(1, $afterSchedule['cart']);
+        $this->assertStringContainsString('Cupim', $afterSchedule['cart'][0]['name']);
+
+        $bot->process($phone, 'terminar', 'Carlos');
+
+        $afterFinalize = $bot->sessionSnapshot($phone);
+        $this->assertContains($afterFinalize['state'], ['side', 'extras', 'address']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringContainsString('Horário anotado', $combined);
+        $this->assertStringContainsString('Anotei', $combined);
+        $this->assertStringContainsString('Cupim', $combined);
+        $this->assertStringNotContainsString('está fechado', mb_strtolower($combined));
+        $this->assertStringNotContainsString('Abriremos hoje', $combined);
+        $this->assertStringNotContainsString('gostaria de fazer um pedido para agendar', mb_strtolower($combined));
+    }
+
     public function test_schedule_during_ordering_before_open_is_saved_and_used_on_pronto(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-20 00:03:00', 'America/Sao_Paulo'));
