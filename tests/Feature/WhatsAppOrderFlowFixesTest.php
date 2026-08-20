@@ -699,6 +699,44 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         $this->assertStringContainsString('endereço', mb_strtolower($combined));
     }
 
+    public function test_nao_after_drink_upsell_finalizes_in_php_not_openai(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:16:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $product = $this->createStrogonoff();
+        $product->update(['requires_side' => true]);
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000501';
+
+        $bot->process($phone, 'strogonoff P', 'Carlos');
+        $bot->process($phone, 'não', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertContains($snapshot['state'], ['side', 'extras', 'address']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringNotContainsString('estou à disposição', mb_strtolower($combined));
+        $this->assertStringNotContainsString('Olá, Carlos', $combined);
+    }
+
     private function createStrogonoff(): Product
     {
         $category = Category::create([
