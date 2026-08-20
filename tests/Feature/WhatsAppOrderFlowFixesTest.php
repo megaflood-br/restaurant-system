@@ -796,6 +796,99 @@ class WhatsAppOrderFlowFixesTest extends TestCase
         $this->assertStringNotContainsString('Abriremos', $combined);
     }
 
+    public function test_mudar_at_payment_returns_to_ordering_in_php(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:29:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $product = $this->createStrogonoff();
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->once();
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000503';
+        $variant = $product->variants->first();
+
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $method->invoke($bot, $phone, [
+            'state' => 'payment',
+            'cart' => [[
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => 3,
+            ]],
+            'scheduled_label' => 'hoje às 12:00',
+        ]);
+
+        $bot->process($phone, 'mudar', 'Carlos');
+
+        $this->assertSame('ordering', $bot->sessionSnapshot($phone)['state']);
+    }
+
+    public function test_apenas_1_bife_replaces_cart_quantity_from_payment(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 00:29:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $category = Category::create(['name' => 'Pratos', 'is_active' => true]);
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Bife a Cavalo (Contra Filé)',
+            'price' => 28,
+            'is_available' => true,
+        ]);
+        $variant = ProductVariant::create([
+            'product_id' => $product->id,
+            'label' => 'P',
+            'price' => 28,
+            'sort_order' => 1,
+            'is_available' => true,
+        ]);
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->never();
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')->once();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $phone = '5511999000504';
+
+        $method = new ReflectionMethod(ConversationalWhatsAppBotService::class, 'setSession');
+        $method->setAccessible(true);
+        $method->invoke($bot, $phone, [
+            'state' => 'payment',
+            'cart' => [[
+                'product_id' => $product->id,
+                'variant_id' => $variant->id,
+                'quantity' => 3,
+            ]],
+            'scheduled_label' => 'hoje às 12:00',
+            'scheduled_for' => Carbon::parse('2026-08-20 12:00:00', 'America/Sao_Paulo')->toIso8601String(),
+            'delivery_address' => 'Rua Machado de Assis, 465',
+            'delivery_fee' => 4.0,
+            'order_type' => 'delivery',
+        ]);
+
+        $bot->process($phone, 'quero apenas 1 bife', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot($phone);
+        $this->assertSame('ordering', $snapshot['state']);
+        $this->assertSame('hoje às 12:00', $snapshot['scheduled_label']);
+        $this->assertCount(1, $snapshot['cart']);
+        $this->assertSame(1, (int) $snapshot['cart'][0]['quantity']);
+    }
+
     private function createStrogonoff(): Product
     {
         $category = Category::create([

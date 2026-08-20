@@ -279,6 +279,14 @@ class ConversationalWhatsAppBotService
         }
 
         $parsed = $this->parseProductsFromText($text);
+        $replaceQuantity = $this->messageReplacesCartQuantity($text);
+
+        if ($parsed !== []) {
+            $parsed = array_map(
+                fn (array $item) => $this->fillVariantFromCartIfUnique($session['cart'] ?? [], $item),
+                $parsed
+            );
+        }
 
         if ($parsed === []) {
             $faqAnswer = $this->tryAnswerFaq($text);
@@ -303,6 +311,7 @@ class ConversationalWhatsAppBotService
                         'product_id' => $item['product_id'],
                         'quantity' => $item['quantity'],
                         'product_name' => $item['product_name'] ?? $item['name'],
+                        'replace_quantity' => $replaceQuantity,
                     ],
                 ]));
                 $this->replyText(
@@ -315,41 +324,23 @@ class ConversationalWhatsAppBotService
             }
         }
 
-        $cart = $session['cart'] ?? [];
+        $cart = $this->mergeParsedItemsIntoCart($session['cart'] ?? [], $parsed, $replaceQuantity);
 
-        foreach ($parsed as $item) {
-            $cartKey = $item['product_id'].'|'.($item['variant_id'] ?? 0);
-            $found = false;
-
-            foreach ($cart as &$cartItem) {
-                $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
-
-                if ($existingKey === $cartKey) {
-                    $cartItem['quantity'] += $item['quantity'];
-                    $found = true;
-                    break;
-                }
-            }
-            unset($cartItem);
-
-            if (! $found) {
-                $cart[] = [
-                    'product_id' => $item['product_id'],
-                    'variant_id' => $item['variant_id'] ?? null,
-                    'quantity' => $item['quantity'],
-                ];
-            }
-        }
-
-        $this->setSession($phone, [
+        $this->setSession($phone, array_merge($session, [
             'state' => 'ordering',
             'cart' => $cart,
             'pending_variant' => null,
-        ]);
+        ]));
 
         $addedLines = collect($parsed)
             ->map(fn (array $item) => "{$item['quantity']}x {$item['name']}")
             ->implode(', ');
+
+        if ($replaceQuantity) {
+            $this->replyText($phone, 'Atualizado! *'.$addedLines.'*. Quer incluir mais alguma coisa? Digite *pronto* quando terminar.', $customer);
+
+            return;
+        }
 
         $this->replyText($phone, $this->render($this->message('order_added_message'), [
             'items' => $addedLines.' 🍽️',
@@ -527,40 +518,150 @@ class ConversationalWhatsAppBotService
         }
 
         $quantity = max(1, (int) ($pending['quantity'] ?? 1));
+        $replaceQuantity = (bool) ($pending['replace_quantity'] ?? false);
         $cart = $session['cart'] ?? [];
         $cartKey = $product->id.'|'.$variant->id;
-        $found = false;
 
-        foreach ($cart as &$cartItem) {
-            $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
-
-            if ($existingKey === $cartKey) {
-                $cartItem['quantity'] += $quantity;
-                $found = true;
-                break;
-            }
-        }
-        unset($cartItem);
-
-        if (! $found) {
+        if ($replaceQuantity) {
+            $cart = array_values(array_filter(
+                $cart,
+                fn (array $line) => (int) ($line['product_id'] ?? 0) !== $product->id
+            ));
             $cart[] = [
                 'product_id' => $product->id,
                 'variant_id' => $variant->id,
                 'quantity' => $quantity,
             ];
+        } else {
+            $found = false;
+
+            foreach ($cart as &$cartItem) {
+                $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
+
+                if ($existingKey === $cartKey) {
+                    $cartItem['quantity'] += $quantity;
+                    $found = true;
+                    break;
+                }
+            }
+            unset($cartItem);
+
+            if (! $found) {
+                $cart[] = [
+                    'product_id' => $product->id,
+                    'variant_id' => $variant->id,
+                    'quantity' => $quantity,
+                ];
+            }
         }
 
-        $this->setSession($phone, [
+        $this->setSession($phone, array_merge($session, [
             'state' => 'ordering',
             'cart' => $cart,
             'pending_variant' => null,
-        ]);
+        ]));
 
-        $this->replyText($phone, $this->render($this->message('order_added_message'), [
-            'items' => "{$quantity}x {$product->name} ({$variant->label}) 🍽️",
-        ]), $customer);
+        $reply = $replaceQuantity
+            ? 'Atualizado! *'.$quantity.'x '.$product->name.' ('.$variant->label.')*. Digite *pronto* quando terminar.'
+            : $this->render($this->message('order_added_message'), [
+                'items' => "{$quantity}x {$product->name} ({$variant->label}) 🍽️",
+            ]);
+
+        $this->replyText($phone, $reply, $customer);
 
         return true;
+    }
+
+    /** @param  array<int, array<string, mixed>>  $cart */
+    /** @param  array<int, array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string}>  $parsed */
+    /** @return array<int, array<string, mixed>> */
+    private function mergeParsedItemsIntoCart(array $cart, array $parsed, bool $replaceQuantity = false): array
+    {
+        foreach ($parsed as $item) {
+            $cartKey = $item['product_id'].'|'.($item['variant_id'] ?? 0);
+            $found = false;
+
+            foreach ($cart as &$cartItem) {
+                $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
+
+                if ($existingKey === $cartKey) {
+                    $cartItem['quantity'] = $replaceQuantity
+                        ? $item['quantity']
+                        : ($cartItem['quantity'] + $item['quantity']);
+                    $found = true;
+                    break;
+                }
+            }
+            unset($cartItem);
+
+            if (! $found) {
+                if ($replaceQuantity) {
+                    $cart = array_values(array_filter(
+                        $cart,
+                        fn (array $line) => ($line['product_id'] ?? null) !== $item['product_id']
+                    ));
+                }
+
+                $cart[] = [
+                    'product_id' => $item['product_id'],
+                    'variant_id' => $item['variant_id'] ?? null,
+                    'quantity' => $item['quantity'],
+                ];
+            }
+        }
+
+        return $cart;
+    }
+
+    /** @param  array<int, array<string, mixed>>  $cart */
+    /** @param  array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string}  $item */
+    /** @return array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string} */
+    private function fillVariantFromCartIfUnique(array $cart, array $item): array
+    {
+        if (! ($item['needs_variant'] ?? false)) {
+            return $item;
+        }
+
+        $productId = (int) ($item['product_id'] ?? 0);
+        $lines = array_values(array_filter(
+            $cart,
+            fn (array $line) => (int) ($line['product_id'] ?? 0) === $productId && filled($line['variant_id'] ?? null)
+        ));
+
+        if (count($lines) !== 1) {
+            return $item;
+        }
+
+        $product = Product::query()
+            ->with(['variants' => fn ($query) => $query->where('is_available', true)->orderBy('sort_order')])
+            ->find($productId);
+
+        $variant = $product?->variants->firstWhere('id', (int) $lines[0]['variant_id']);
+
+        if ($product === null || $variant === null) {
+            return $item;
+        }
+
+        return [
+            'product_id' => $product->id,
+            'variant_id' => $variant->id,
+            'quantity' => $item['quantity'],
+            'name' => $product->name.' ('.$variant->label.')',
+        ];
+    }
+
+    private function messageReplacesCartQuantity(string $text): bool
+    {
+        $command = mb_strtolower(trim($text));
+
+        if ($command === '') {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/\b(apenas|somente|só|so|mudar\s+para|trocar\s+para|alterar\s+para|ao\s+inv[eé]s\s+de)\b/u',
+            $command
+        ) || (bool) preg_match('/\b(quero|gostaria\s+de)\s+(apenas|somente|só|so)\s+\d/u', $command);
     }
 
     private function askSideOrExtras(string $phone, ?Customer $customer): void
@@ -1359,6 +1460,7 @@ class ConversationalWhatsAppBotService
             '/^(me\s+)?(vê|ve|vei|manda|quero|gostaria\s+de|preciso\s+de|pode\s+ser|vou\s+querer|vou\s+de|desejo)\s+/iu',
             '/^(também|tambem)\s+(quero|gostaria\s+de|manda|pede)\s+/iu',
             '/^(quero\s+mais|mais\s+um|mais\s+uma|mais)\s+/iu',
+            '/^(apenas|somente|só|so)\s+/iu',
             '/^(um|uma|uns|umas)\s+/iu',
             '/^(de|do|da|dos|das)\s+/iu',
         ];
@@ -1555,9 +1657,14 @@ class ConversationalWhatsAppBotService
 
     /** @param  array<int, array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string}>  $parsed */
     /** @return array<string, mixed> */
-    private function toolAddParsedItems(string $phone, array $parsed, ?Customer $customer): array
+    private function toolAddParsedItems(string $phone, array $parsed, ?Customer $customer, ?string $userText = null): array
     {
         $session = $this->getSession($phone);
+        $replaceQuantity = $this->messageReplacesCartQuantity((string) $userText);
+        $parsed = array_map(
+            fn (array $item) => $this->fillVariantFromCartIfUnique($session['cart'] ?? [], $item),
+            $parsed
+        );
 
         foreach ($parsed as $item) {
             if ($item['needs_variant'] ?? false) {
@@ -1568,6 +1675,7 @@ class ConversationalWhatsAppBotService
                         'product_id' => $item['product_id'],
                         'quantity' => $item['quantity'],
                         'product_name' => $item['product_name'] ?? $item['name'],
+                        'replace_quantity' => $replaceQuantity,
                     ],
                 ]));
                 $ask = "O *{$item['product_name']}* tem tamanhos {$sizes}. Qual você prefere? Responda *P*, *M* ou *G*.";
@@ -1590,37 +1698,17 @@ class ConversationalWhatsAppBotService
         $cart = $session['cart'] ?? [];
         $added = [];
 
+        $cart = $this->mergeParsedItemsIntoCart($cart, $parsed, $replaceQuantity);
+
         foreach ($parsed as $item) {
-            $cartKey = $item['product_id'].'|'.($item['variant_id'] ?? 0);
-            $found = false;
-
-            foreach ($cart as &$cartItem) {
-                $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
-
-                if ($existingKey === $cartKey) {
-                    $cartItem['quantity'] += $item['quantity'];
-                    $found = true;
-                    break;
-                }
-            }
-            unset($cartItem);
-
-            if (! $found) {
-                $cart[] = [
-                    'product_id' => $item['product_id'],
-                    'variant_id' => $item['variant_id'] ?? null,
-                    'quantity' => $item['quantity'],
-                ];
-            }
-
             $added[] = "{$item['quantity']}x {$item['name']}";
         }
 
-        $this->setSession($phone, [
+        $this->setSession($phone, array_merge($session, [
             'state' => 'ordering',
             'cart' => $cart,
             'pending_variant' => null,
-        ]);
+        ]));
 
         return [
             'ok' => true,
@@ -2094,6 +2182,7 @@ class ConversationalWhatsAppBotService
         }
 
         return $this->wantsToEditOrder($text)
+            || $this->messageReplacesCartQuantity($text)
             || $this->wantsMoreItemsWithoutNamingThem($text);
     }
 
@@ -2155,10 +2244,13 @@ class ConversationalWhatsAppBotService
             'corrigir',
             'mudar o pedido',
             'mudar pedido',
+            'mudar',
             'alterar o pedido',
             'alterar pedido',
+            'alterar',
             'trocar o pedido',
             'trocar pedido',
+            'trocar',
         ];
 
         foreach ($phrases as $phrase) {
@@ -2176,7 +2268,7 @@ class ConversationalWhatsAppBotService
     private function resumeOrderingForMoreItems(string $phone, string $text, ?Customer $customer): void
     {
         $session = $this->getSession($phone);
-        $editing = $this->wantsToEditOrder($text);
+        $editing = $this->wantsToEditOrder($text) || $this->messageReplacesCartQuantity($text);
 
         $updates = [
             'state' => 'ordering',
@@ -2197,6 +2289,13 @@ class ConversationalWhatsAppBotService
         }
 
         $this->setSession($phone, array_merge($session, $updates));
+        $parsed = $this->parseProductsFromText($text);
+
+        if ($parsed !== []) {
+            $this->handleOrdering($phone, $text, $customer);
+
+            return;
+        }
 
         if ($editing) {
             $cart = $session['cart'] ?? [];
@@ -2209,23 +2308,17 @@ class ConversationalWhatsAppBotService
                 '',
                 $summary,
                 '',
-                'Me diga o que quer *adicionar*. Digite *cancelar* para recomeçar do zero ou *pronto* quando terminar.',
+                'Me diga a quantidade correta (ex.: *apenas 1 bife P*) ou o que quer *adicionar*. Digite *cancelar* para recomeçar ou *pronto* quando terminar.',
             ]), $customer);
 
             return;
         }
 
-        if ($this->parseProductsFromText($text) === []) {
-            $this->replyText(
-                $phone,
-                'Claro! Me diga o que mais você quer incluir. Quando terminar, digite *pronto*.',
-                $customer
-            );
-
-            return;
-        }
-
-        $this->handleOrdering($phone, $text, $customer);
+        $this->replyText(
+            $phone,
+            'Claro! Me diga o que mais você quer incluir. Quando terminar, digite *pronto*.',
+            $customer
+        );
     }
 
     /** Usado pelo agente OpenAI para não tratar prato como endereço. */
@@ -2421,7 +2514,7 @@ class ConversationalWhatsAppBotService
             $parsed = $this->parseProductsFromText($userText);
 
             if ($parsed !== []) {
-                return $this->toolAddParsedItems($phone, $parsed, $customer);
+                return $this->toolAddParsedItems($phone, $parsed, $customer, $userText);
             }
         }
 
