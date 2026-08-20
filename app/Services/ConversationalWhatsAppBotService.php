@@ -1500,7 +1500,7 @@ class ConversationalWhatsAppBotService
             return 1000;
         }
 
-        if (mb_stripos($query, $name) !== false || mb_stripos($name, $query) !== false) {
+        if ($this->fullNameContainsQuery($query, $name)) {
             return 900;
         }
 
@@ -1514,8 +1514,7 @@ class ConversationalWhatsAppBotService
         foreach ($queryTokens as $queryToken) {
             foreach ($nameTokens as $nameToken) {
                 if ($queryToken === $nameToken
-                    || mb_stripos($nameToken, $queryToken) !== false
-                    || mb_stripos($queryToken, $nameToken) !== false) {
+                    || $this->tokensHaveStrongPartialMatch($queryToken, $nameToken)) {
                     $matched++;
                     break;
                 }
@@ -1530,6 +1529,39 @@ class ConversationalWhatsAppBotService
         $nameCoverage = $matched / max(count($nameTokens), 1);
 
         return (int) round(($queryCoverage * 0.7 + $nameCoverage * 0.3) * 100);
+    }
+
+    private function tokensHaveStrongPartialMatch(string $queryToken, string $nameToken): bool
+    {
+        $queryToken = trim($queryToken);
+        $nameToken = trim($nameToken);
+
+        if ($queryToken === '' || $nameToken === '') {
+            return false;
+        }
+
+        if (mb_strlen($queryToken) < 4 || mb_strlen($nameToken) < 4) {
+            return false;
+        }
+
+        return mb_stripos($nameToken, $queryToken) !== false
+            || mb_stripos($queryToken, $nameToken) !== false;
+    }
+
+    private function fullNameContainsQuery(string $query, string $name): bool
+    {
+        $query = trim($query);
+        $name = trim($name);
+
+        if ($query === '' || $name === '') {
+            return false;
+        }
+
+        if (mb_strlen($query) < 4) {
+            return false;
+        }
+
+        return mb_stripos($query, $name) !== false || mb_stripos($name, $query) !== false;
     }
 
     /** @return array<int, string> */
