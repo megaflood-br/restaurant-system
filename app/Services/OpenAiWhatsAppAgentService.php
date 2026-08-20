@@ -135,6 +135,7 @@ class OpenAiWhatsAppAgentService
             'Nunca invente pratos, preços, tamanhos (P/M/G) nem ingredientes.',
             'Para dúvidas sobre o prato (ingredientes, descrição), use SOMENTE o campo description do get_menu/cardápio. Se description estiver vazio, diga que não tem esse detalhe cadastrado — NÃO invente.',
             'Se o produto tiver variações e o cliente NÃO disse o tamanho, NÃO chame add_to_cart com P/M/G inventado: pergunte o tamanho e só então adicione.',
+            'Se add_to_cart retornar needs_variant ou ask_customer, repasse a pergunta ao cliente e espere a resposta — não troque o prato por outro do cardápio.',
             'Use SEMPRE as ferramentas para consultar cardápio, adicionar itens, ver carrinho e avançar etapas.',
             'Nunca invente pratos ou preços — consulte get_menu.',
             'Quando o cliente pedir cardápio/menu (ex.: "cardápio", "cardápio de hoje", "cardápio de segunda", "manda o menu"), chame OBRIGATORIAMENTE send_menu_image.',
