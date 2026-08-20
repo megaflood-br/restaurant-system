@@ -316,9 +316,7 @@ class ConversationalWhatsAppBotService
             return false;
         }
 
-        $size = $this->parseSizeToken($text) ?? $this->extractVariantHint(mb_strtolower(trim($text)))[1];
-
-        if ($size === null) {
+        if ($this->isPureConfirmation($text)) {
             return false;
         }
 
@@ -329,6 +327,18 @@ class ConversationalWhatsAppBotService
         if (! $product) {
             $this->setSession($phone, array_merge($session, ['pending_variant' => null]));
 
+            return false;
+        }
+
+        if ($this->userTextMentionsDifferentProduct($text, $product)) {
+            $this->setSession($phone, array_merge($session, ['pending_variant' => null]));
+
+            return false;
+        }
+
+        $size = $this->parseSizeToken($text) ?? $this->extractVariantHint(mb_strtolower(trim($text)))[1];
+
+        if ($size === null) {
             return false;
         }
 
@@ -549,6 +559,13 @@ class ConversationalWhatsAppBotService
 
     private function confirmsSavedAddress(string $command): bool
     {
+        return $this->isPureConfirmation($command);
+    }
+
+    private function isPureConfirmation(string $command): bool
+    {
+        $command = mb_strtolower(trim($command));
+
         return $this->matchesIntent($command, [
             'sim', 's', 'ss', 'yes', 'ok', 'okay', 'pode', 'pode ser', 'isso', 'isso mesmo',
             'mesmo', 'esse', 'esse mesmo', 'este', 'este mesmo', 'confirmar', 'confirmo',
@@ -1252,6 +1269,129 @@ class ConversationalWhatsAppBotService
         return $bestScore >= 50 ? $best : null;
     }
 
+    private function userTextMentionsDifferentProduct(string $text, Product $pendingProduct): bool
+    {
+        $parsed = $this->parseProductsFromText($text);
+
+        foreach ($parsed as $item) {
+            if (($item['product_id'] ?? null) !== $pendingProduct->id) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function userTextMentionsProduct(string $text, Product $product): bool
+    {
+        $parsed = $this->parseProductsFromText($text);
+
+        foreach ($parsed as $item) {
+            if (($item['product_id'] ?? null) === $product->id) {
+                return true;
+            }
+        }
+
+        if ($parsed !== []) {
+            return false;
+        }
+
+        if ($this->parseSizeToken($text) !== null) {
+            return true;
+        }
+
+        $normalized = $this->normalizeOrderSegment($text);
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        $queryTokens = $this->significantTokens($normalized);
+
+        if ($queryTokens === []) {
+            return false;
+        }
+
+        return $this->productMatchScore($normalized, $queryTokens, $product) >= 50;
+    }
+
+    /** @param  array<int, array{product_id: int, variant_id: ?int, quantity: int, name: string, needs_variant?: bool, product_name?: string, available_sizes?: string}>  $parsed */
+    /** @return array<string, mixed> */
+    private function toolAddParsedItems(string $phone, array $parsed, ?Customer $customer): array
+    {
+        $session = $this->getSession($phone);
+
+        foreach ($parsed as $item) {
+            if ($item['needs_variant'] ?? false) {
+                $sizes = $item['available_sizes'] ?? 'P, M ou G';
+                $this->setSession($phone, array_merge($session, [
+                    'state' => 'ordering',
+                    'pending_variant' => [
+                        'product_id' => $item['product_id'],
+                        'quantity' => $item['quantity'],
+                        'product_name' => $item['product_name'] ?? $item['name'],
+                    ],
+                ]));
+                $ask = "O *{$item['product_name']}* tem tamanhos {$sizes}. Qual você prefere? Responda *P*, *M* ou *G*.";
+
+                return [
+                    'ok' => false,
+                    'added' => [],
+                    'errors' => [$ask],
+                    'needs_variant' => [[
+                        'product_name' => $item['product_name'] ?? $item['name'],
+                        'available_sizes' => $sizes,
+                        'message' => $ask,
+                    ]],
+                    'ask_customer' => $ask,
+                    'cart' => $this->simplifiedCart($session['cart'] ?? []),
+                ];
+            }
+        }
+
+        $cart = $session['cart'] ?? [];
+        $added = [];
+
+        foreach ($parsed as $item) {
+            $cartKey = $item['product_id'].'|'.($item['variant_id'] ?? 0);
+            $found = false;
+
+            foreach ($cart as &$cartItem) {
+                $existingKey = $cartItem['product_id'].'|'.($cartItem['variant_id'] ?? 0);
+
+                if ($existingKey === $cartKey) {
+                    $cartItem['quantity'] += $item['quantity'];
+                    $found = true;
+                    break;
+                }
+            }
+            unset($cartItem);
+
+            if (! $found) {
+                $cart[] = [
+                    'product_id' => $item['product_id'],
+                    'variant_id' => $item['variant_id'] ?? null,
+                    'quantity' => $item['quantity'],
+                ];
+            }
+
+            $added[] = "{$item['quantity']}x {$item['name']}";
+        }
+
+        $this->setSession($phone, [
+            'state' => 'ordering',
+            'cart' => $cart,
+            'pending_variant' => null,
+        ]);
+
+        return [
+            'ok' => true,
+            'added' => $added,
+            'errors' => [],
+            'cart' => $this->simplifiedCart($cart),
+        ];
+    }
+
     /** @param  array<int, string>  $queryTokens */
     private function productMatchScore(string $query, array $queryTokens, Product $product): int
     {
@@ -1884,8 +2024,19 @@ class ConversationalWhatsAppBotService
         $errors = [];
         $needsVariant = [];
         $userText = trim((string) $userText);
+        $customer = $this->resolveCustomer($phone, $pushName);
 
-        if ($userText !== '' && $this->completePendingVariantFromText($phone, $userText, $this->resolveCustomer($phone, $pushName))) {
+        if ($userText !== '' && $this->messageLooksLikeMenuItems($userText)) {
+            $parsed = $this->parseProductsFromText($userText);
+
+            if ($parsed !== []) {
+                return $this->toolAddParsedItems($phone, $parsed, $customer);
+            }
+        }
+
+        if ($userText !== ''
+            && ! $this->isPureConfirmation($userText)
+            && $this->completePendingVariantFromText($phone, $userText, $customer)) {
             $session = $this->getSession($phone);
 
             return [
@@ -1911,8 +2062,13 @@ class ConversationalWhatsAppBotService
 
             $openaiLabel = isset($item['variant_label']) ? mb_strtoupper(trim((string) $item['variant_label'])) : null;
             [, $hintFromName] = $this->extractVariantHint(mb_strtolower(trim((string) ($item['product_name'] ?? ''))));
-            [, $hintFromUser] = $this->extractVariantHint(mb_strtolower($userText));
-            $sizeOnly = $this->parseSizeToken($userText);
+            $hintFromUser = null;
+            $sizeOnly = null;
+
+            if ($userText !== '' && $this->userTextMentionsProduct($userText, $product)) {
+                [, $hintFromUser] = $this->extractVariantHint(mb_strtolower($userText));
+                $sizeOnly = $this->parseSizeToken($userText);
+            }
 
             $hint = $hintFromName ?? $hintFromUser ?? $sizeOnly;
 
