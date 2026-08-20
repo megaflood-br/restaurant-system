@@ -133,6 +133,49 @@ class WhatsAppClosedHoursTest extends TestCase
         $this->assertStringNotContainsString('Contra filé', $combined);
     }
 
+    public function test_outside_hours_greeting_does_not_match_coca_cola(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:45:00', 'America/Sao_Paulo'));
+        config(['whatsapp_agent.use_openai' => true]);
+
+        $category = Category::create([
+            'name' => 'Bebidas',
+            'is_active' => true,
+        ]);
+
+        Product::create([
+            'category_id' => $category->id,
+            'name' => 'Coca Cola 200ml',
+            'price' => 6,
+            'is_available' => true,
+        ]);
+
+        $openAi = Mockery::mock(OpenAiWhatsAppAgentService::class);
+        $openAi->shouldReceive('handle')->once()->andReturn(false);
+        $this->app->instance(OpenAiWhatsAppAgentService::class, $openAi);
+
+        $messages = [];
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendToPhone')
+            ->atLeast()->once()
+            ->andReturnUsing(function (string $phone, string $message) use (&$messages) {
+                $messages[] = $message;
+
+                return null;
+            });
+        $whatsApp->shouldReceive('sendImageToPhone')->never();
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $bot = app(ConversationalWhatsAppBotService::class);
+        $bot->process('5511999000304', 'Ola', 'Carlos');
+
+        $snapshot = $bot->sessionSnapshot('5511999000304');
+        $this->assertSame([], $snapshot['cart']);
+
+        $combined = implode("\n", $messages);
+        $this->assertStringNotContainsString('Coca Cola', $combined);
+    }
+
     private function seedCupimAndContraFilé(): void
     {
         $category = Category::create([
