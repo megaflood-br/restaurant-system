@@ -95,6 +95,12 @@ class ConversationalWhatsAppBotService
             return;
         }
 
+        if ($this->matchesRestaurantLocationIntent($command)) {
+            $this->replyText($phone, $this->restaurantLocationMessage(), $customer);
+
+            return;
+        }
+
         $session = $this->getSession($phone);
 
         // Cliente pediu mais itens no meio do checkout (endereço/extras/etc.): voltar ao carrinho.
@@ -1913,6 +1919,10 @@ class ConversationalWhatsAppBotService
 
     private function tryAnswerFaq(string $text): ?string
     {
+        if ($this->matchesRestaurantLocationIntent($text)) {
+            return $this->restaurantLocationMessage();
+        }
+
         $normalized = mb_strtolower(trim($text));
 
         if (! preg_match('/(hor[aá]rio|que horas|abre|aberto|funciona|fechado|fecha|atende)/u', $normalized)) {
@@ -2500,6 +2510,51 @@ class ConversationalWhatsAppBotService
     public function restaurantDisplayName(): string
     {
         return $this->restaurantName();
+    }
+
+    public function restaurantAddress(): string
+    {
+        return trim((string) config('general.address', ''));
+    }
+
+    private function restaurantLocationMessage(): string
+    {
+        $name = $this->restaurantName();
+        $address = $this->restaurantAddress();
+
+        if ($address === '') {
+            return 'Ainda não tenho o endereço do *'.$name.'* cadastrado. Digite *atendente* se quiser falar com a equipe.';
+        }
+
+        return 'O *'.$name.'* fica em *'.$address.'*. Se quiser fazer um pedido, é só me dizer o que deseja!';
+    }
+
+    private function matchesRestaurantLocationIntent(string $text): bool
+    {
+        $command = mb_strtolower(trim($text));
+        $command = trim(preg_replace('/[?!.,;]+$/u', '', $command) ?? $command);
+
+        if ($command === '') {
+            return false;
+        }
+
+        if ($this->matchesIntent($command, [
+            'onde fica', 'onde ficam', 'onde vocês ficam', 'onde voces ficam',
+            'onde é', 'onde e', 'onde vocês estão', 'onde voces estao',
+            'onde fica o restaurante', 'onde é o restaurante', 'onde e o restaurante',
+            'endereço do restaurante', 'endereco do restaurante',
+            'endereço de vocês', 'endereco de voces', 'endereço de voces',
+            'localização', 'localizacao', 'como chegar',
+            'qual o endereço de vocês', 'qual o endereco de voces',
+            'qual o endereço do restaurante', 'qual o endereco do restaurante',
+        ])) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/\b(?:onde\s+(?:fica|ficam|é|e|estão|estao).{0,40}\b(?:restaurante|bistr[oô]|voc[eê]s|voces)|(?:endere[cç]o|localiza[cç][aã]o)\s+(?:d[oe]s?\s+)?(?:restaurante|bistr[oô]|voc[eê]s|voces)|como\s+chegar)\b/u',
+            $command
+        );
     }
 
     public function openingHoursLabel(): string

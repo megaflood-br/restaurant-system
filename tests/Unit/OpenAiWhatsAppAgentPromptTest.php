@@ -17,6 +17,7 @@ class OpenAiWhatsAppAgentPromptTest extends TestCase
         $bot->shouldReceive('sessionSnapshot')->andReturn([]);
         $bot->shouldReceive('menuSnapshot')->andReturn([]);
         $bot->shouldReceive('restaurantDisplayName')->andReturn('Bella Bistrô');
+        $bot->shouldReceive('restaurantAddress')->andReturn('Rua Exemplo, 100');
         $bot->shouldReceive('openingHoursLabel')->andReturn('11:00 às 15:00');
         $bot->shouldReceive('openingHoursSnapshot')->andReturn([
             'is_open' => true,
@@ -44,5 +45,8 @@ class OpenAiWhatsAppAgentPromptTest extends TestCase
         $this->assertStringContainsString('use SOMENTE o campo description', $system);
         $this->assertStringContainsString('requires_side=true', $system);
         $this->assertStringContainsString('cardápio de segunda', $system);
+        $this->assertStringContainsString('Endereço do restaurante: Rua Exemplo, 100', $system);
+        $this->assertStringContainsString('NUNCA use como localização do restaurante', $system);
+        $this->assertStringContainsString('O endereço do cliente NÃO é o do restaurante', $system);
     }
 }

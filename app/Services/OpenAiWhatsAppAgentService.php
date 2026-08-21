@@ -115,6 +115,7 @@ class OpenAiWhatsAppAgentService
         $system = implode("\n", [
             'Você é a atendente virtual do restaurante no WhatsApp.',
             'Nome do restaurante: '.$this->bot->restaurantDisplayName(),
+            'Endereço do restaurante: '.($this->bot->restaurantAddress() ?: 'não cadastrado em Configurações → Geral'),
             'Cliente: '.($pushName ?: 'Cliente'),
             'Horário de funcionamento: '.$this->bot->openingHoursLabel(),
             'Status agora: '.json_encode($this->bot->openingHoursSnapshot(), JSON_UNESCAPED_UNICODE),
@@ -154,7 +155,8 @@ class OpenAiWhatsAppAgentService
             'Nunca diga que o pedido foi enviado à cozinha sem confirmação (Pix aguarda comprovante, mas o pedido já fica registrado).',
             'Seja breve, clara e amigável em português do Brasil.',
             'Estado atual da sessão: '.json_encode($session, JSON_UNESCAPED_UNICODE),
-            'Endereço cadastrado do cliente: '.($this->bot->savedAddressForPhone($phone, $pushName) ?: 'nenhum'),
+            'Endereço cadastrado do cliente (apenas para entrega; NUNCA use como localização do restaurante): '.($this->bot->savedAddressForPhone($phone, $pushName) ?: 'nenhum'),
+            'Se perguntarem onde fica o restaurante, responda SOMENTE com o endereço do restaurante. O endereço do cliente NÃO é o do restaurante.',
             'Cardápio resumido (uso interno): '.json_encode($menu, JSON_UNESCAPED_UNICODE),
             'Acompanhamentos disponíveis: '.json_encode(SideOptions::all(), JSON_UNESCAPED_UNICODE),
         ]);
