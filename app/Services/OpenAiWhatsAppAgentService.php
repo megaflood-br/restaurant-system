@@ -136,6 +136,7 @@ class OpenAiWhatsAppAgentService
             'Se o cliente já tiver endereço cadastrado, após set_extras a ferramenta devolve a confirmação. Se o cliente disser sim/mesmo, chame quote_delivery com "sim". Se disser não/outro, peça o endereço novo e depois quote_delivery.',
             'Depois de quote_delivery/set_schedule, se already_sent_to_customer=true, NÃO chame set_payment e NÃO invente Pix — apenas OK. O PHP já perguntou horário ou forma de pagamento.',
             'NUNCA chame set_payment no mesmo turno em que o cliente só confirmou endereço (sim/mesmo). Espere a resposta explícita: pix, dinheiro ou cartão.',
+            'Se o estado for payment e o cliente disser pix/dinheiro/cartão, use set_payment. NÃO diga que o restaurante está fechado nem reinicie o pedido — o horário já foi definido.',
             'NUNCA invente forma de pagamento. Pix só se o cliente pediu Pix.',
             'Se o cliente já mencionar horário durante o pedido (ex.: "para às 12h", "as 11hs"), use set_schedule assim que possível.',
             'Horários como "11hs"/"11h" sem "daqui" são horário do relógio; se já passou hoje, a ferramenta agenda para amanhã.',

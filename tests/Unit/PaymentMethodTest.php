@@ -13,6 +13,10 @@ class PaymentMethodTest extends TestCase
         $this->assertSame('pix', PaymentMethod::detect('Pix'));
         $this->assertSame('cash', PaymentMethod::detect('vou pagar em dinheiro'));
         $this->assertSame('credit', PaymentMethod::detect('cartão de crédito'));
+        $this->assertSame('credit', PaymentMethod::detect('cartão'));
+        $this->assertSame('credit', PaymentMethod::detect('Cartao'));
+        $this->assertSame('credit', PaymentMethod::detect('no cartão'));
+        $this->assertSame('debit', PaymentMethod::detect('cartão de débito'));
         $this->assertNull(PaymentMethod::detect('quero strogonoff'));
     }
 }

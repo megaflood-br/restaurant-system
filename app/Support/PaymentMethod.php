@@ -80,13 +80,15 @@ class PaymentMethod
 
         $slug = ' '.self::slug($input).' ';
 
-        // Mais específicos primeiro (cartão de crédito antes de crédito).
+        // Mais específicos primeiro (cartão de crédito antes de crédito / cartão sozinho).
         $phrases = [
             'cartao de credito' => 'credit',
             'cartao credito' => 'credit',
             'cartao de debito' => 'debit',
             'cartao debito' => 'debit',
             'vale refeicao' => 'voucher',
+            'no cartao' => 'credit',
+            'cartao' => 'credit',
             'dinheiro' => 'cash',
             'especie' => 'cash',
             'pix' => 'pix',
@@ -118,6 +120,10 @@ class PaymentMethod
             'cartão crédito' => 'credit',
             'cartao de credito' => 'credit',
             'cartão de crédito' => 'credit',
+            'cartao' => 'credit',
+            'cartão' => 'credit',
+            'no cartao' => 'credit',
+            'no cartão' => 'credit',
             'debito' => 'debit',
             'débito' => 'debit',
             'cartao debito' => 'debit',

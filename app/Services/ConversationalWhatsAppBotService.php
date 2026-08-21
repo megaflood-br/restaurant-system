@@ -162,8 +162,9 @@ class ConversationalWhatsAppBotService
             return;
         }
 
-        // Pagamento: gravar pedido no PHP antes da OpenAI (ela às vezes "confirma" sem set_payment).
-        if (($session['state'] ?? '') === 'payment' && PaymentMethod::detect($text) !== null) {
+        // Pagamento: PHP controla a etapa inteira (antes da OpenAI / “fechado”).
+        // "cartão" sozinho precisa criar o pedido; a LLM às vezes reinicia o fluxo fora do horário.
+        if (($session['state'] ?? '') === 'payment') {
             $this->handlePayment($phone, $text, $customer);
 
             return;
