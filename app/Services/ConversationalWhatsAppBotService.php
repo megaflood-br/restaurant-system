@@ -25,6 +25,9 @@ use Illuminate\Support\Facades\Log;
 
 class ConversationalWhatsAppBotService
 {
+    /** Evita somar o mesmo texto duas vezes no mesmo turno (PHP pré-registro + OpenAI add_to_cart). */
+    private ?string $pendingMenuAddFingerprint = null;
+
     public function __construct(
         private readonly WhatsAppService $whatsAppService,
         private readonly DeliveryFeeService $deliveryFeeService,
@@ -32,6 +35,8 @@ class ConversationalWhatsAppBotService
 
     public function process(string $phone, string $text, ?string $pushName = null, array $payload = []): void
     {
+        $this->pendingMenuAddFingerprint = null;
+
         if (! config('whatsapp_agent.enabled') || ! config('evolution.enabled')) {
             return;
         }
@@ -195,6 +200,17 @@ class ConversationalWhatsAppBotService
                 'Tudo bem! Se quiser incluir mais alguma coisa, é só dizer. Quando terminar, digite *pronto*.',
                 $customer
             );
+
+            return;
+        }
+
+        // Cliente escolheu acompanhamento sem digitar "pronto" — não deixar a OpenAI reabrir o item.
+        if ($this->shouldAcceptSideWhileOrdering($session, $text)) {
+            $this->setSession($phone, array_merge($session, [
+                'state' => 'side',
+                'pending_variant' => null,
+            ]));
+            $this->handleSide($phone, $text, $customer);
 
             return;
         }
@@ -471,9 +487,32 @@ class ConversationalWhatsAppBotService
             }
         }
 
-        $this->toolAddParsedItems($phone, $parsed, $customer);
+        // Pré-registra no carrinho e marca o texto para a OpenAI não somar de novo no mesmo turno.
+        $this->toolAddParsedItems($phone, $parsed, $customer, $text);
 
         return false;
+    }
+
+    /** @param  array<string, mixed>  $session */
+    private function shouldAcceptSideWhileOrdering(array $session, string $text): bool
+    {
+        if (($session['state'] ?? '') !== 'ordering') {
+            return false;
+        }
+
+        if (($session['cart'] ?? []) === []) {
+            return false;
+        }
+
+        if (! SideOptions::neededForCart($session['cart'] ?? []) || filled($session['side'] ?? null)) {
+            return false;
+        }
+
+        if ($this->messageLooksLikeMenuItems($text) || $this->matchesFinalizeIntent($text)) {
+            return false;
+        }
+
+        return SideOptions::resolve($text) !== null;
     }
 
     private function completePendingVariantFromText(string $phone, string $text, ?Customer $customer): bool
@@ -1804,6 +1843,28 @@ class ConversationalWhatsAppBotService
             }
         }
 
+        $fingerprint = $this->menuAddFingerprint($userText, $parsed);
+
+        // PHP já pré-registrou estes itens neste turno (mesmo texto) — não somar quantidade de novo.
+        if ($fingerprint !== null
+            && $this->pendingMenuAddFingerprint === $fingerprint
+            && ! $replaceQuantity) {
+            $added = collect($parsed)
+                ->map(fn (array $item) => "{$item['quantity']}x {$item['name']}")
+                ->values()
+                ->all();
+
+            $this->pendingMenuAddFingerprint = null;
+
+            return [
+                'ok' => true,
+                'added' => $added,
+                'errors' => [],
+                'already_in_cart' => true,
+                'cart' => $this->simplifiedCart($session['cart'] ?? []),
+            ];
+        }
+
         $cart = $session['cart'] ?? [];
         $added = [];
 
@@ -1819,12 +1880,36 @@ class ConversationalWhatsAppBotService
             'pending_variant' => null,
         ]));
 
+        if ($fingerprint !== null && ! $replaceQuantity) {
+            $this->pendingMenuAddFingerprint = $fingerprint;
+        }
+
         return [
             'ok' => true,
             'added' => $added,
             'errors' => [],
             'cart' => $this->simplifiedCart($cart),
         ];
+    }
+
+    /**
+     * @param  array<int, array{product_id: int, variant_id: ?int, quantity: int, name?: string}>  $parsed
+     */
+    private function menuAddFingerprint(?string $userText, array $parsed): ?string
+    {
+        $userText = mb_strtolower(trim((string) $userText));
+
+        if ($userText === '' || $parsed === []) {
+            return null;
+        }
+
+        $lines = collect($parsed)
+            ->map(fn (array $item) => ($item['product_id'] ?? 0).'|'.($item['variant_id'] ?? 0).'|'.($item['quantity'] ?? 1))
+            ->sort()
+            ->values()
+            ->all();
+
+        return hash('sha256', $userText.'|'.implode(';', $lines));
     }
 
     /** @param  array<int, string>  $queryTokens */
