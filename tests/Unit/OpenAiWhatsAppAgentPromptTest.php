@@ -45,6 +45,8 @@ class OpenAiWhatsAppAgentPromptTest extends TestCase
         $this->assertStringContainsString('use SOMENTE o campo description', $system);
         $this->assertStringContainsString('requires_side=true', $system);
         $this->assertStringContainsString('cardápio de segunda', $system);
+        $this->assertStringContainsString('NÃO chame add_to_cart de novo', $system);
+        $this->assertStringContainsString('already_in_cart=true', $system);
         $this->assertStringContainsString('Endereço do restaurante: Rua Exemplo, 100', $system);
         $this->assertStringContainsString('NUNCA use como localização do restaurante', $system);
         $this->assertStringContainsString('O endereço do cliente NÃO é o do restaurante', $system);
