@@ -147,6 +147,7 @@ class OrderController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.notes' => ['nullable', 'string'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'discount' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'in:'.implode(',', PaymentMethod::keys())],
         ]);
 
@@ -159,6 +160,7 @@ class OrderController extends Controller
         $deliveryFeeAmount = 0.0;
         $deliveryAreaId = null;
         $deliveryAddress = null;
+        $discountAmount = (float) ($validated['discount'] ?? 0);
 
         if ($validated['type'] === 'delivery') {
             if ($customer) {
@@ -184,6 +186,7 @@ class OrderController extends Controller
             $deliveryFeeAmount,
             $deliveryAreaId,
             $deliveryAddress,
+            $discountAmount,
         ) {
             $order = Order::create([
                 'order_number' => Order::generateOrderNumber(),
@@ -194,6 +197,7 @@ class OrderController extends Controller
                 'customer_phone' => $customer?->phone ?? ($validated['customer_phone'] ?? null),
                 'delivery_area_id' => $deliveryAreaId,
                 'delivery_fee' => $deliveryFeeAmount,
+                'discount' => $discountAmount,
                 'delivery_address' => $deliveryAddress,
                 'notes' => $validated['notes'] ?? null,
                 'payment_method' => ($validated['payment_method'] ?? null) ?: null,
@@ -216,7 +220,9 @@ class OrderController extends Controller
                 $total += $line['subtotal'];
             }
 
-            $order->update(['total' => $total + $deliveryFeeAmount]);
+            $order->update([
+                'total' => max(0, $total + $deliveryFeeAmount - $discountAmount),
+            ]);
 
             return $order;
         });
@@ -269,6 +275,7 @@ class OrderController extends Controller
             'customer_phone' => ['nullable', 'string', 'max:20'],
             'delivery_address' => ['nullable', 'string', 'max:500'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'discount' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'in:'.implode(',', PaymentMethod::keys())],
         ]);
 
@@ -287,6 +294,9 @@ class OrderController extends Controller
             'delivery_fee' => $order->type === 'delivery' && array_key_exists('delivery_fee', $validated)
                 ? (float) ($validated['delivery_fee'] ?? 0)
                 : $order->delivery_fee,
+            'discount' => array_key_exists('discount', $validated)
+                ? (float) ($validated['discount'] ?? 0)
+                : $order->discount,
             'payment_method' => array_key_exists('payment_method', $validated)
                 ? ($validated['payment_method'] ?: null)
                 : $order->payment_method,
@@ -361,7 +371,10 @@ class OrderController extends Controller
             $order->refresh()->load('items');
 
             if ($order->items->isEmpty()) {
-                $order->update(['status' => 'cancelled', 'total' => (float) $order->delivery_fee]);
+                $order->update([
+                    'status' => 'cancelled',
+                    'total' => max(0, (float) $order->delivery_fee - (float) $order->discount),
+                ]);
 
                 return;
             }

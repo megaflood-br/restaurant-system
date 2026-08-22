@@ -93,6 +93,9 @@
                         @if ($order->delivery_fee > 0)
                             <p class="text-xs text-gray-500">inclui taxa de entrega R$ {{ number_format($order->delivery_fee, 2, ',', '.') }}</p>
                         @endif
+                        @if ($order->discount > 0)
+                            <p class="text-xs text-gray-500">desconto R$ {{ number_format($order->discount, 2, ',', '.') }}</p>
+                        @endif
                     </div>
                 </div>
 
@@ -142,6 +145,12 @@
                                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                             </div>
                         @endif
+                        <div class="max-w-xs">
+                            <label for="discount" class="block text-sm font-medium text-gray-700">Desconto (R$)</label>
+                            <input type="number" step="0.01" min="0" name="discount" id="discount" value="{{ old('discount', $order->discount) }}"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <p class="mt-1 text-xs text-gray-500">Use para abater taxa de entrega ou dar desconto no pedido. A taxa continua registrada para o motoboy.</p>
+                        </div>
                         <x-payment-method-select :required="false" :selected="old('payment_method', $order->payment_method)" />
                         <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-xs font-semibold uppercase tracking-widest rounded-md hover:bg-indigo-700">
                             Salvar dados
