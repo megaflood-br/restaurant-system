@@ -114,6 +114,9 @@
             @if ($order->delivery_fee > 0)
                 <div>Taxa entrega: R$ {{ number_format($order->delivery_fee, 2, ',', '.') }}</div>
             @endif
+            @if ($order->discount > 0)
+                <div>Desconto: - R$ {{ number_format($order->discount, 2, ',', '.') }}</div>
+            @endif
             <div class="total">TOTAL: R$ {{ number_format($order->total, 2, ',', '.') }}</div>
         @endif
 

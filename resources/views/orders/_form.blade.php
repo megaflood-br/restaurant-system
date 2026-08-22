@@ -320,6 +320,15 @@
         <p class="mt-1 text-xs text-gray-500">Deixe em branco para calcular pelo endereço do cliente. Preencha para usar um valor manual.</p>
     </div>
 
+    <div class="max-w-xs">
+        <label for="discount" class="block text-sm font-medium text-gray-700">Desconto (R$)</label>
+        <input type="number" step="0.01" min="0" name="discount" id="discount"
+            value="{{ old('discount', '') }}"
+            placeholder="0,00"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        <p class="mt-1 text-xs text-gray-500">Opcional. Use para abater a taxa de entrega ou dar desconto no total. A taxa continua registrada para o motoboy.</p>
+    </div>
+
     <div x-show="type === 'delivery' && customerId" x-cloak class="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
         <template x-if="deliveryQuoteLoading">
             <p>Calculando taxa de entrega...</p>

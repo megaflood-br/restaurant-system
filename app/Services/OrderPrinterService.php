@@ -222,6 +222,9 @@ class OrderPrinterService
             if ($order->delivery_fee > 0) {
                 $lines[] = $this->padLine('Taxa entrega', 'R$ '.number_format((float) $order->delivery_fee, 2, ',', '.'), $width);
             }
+            if ((float) $order->discount > 0) {
+                $lines[] = $this->padLine('Desconto', '- R$ '.number_format((float) $order->discount, 2, ',', '.'), $width);
+            }
             $lines[] = $this->padLine('TOTAL', 'R$ '.number_format((float) $order->total, 2, ',', '.'), $width);
         }
 

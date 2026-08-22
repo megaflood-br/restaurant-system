@@ -1340,7 +1340,7 @@ class ConversationalWhatsAppBotService
                     $itemsTotal += (float) $attrs['subtotal'];
                 }
 
-                $order->update(['total' => $itemsTotal + (float) $order->delivery_fee]);
+                $order->update(['total' => max(0, $itemsTotal + (float) $order->delivery_fee - (float) $order->discount)]);
 
                 if ($customer && $orderType === 'delivery' && filled($session['delivery_address'] ?? null)) {
                     $customer->update(['address' => $session['delivery_address']]);

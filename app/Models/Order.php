@@ -16,6 +16,7 @@ class Order extends Model
         'comanda_number',
         'delivery_area_id',
         'delivery_fee',
+        'discount',
         'delivery_address',
         'type',
         'status',
@@ -34,6 +35,7 @@ class Order extends Model
         return [
             'total' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
+            'discount' => 'decimal:2',
             'scheduled_for' => 'datetime',
             'inventory_deducted_at' => 'datetime',
         ];
@@ -72,7 +74,7 @@ class Order extends Model
     public function recalculateTotal(): void
     {
         $this->update([
-            'total' => $this->itemsSubtotal() + (float) $this->delivery_fee,
+            'total' => max(0, $this->itemsSubtotal() + (float) $this->delivery_fee - (float) $this->discount),
         ]);
     }
 
