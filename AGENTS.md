@@ -48,6 +48,19 @@ If PHP-FPM / Octane / queue workers are used, restart them too — cached config
 times still look like UTC after an `.env` edit. Verify with:
 `php artisan tinker --execute="echo config('app.timezone').' '.now();"`
 
+### MySQL (produção)
+
+Se o `.env` usa `DB_CONNECTION=mysql` e ainda existe `database/database.sqlite` com os dados antigos:
+
+```
+cp database/database.sqlite database/database.sqlite.backup
+php artisan migrate --force
+php artisan db:import-from-sqlite --sqlite=database/database.sqlite --fresh --force
+php artisan config:clear && php artisan cache:clear
+```
+
+`db:import-from-sqlite --dry-run` lista contagens sem gravar. Requer MySQL já migrado e `DB_*` apontando para o banco novo.
+
 ### Evolution / WhatsApp
 Credenciais e QR Code ficam em **Configurações → Agente WhatsApp** (grupo `evolution` na
 tabela `settings`). O `.env` (`EVOLUTION_*`) só é fallback inicial. Depois de salvar URL/API

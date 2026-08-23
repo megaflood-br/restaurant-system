@@ -56,6 +56,16 @@ DB_PASSWORD=
 
 Depois execute `php artisan migrate --seed`.
 
+### Migrar SQLite → MySQL (produção, mantendo dados)
+
+1. Crie o banco MySQL vazio e configure o `.env` com `DB_CONNECTION=mysql`.
+2. Rode `php artisan migrate --force` (**sem** `--seed`).
+3. Faça backup: `cp database/database.sqlite database/database.sqlite.backup`.
+4. Importe: `php artisan db:import-from-sqlite --sqlite=database/database.sqlite --fresh --force`
+5. Confira pedidos/clientes no painel; depois `php artisan config:clear`.
+
+Use `--dry-run` antes para ver contagens. A tabela `migrations` do MySQL (do passo 2) não é sobrescrita.
+
 ## Integração WhatsApp (Evolution API)
 
 Configure no `.env`:
