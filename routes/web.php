@@ -6,6 +6,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryAreaController;
 use App\Http\Controllers\FinanceiroController;
+use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\MotoboySettlementController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderPrintController;
