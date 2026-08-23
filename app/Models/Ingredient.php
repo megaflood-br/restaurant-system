@@ -169,6 +169,43 @@ class Ingredient extends Model
         return round($stockQuantity * $this->unitCost(), 2);
     }
 
+    /** Valor do estoque atual com base no custo unitário cadastrado. */
+    public function stockValue(): float
+    {
+        return $this->lineCost((float) $this->current_stock);
+    }
+
+    /**
+     * @param  Builder<Ingredient>|null  $query
+     * @return array{total_value: float, items_count: int, priced_count: int, unpriced_count: int}
+     */
+    public static function summarizeStockValue(?Builder $query = null): array
+    {
+        $items = ($query ?? static::query())
+            ->get(['id', 'unit', 'package_size', 'cost_price', 'current_stock']);
+
+        $totalValue = 0.0;
+        $pricedCount = 0;
+
+        foreach ($items as $ingredient) {
+            $value = $ingredient->stockValue();
+            $totalValue += $value;
+
+            if ($value > 0 || ((float) $ingredient->cost_price > 0 && (float) $ingredient->package_size > 0)) {
+                $pricedCount++;
+            }
+        }
+
+        $itemsCount = $items->count();
+
+        return [
+            'total_value' => round($totalValue, 2),
+            'items_count' => $itemsCount,
+            'priced_count' => $pricedCount,
+            'unpriced_count' => max(0, $itemsCount - $pricedCount),
+        ];
+    }
+
     public function formattedUnitCost(): string
     {
         return 'R$ '.number_format($this->unitCost(), 2, ',', '.').' / '.$this->unit;

@@ -15,7 +15,10 @@ class DashboardController extends Controller
         $monthStart = now()->startOfMonth();
         $todayQuery = Order::query()->whereDate('created_at', today());
         $monthQuery = Order::query()->where('created_at', '>=', $monthStart);
-        $revenueScope = fn ($query) => $query->where('status', '!=', 'cancelled');
+        $stockSummary = Ingredient::summarizeStockValue();
+        $lowStockSummary = Ingredient::summarizeStockValue(
+            Ingredient::query()->whereColumn('current_stock', '<=', 'minimum_stock')
+        );
 
         return view('dashboard', [
             'stats' => [
@@ -27,6 +30,10 @@ class DashboardController extends Controller
                 'revenue_month' => (clone $monthQuery)->where('status', '!=', 'cancelled')->sum('total'),
                 'orders_in_progress' => Order::whereIn('status', ['pending', 'preparing', 'ready', 'served'])->count(),
                 'low_stock_count' => Ingredient::whereColumn('current_stock', '<=', 'minimum_stock')->count(),
+                'stock_total_value' => $stockSummary['total_value'],
+                'stock_items_count' => $stockSummary['items_count'],
+                'stock_unpriced_count' => $stockSummary['unpriced_count'],
+                'low_stock_value' => $lowStockSummary['total_value'],
             ],
             'orders_today' => Order::with('items.product', 'customer', 'user')
                 ->whereDate('created_at', today())

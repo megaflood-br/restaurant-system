@@ -28,10 +28,14 @@ class IngredientController extends Controller
             ->with('stockCategory')
             ->filteredForIndex($filters);
 
+        $stockSummary = Ingredient::summarizeStockValue(
+            Ingredient::query()->filteredForIndex($filters)
+        );
+
         $ingredients = $query->paginate(15)->withQueryString();
         $stockCategories = StockCategory::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
 
-        return view('ingredients.index', compact('ingredients', 'stockCategories', 'filters'));
+        return view('ingredients.index', compact('ingredients', 'stockCategories', 'filters', 'stockSummary'));
     }
 
     public function prices(Request $request): View
