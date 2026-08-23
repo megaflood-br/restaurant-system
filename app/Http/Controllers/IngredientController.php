@@ -16,16 +16,22 @@ class IngredientController extends Controller
 
     public function index(Request $request): View
     {
-        $query = Ingredient::with('stockCategory')->orderBy('name');
+        $filters = [
+            'q' => $request->string('q')->trim()->toString(),
+            'stock_category' => $request->input('stock_category'),
+            'stock' => $request->string('stock')->toString(),
+            'price' => $request->string('price')->toString(),
+            'sort' => $request->string('sort')->toString(),
+        ];
 
-        if ($request->filled('stock_category')) {
-            $query->where('stock_category_id', $request->integer('stock_category'));
-        }
+        $query = Ingredient::query()
+            ->with('stockCategory')
+            ->filteredForIndex($filters);
 
         $ingredients = $query->paginate(15)->withQueryString();
         $stockCategories = StockCategory::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
 
-        return view('ingredients.index', compact('ingredients', 'stockCategories'));
+        return view('ingredients.index', compact('ingredients', 'stockCategories', 'filters'));
     }
 
     public function prices(Request $request): View

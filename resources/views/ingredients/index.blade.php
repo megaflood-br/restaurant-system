@@ -23,20 +23,58 @@
                     <x-flash-messages />
 
                     <form method="GET" class="mb-6 flex flex-wrap items-end gap-4">
+                        <div class="min-w-[12rem] flex-1">
+                            <label for="q" class="block text-sm font-medium text-gray-700">Buscar item</label>
+                            <input type="text" name="q" id="q" value="{{ $filters['q'] ?? request('q') }}" placeholder="Ex.: farinha, óleo…"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                        </div>
                         <div>
-                            <label for="stock_category" class="block text-sm font-medium text-gray-700">Filtrar por categoria</label>
+                            <label for="stock_category" class="block text-sm font-medium text-gray-700">Categoria</label>
                             <select name="stock_category" id="stock_category" class="mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
                                 <option value="">Todas</option>
                                 @foreach ($stockCategories as $category)
-                                    <option value="{{ $category->id }}" @selected(request('stock_category') == $category->id)>{{ $category->name }}</option>
+                                    <option value="{{ $category->id }}" @selected(($filters['stock_category'] ?? request('stock_category')) == $category->id)>{{ $category->name }}</option>
                                 @endforeach
                             </select>
                         </div>
+                        <div>
+                            <label for="stock" class="block text-sm font-medium text-gray-700">Situação do estoque</label>
+                            <select name="stock" id="stock" class="mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                                <option value="" @selected(! ($filters['stock'] ?? request('stock')))>Todas</option>
+                                <option value="low" @selected(($filters['stock'] ?? request('stock')) === 'low')>Estoque baixo</option>
+                                <option value="ok" @selected(($filters['stock'] ?? request('stock')) === 'ok')>Estoque OK</option>
+                                <option value="zero" @selected(($filters['stock'] ?? request('stock')) === 'zero')>Sem estoque (zerado)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="price" class="block text-sm font-medium text-gray-700">Preço de compra</label>
+                            <select name="price" id="price" class="mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                                <option value="" @selected(! ($filters['price'] ?? request('price')))>Todos</option>
+                                <option value="with" @selected(($filters['price'] ?? request('price')) === 'with')>Com preço cadastrado</option>
+                                <option value="without" @selected(($filters['price'] ?? request('price')) === 'without')>Sem preço cadastrado</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="sort" class="block text-sm font-medium text-gray-700">Ordenar</label>
+                            <select name="sort" id="sort" class="mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                                <option value="" @selected(! ($filters['sort'] ?? request('sort')))>Nome (A–Z)</option>
+                                <option value="name_desc" @selected(($filters['sort'] ?? request('sort')) === 'name_desc')>Nome (Z–A)</option>
+                                <option value="stock_asc" @selected(($filters['sort'] ?? request('sort')) === 'stock_asc')>Estoque ↑</option>
+                                <option value="stock_desc" @selected(($filters['sort'] ?? request('sort')) === 'stock_desc')>Estoque ↓</option>
+                                <option value="minimum_asc" @selected(($filters['sort'] ?? request('sort')) === 'minimum_asc')>Estoque mínimo ↑</option>
+                            </select>
+                        </div>
                         <button type="submit" class="px-4 py-2 bg-gray-800 text-white text-xs font-semibold uppercase rounded-md hover:bg-gray-700">Filtrar</button>
-                        @if (request('stock_category'))
-                            <a href="{{ route('ingredients.index') }}" class="text-sm text-indigo-600 hover:underline">Limpar filtro</a>
+                        @if (request()->hasAny(['q', 'stock_category', 'stock', 'price', 'sort']))
+                            <a href="{{ route('ingredients.index') }}" class="text-sm text-indigo-600 hover:underline">Limpar filtros</a>
                         @endif
                     </form>
+
+                    @if (request('stock') === 'low')
+                        <p class="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                            Mostrando itens com estoque atual ≤ estoque mínimo.
+                        </p>
+                    @endif
 
                     <x-bulk-select :action="route('ingredients.bulk-destroy')" confirm="Excluir :count item(ns) de estoque? Isso remove também o vínculo nas fichas técnicas.">
                     <div class="overflow-x-auto">

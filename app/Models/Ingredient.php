@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -49,6 +50,45 @@ class Ingredient extends Model
     public function isLowStock(): bool
     {
         return $this->current_stock <= $this->minimum_stock;
+    }
+
+    /** @param  array{q?: string, stock_category?: int|string|null, stock?: string|null, price?: string|null, sort?: string|null}  $filters */
+    public function scopeFilteredForIndex(Builder $query, array $filters): Builder
+    {
+        if (filled($filters['q'] ?? null)) {
+            $query->where('name', 'like', '%'.$filters['q'].'%');
+        }
+
+        if (filled($filters['stock_category'] ?? null)) {
+            $query->where('stock_category_id', (int) $filters['stock_category']);
+        }
+
+        match ($filters['stock'] ?? null) {
+            'low' => $query->whereColumn('current_stock', '<=', 'minimum_stock'),
+            'ok' => $query->whereColumn('current_stock', '>', 'minimum_stock'),
+            'zero' => $query->where('current_stock', '<=', 0),
+            default => null,
+        };
+
+        match ($filters['price'] ?? null) {
+            'with' => $query->whereNotNull('cost_price')->where('cost_price', '>', 0),
+            'without' => $query->where(function (Builder $inner): void {
+                $inner->whereNull('cost_price')->orWhere('cost_price', '<=', 0);
+            }),
+            default => null,
+        };
+
+        $query->reorder();
+
+        match ($filters['sort'] ?? null) {
+            'name_desc' => $query->orderByDesc('name'),
+            'stock_asc' => $query->orderBy('current_stock')->orderBy('name'),
+            'stock_desc' => $query->orderByDesc('current_stock')->orderBy('name'),
+            'minimum_asc' => $query->orderBy('minimum_stock')->orderBy('name'),
+            default => $query->orderBy('name'),
+        };
+
+        return $query;
     }
 
     public function recipeUnitLabel(): string
