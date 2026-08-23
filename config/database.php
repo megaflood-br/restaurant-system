@@ -44,6 +44,16 @@ return [
             'transaction_mode' => 'DEFERRED',
         ],
 
+        /** Origem temporária para `php artisan db:import-from-sqlite` (arquivo SQLite antigo). */
+        'sqlite_legacy' => [
+            'driver' => 'sqlite',
+            'database' => env('SQLITE_LEGACY_PATH', database_path('database.sqlite')),
+            'prefix' => '',
+            'foreign_key_constraints' => true,
+            'busy_timeout' => (int) env('DB_BUSY_TIMEOUT', 10000),
+            'journal_mode' => env('DB_JOURNAL_MODE', 'WAL'),
+        ],
+
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
