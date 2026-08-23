@@ -28,10 +28,42 @@ class IngredientController extends Controller
             ->with('stockCategory')
             ->filteredForIndex($filters);
 
+        $stockSummary = $this->stockValueSummary(
+            Ingredient::query()->filteredForIndex($filters)->get(['id', 'unit', 'package_size', 'cost_price', 'current_stock'])
+        );
+
         $ingredients = $query->paginate(15)->withQueryString();
         $stockCategories = StockCategory::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
 
-        return view('ingredients.index', compact('ingredients', 'stockCategories', 'filters'));
+        return view('ingredients.index', compact('ingredients', 'stockCategories', 'filters', 'stockSummary'));
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Ingredient>  $items
+     * @return array{total_value: float, items_count: int, priced_count: int, unpriced_count: int}
+     */
+    private function stockValueSummary($items): array
+    {
+        $totalValue = 0.0;
+        $pricedCount = 0;
+
+        foreach ($items as $ingredient) {
+            $value = $ingredient->stockValue();
+            $totalValue += $value;
+
+            if ($value > 0 || ((float) $ingredient->cost_price > 0 && (float) $ingredient->package_size > 0)) {
+                $pricedCount++;
+            }
+        }
+
+        $itemsCount = $items->count();
+
+        return [
+            'total_value' => round($totalValue, 2),
+            'items_count' => $itemsCount,
+            'priced_count' => $pricedCount,
+            'unpriced_count' => max(0, $itemsCount - $pricedCount),
+        ];
     }
 
     public function prices(Request $request): View

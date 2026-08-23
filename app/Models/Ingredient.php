@@ -169,6 +169,12 @@ class Ingredient extends Model
         return round($stockQuantity * $this->unitCost(), 2);
     }
 
+    /** Valor do estoque atual com base no custo unitário cadastrado. */
+    public function stockValue(): float
+    {
+        return $this->lineCost((float) $this->current_stock);
+    }
+
     public function formattedUnitCost(): string
     {
         return 'R$ '.number_format($this->unitCost(), 2, ',', '.').' / '.$this->unit;

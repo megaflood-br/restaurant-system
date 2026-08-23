@@ -76,6 +76,31 @@
                         </p>
                     @endif
 
+                    <div class="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Valor total em estoque</p>
+                            <p class="mt-1 text-2xl font-semibold text-gray-900">R$ {{ number_format($stockSummary['total_value'], 2, ',', '.') }}</p>
+                            <p class="mt-1 text-xs text-gray-500">
+                                @if (request()->hasAny(['q', 'stock_category', 'stock', 'price', 'sort']))
+                                    Com os filtros atuais
+                                @else
+                                    Todos os itens com preço cadastrado
+                                @endif
+                            </p>
+                        </div>
+                        <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Itens listados</p>
+                            <p class="mt-1 text-2xl font-semibold text-gray-900">{{ $stockSummary['items_count'] }}</p>
+                        </div>
+                        <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Sem preço de compra</p>
+                            <p class="mt-1 text-2xl font-semibold {{ $stockSummary['unpriced_count'] > 0 ? 'text-amber-700' : 'text-gray-900' }}">{{ $stockSummary['unpriced_count'] }}</p>
+                            @if ($stockSummary['unpriced_count'] > 0)
+                                <p class="mt-1 text-xs text-amber-700">Não entram no valor total.</p>
+                            @endif
+                        </div>
+                    </div>
+
                     <x-bulk-select :action="route('ingredients.bulk-destroy')" confirm="Excluir :count item(ns) de estoque? Isso remove também o vínculo nas fichas técnicas.">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
@@ -87,6 +112,7 @@
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pacote</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Custo unit.</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estoque atual</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estoque mínimo</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                     <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
@@ -94,6 +120,7 @@
                             </thead>
                             <tbody class="divide-y divide-gray-200">
                                 @forelse ($ingredients as $ingredient)
+                                    @php $lineValue = $ingredient->stockValue(); @endphp
                                     <tr>
                                         <x-bulk-select-item :id="$ingredient->id" />
                                         <td class="px-4 py-3 font-medium text-gray-900">{{ $ingredient->name }}</td>
@@ -101,6 +128,13 @@
                                         <td class="px-4 py-3 text-sm text-gray-600">{{ $ingredient->formattedPackageCost() }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ $ingredient->unitCost() > 0 ? $ingredient->formattedUnitCost() : '—' }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ number_format($ingredient->current_stock, 2, ',', '.') }} {{ $ingredient->unit }}</td>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                            @if ($lineValue > 0)
+                                                R$ {{ number_format($lineValue, 2, ',', '.') }}
+                                            @else
+                                                <span class="text-gray-400 font-normal">—</span>
+                                            @endif
+                                        </td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ number_format($ingredient->minimum_stock, 2, ',', '.') }} {{ $ingredient->unit }}</td>
                                         <td class="px-4 py-3">
                                             <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $ingredient->isLowStock() ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800' }}">
@@ -119,7 +153,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">Nenhum item cadastrado.</td>
+                                        <td colspan="10" class="px-4 py-8 text-center text-gray-500">Nenhum item cadastrado.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
