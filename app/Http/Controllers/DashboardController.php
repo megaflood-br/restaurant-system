@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Ingredient;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -26,6 +28,8 @@ class DashboardController extends Controller
                 'products' => Product::count(),
                 'orders_today' => (clone $todayQuery)->count(),
                 'orders_month' => (clone $monthQuery)->count(),
+                'dishes_today' => $this->dishesSold(fn (Builder $query) => $query->whereDate('orders.created_at', today())),
+                'dishes_month' => $this->dishesSold(fn (Builder $query) => $query->where('orders.created_at', '>=', $monthStart)),
                 'revenue_today' => (clone $todayQuery)->where('status', '!=', 'cancelled')->sum('total'),
                 'revenue_month' => (clone $monthQuery)->where('status', '!=', 'cancelled')->sum('total'),
                 'orders_in_progress' => Order::whereIn('status', ['pending', 'preparing', 'ready', 'served'])->count(),
@@ -50,5 +54,17 @@ class DashboardController extends Controller
                 ->limit(8)
                 ->get(),
         ]);
+    }
+
+    /** Soma das quantidades dos itens em pedidos não cancelados. */
+    private function dishesSold(callable $scope): int
+    {
+        $query = OrderItem::query()
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.status', '!=', 'cancelled');
+
+        $scope($query);
+
+        return (int) $query->sum('order_items.quantity');
     }
 }

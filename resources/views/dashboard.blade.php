@@ -23,10 +23,22 @@
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-4 sm:p-6">
                     <p class="text-xs sm:text-sm text-gray-500">Pedidos hoje</p>
                     <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ $stats['orders_today'] }}</p>
+                    <p class="text-xs sm:text-sm text-gray-500 mt-1">{{ $stats['dishes_today'] }} prato(s)</p>
                 </div>
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-4 sm:p-6">
                     <p class="text-xs sm:text-sm text-gray-500">Pedidos mês</p>
                     <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ $stats['orders_month'] }}</p>
+                    <p class="text-xs sm:text-sm text-gray-500 mt-1">{{ $stats['dishes_month'] }} prato(s)</p>
+                </div>
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-4 sm:p-6">
+                    <p class="text-xs sm:text-sm text-gray-500">Pratos hoje</p>
+                    <p class="text-2xl sm:text-3xl font-bold text-sky-700">{{ $stats['dishes_today'] }}</p>
+                    <p class="text-xs text-gray-500 mt-1">Soma das quantidades (sem cancelados)</p>
+                </div>
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-4 sm:p-6">
+                    <p class="text-xs sm:text-sm text-gray-500">Pratos mês</p>
+                    <p class="text-2xl sm:text-3xl font-bold text-sky-700">{{ $stats['dishes_month'] }}</p>
+                    <p class="text-xs text-gray-500 mt-1">Soma das quantidades (sem cancelados)</p>
                 </div>
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-4 sm:p-6">
                     <p class="text-xs sm:text-sm text-gray-500">Faturamento hoje</p>
