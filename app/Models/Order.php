@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\ElapsedTime;
 use App\Support\OrderSchedule;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -78,9 +79,9 @@ class Order extends Model
         ]);
     }
 
-    public static function generateOrderNumber(): string
+    public static function generateOrderNumber(?\DateTimeInterface $at = null): string
     {
-        $date = now()->format('Ymd');
+        $date = Carbon::parse($at ?? now())->timezone(config('app.timezone'))->format('Ymd');
         $prefix = sprintf('PED-%s-', $date);
 
         $max = 0;
