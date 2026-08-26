@@ -104,6 +104,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::delete('ingredients-bulk', [IngredientController::class, 'bulkDestroy'])->name('ingredients.bulk-destroy');
         Route::get('ingredients/{ingredient}/movement', [IngredientController::class, 'movementForm'])->name('ingredients.movement');
         Route::post('ingredients/{ingredient}/movement', [IngredientController::class, 'storeMovement'])->name('ingredients.movement.store');
+        Route::delete('ingredients/{ingredient}/movement/{movement}', [IngredientController::class, 'destroyMovement'])->name('ingredients.movement.destroy');
 
         Route::resource('orders', OrderController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::delete('orders-bulk', [OrderController::class, 'bulkDestroy'])->name('orders.bulk-destroy');

@@ -141,6 +141,60 @@ class InventoryService
         });
     }
 
+    /**
+     * Estorna um movimento: desfaz o estoque e remove o histórico.
+     * Movimentos de venda (sale / sale_cancel) não podem ser estornados aqui.
+     */
+    public function reverseMovement(InventoryMovement $movement, ?int $userId = null): void
+    {
+        if ($movement->reason !== 'manual') {
+            throw new RuntimeException('Só é possível estornar movimentações manuais. Para vendas, cancele o pedido.');
+        }
+
+        $ingredient = $movement->ingredient;
+
+        if (! $ingredient) {
+            throw new RuntimeException('Item de estoque não encontrado para este movimento.');
+        }
+
+        DB::transaction(function () use ($movement, $ingredient): void {
+            $locked = Ingredient::query()->whereKey($ingredient->id)->lockForUpdate()->firstOrFail();
+            $quantity = (float) $movement->quantity;
+
+            // Entrada errada → remove do estoque; saída errada → devolve ao estoque.
+            if ($movement->type === 'in') {
+                if ((float) $locked->current_stock < $quantity) {
+                    throw new RuntimeException(
+                        'Não dá para estornar: o estoque atual ('.number_format((float) $locked->current_stock, 2, ',', '.').' '.$locked->unit.') é menor que a entrada.'
+                    );
+                }
+                $locked->decrement('current_stock', $quantity);
+            } else {
+                $locked->increment('current_stock', $quantity);
+            }
+
+            if (
+                $movement->type === 'in'
+                && $movement->cost_price !== null
+                && (float) $locked->cost_price === (float) $movement->cost_price
+            ) {
+                $previousCost = InventoryMovement::query()
+                    ->where('ingredient_id', $locked->id)
+                    ->where('id', '<', $movement->id)
+                    ->where('type', 'in')
+                    ->whereNotNull('cost_price')
+                    ->orderByDesc('id')
+                    ->value('cost_price');
+
+                if ($previousCost !== null) {
+                    $locked->update(['cost_price' => round((float) $previousCost, 2)]);
+                }
+            }
+
+            $movement->delete();
+        });
+    }
+
     private function recordMovement(
         Ingredient $ingredient,
         string $type,
