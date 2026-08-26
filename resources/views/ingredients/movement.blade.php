@@ -94,8 +94,8 @@
                     <h3 class="text-lg font-semibold text-gray-800 mb-4">Últimas movimentações</h3>
                     <div class="space-y-3">
                         @forelse ($movements as $movement)
-                            <div class="flex justify-between items-start border-b border-gray-100 pb-3">
-                                <div>
+                            <div class="flex justify-between items-start gap-3 border-b border-gray-100 pb-3">
+                                <div class="min-w-0">
                                     <p class="font-medium {{ $movement->type === 'in' ? 'text-green-700' : 'text-red-700' }}">
                                         {{ $movement->type === 'in' ? 'Entrada' : 'Saída' }} — {{ number_format($movement->quantity, 2, ',', '.') }} {{ $ingredient->unit }}
                                     </p>
@@ -113,6 +113,14 @@
                                     @endif
                                     <p class="text-xs text-gray-400">{{ $movement->created_at->format('d/m/Y H:i') }}</p>
                                 </div>
+                                @if ($movement->reason === 'manual')
+                                    <form method="POST" action="{{ route('ingredients.movement.destroy', [$ingredient, $movement]) }}"
+                                        onsubmit="return confirm('Estornar esta movimentação? O estoque será ajustado automaticamente.')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-sm text-red-600 hover:text-red-800 shrink-0">Estornar</button>
+                                    </form>
+                                @endif
                             </div>
                         @empty
                             <p class="text-sm text-gray-500">Nenhuma movimentação registrada.</p>

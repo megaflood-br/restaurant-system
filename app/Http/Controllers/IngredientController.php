@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\HandlesBulkDestroy;
 use App\Models\Ingredient;
+use App\Models\InventoryMovement;
 use App\Models\StockCategory;
 use App\Services\InventoryService;
 use Illuminate\Http\RedirectResponse;
@@ -167,6 +168,26 @@ class IngredientController extends Controller
         return redirect()
             ->route('ingredients.movement', $ingredient)
             ->with('success', $message);
+    }
+
+    public function destroyMovement(
+        Ingredient $ingredient,
+        InventoryMovement $movement,
+        InventoryService $inventory,
+    ): RedirectResponse {
+        if ((int) $movement->ingredient_id !== (int) $ingredient->id) {
+            abort(404);
+        }
+
+        try {
+            $inventory->reverseMovement($movement, request()->user()?->id);
+        } catch (\Throwable $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('ingredients.movement', $ingredient)
+            ->with('success', 'Movimentação estornada. Estoque atualizado.');
     }
 
     /** @return array<string, mixed> */
