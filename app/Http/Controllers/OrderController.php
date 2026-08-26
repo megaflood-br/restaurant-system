@@ -149,7 +149,12 @@ class OrderController extends Controller
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
             'discount' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'in:'.implode(',', PaymentMethod::keys())],
+            'ordered_at' => ['nullable', 'date', 'before_or_equal:now'],
         ]);
+
+        $orderedAt = filled($validated['ordered_at'] ?? null)
+            ? Carbon::parse($validated['ordered_at'])->timezone(config('app.timezone'))
+            : null;
 
         $customer = isset($validated['customer_id'])
             ? Customer::find($validated['customer_id'])
@@ -187,9 +192,10 @@ class OrderController extends Controller
             $deliveryAreaId,
             $deliveryAddress,
             $discountAmount,
+            $orderedAt,
         ) {
             $order = Order::create([
-                'order_number' => Order::generateOrderNumber(),
+                'order_number' => Order::generateOrderNumber($orderedAt),
                 'customer_id' => $customer?->id,
                 'type' => $validated['type'],
                 'comanda_number' => $validated['comanda_number'] ?? null,
@@ -204,6 +210,13 @@ class OrderController extends Controller
                 'status' => 'pending',
                 'user_id' => $request->user()->id,
             ]);
+
+            if ($orderedAt !== null) {
+                $order->forceFill([
+                    'created_at' => $orderedAt,
+                    'updated_at' => $orderedAt,
+                ])->save();
+            }
 
             $total = 0;
 
@@ -224,6 +237,14 @@ class OrderController extends Controller
                 'total' => max(0, $total + $deliveryFeeAmount - $discountAmount),
             ]);
 
+            if ($orderedAt !== null) {
+                // O update do total toca updated_at; reaplica a data retroativa.
+                $order->forceFill([
+                    'created_at' => $orderedAt,
+                    'updated_at' => $orderedAt,
+                ])->save();
+            }
+
             return $order;
         });
 
@@ -236,7 +257,13 @@ class OrderController extends Controller
                 ->with('success', 'Pedido criado com sucesso.');
         }
 
-        return redirect()->route('orders.show', $order)->with('success', 'Pedido criado com sucesso.');
+        $redirect = redirect()->route('orders.show', $order)->with('success', 'Pedido criado com sucesso.');
+
+        if ($orderedAt !== null) {
+            $redirect->with('success', 'Pedido retroativo criado para '.$orderedAt->format('d/m/Y H:i').'.');
+        }
+
+        return $redirect;
     }
 
     private function tryPrintOnCreate(Order $order): void
