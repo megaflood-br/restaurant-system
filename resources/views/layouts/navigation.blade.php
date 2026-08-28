@@ -21,9 +21,6 @@
                     <x-nav-link :href="route('orders.index')" :active="request()->routeIs('orders.*')">
                         Pedidos
                     </x-nav-link>
-                    <x-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')">
-                        Relatórios
-                    </x-nav-link>
                     <x-nav-link :href="route('customers.index')" :active="request()->routeIs('customers.*')">
                         Clientes
                     </x-nav-link>
@@ -144,9 +141,6 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('orders.index')" :active="request()->routeIs('orders.*')">
                 Pedidos
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')">
-                Relatórios
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('comandas.index')" :active="request()->routeIs('comandas.*')">
                 Comandas
