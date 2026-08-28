@@ -21,6 +21,9 @@
                     <x-nav-link :href="route('orders.index')" :active="request()->routeIs('orders.*')">
                         Pedidos
                     </x-nav-link>
+                    <x-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')">
+                        Relatórios
+                    </x-nav-link>
                     <x-nav-link :href="route('customers.index')" :active="request()->routeIs('customers.*')">
                         Clientes
                     </x-nav-link>
@@ -62,8 +65,11 @@
 
                     <x-nav-dropdown
                         label="Financeiro"
-                        :active="request()->routeIs('financeiro.*', 'motoboy.*')"
+                        :active="request()->routeIs('financeiro.*', 'motoboy.*', 'reports.*')"
                     >
+                        <x-nav-dropdown-link :href="route('reports.index')" :active="request()->routeIs('reports.*')">
+                            Relatórios de vendas
+                        </x-nav-dropdown-link>
                         <x-nav-dropdown-link :href="route('financeiro.index')" :active="request()->routeIs('financeiro.*')">
                             Fluxo de caixa
                         </x-nav-dropdown-link>
@@ -139,6 +145,9 @@
             <x-responsive-nav-link :href="route('orders.index')" :active="request()->routeIs('orders.*')">
                 Pedidos
             </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')">
+                Relatórios
+            </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('comandas.index')" :active="request()->routeIs('comandas.*')">
                 Comandas
             </x-responsive-nav-link>
@@ -174,6 +183,9 @@
             </x-responsive-nav-link>
 
             <div class="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Financeiro</div>
+            <x-responsive-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.*')">
+                Relatórios de vendas
+            </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('financeiro.index')" :active="request()->routeIs('financeiro.*')">
                 Fluxo de caixa
             </x-responsive-nav-link>
