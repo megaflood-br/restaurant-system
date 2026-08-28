@@ -139,15 +139,10 @@ class SalesReportService
     /** @return Collection<int, array{name: string, quantity_sold: int, revenue: float}> */
     public function categories(Carbon $from, Carbon $to): Collection
     {
-        $driver = OrderItem::query()->getConnection()->getDriverName();
-        $categoryExpression = $driver === 'sqlite'
-            ? "COALESCE(categories.name, 'Sem categoria')"
-            : "COALESCE(categories.name, 'Sem categoria')";
-
         return $this->itemsInRange($from, $to)
             ->leftJoin('products', 'products.id', '=', 'order_items.product_id')
             ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
-            ->selectRaw("{$categoryExpression} as category_name")
+            ->selectRaw("COALESCE(categories.name, 'Sem categoria') as category_name")
             ->selectRaw('SUM(order_items.quantity) as quantity_sold')
             ->selectRaw('SUM(order_items.subtotal) as revenue')
             ->groupBy('category_name')
