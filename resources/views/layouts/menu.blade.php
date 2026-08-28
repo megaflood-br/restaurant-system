@@ -6,6 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     @php($menuTitle = config('digital_menu.display_name', config('printing.restaurant_name', config('app.name'))))
     <title>{{ $menuTitle }} — Cardápio</title>
+    @include('partials.favicon')
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
     @include('public.partials.menu-theme-styles')
