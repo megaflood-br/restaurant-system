@@ -15,6 +15,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\CheckoutController;
 use App\Http\Controllers\Public\MenuController;
 use App\Http\Controllers\RecipeController;
+use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StockCategoryController;
 use App\Http\Controllers\UserController;
@@ -127,6 +128,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::post('comandas/{comanda}/pedidos/{order}/cancelar', [ComandaController::class, 'cancelOrder'])->name('comandas.orders.cancel');
 
         Route::get('financeiro', [FinanceiroController::class, 'index'])->name('financeiro.index');
+        Route::get('reports', [ReportsController::class, 'index'])->name('reports.index');
         Route::get('financeiro/create', [FinanceiroController::class, 'create'])->name('financeiro.create');
         Route::post('financeiro', [FinanceiroController::class, 'store'])->name('financeiro.store');
         Route::post('financeiro/sync-sales', [FinanceiroController::class, 'syncSales'])->name('financeiro.sync-sales');
