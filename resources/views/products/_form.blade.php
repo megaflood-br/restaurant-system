@@ -30,16 +30,26 @@
 </div>
 
 <div>
-    <label for="category_id" class="block text-sm font-medium text-gray-700">Categoria</label>
-    <select name="category_id" id="category_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-        <option value="">Selecione...</option>
+    <p class="block text-sm font-medium text-gray-700">Categorias</p>
+    <p class="mt-1 text-xs text-gray-500">Selecione uma ou mais categorias em que o item aparecerá no cardápio.</p>
+    @php
+        $selectedCategoryIds = collect(old('category_ids', isset($product) ? $product->categories->pluck('id') : []))->map(fn ($id) => (int) $id);
+    @endphp
+    <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
         @foreach ($categories as $category)
-            <option value="{{ $category->id }}" @selected(old('category_id', $product->category_id ?? '') == $category->id)>
+            <label class="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+                <input type="checkbox" name="category_ids[]" value="{{ $category->id }}"
+                    @checked($selectedCategoryIds->contains($category->id))
+                    class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
                 {{ $category->name }}
-            </option>
+                @if (! $category->is_active)
+                    <span class="text-xs text-amber-700">(inativa)</span>
+                @endif
+            </label>
         @endforeach
-    </select>
-    @error('category_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+    </div>
+    @error('category_ids') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+    @error('category_ids.*') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
 </div>
 
 <div>

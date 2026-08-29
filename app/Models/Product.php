@@ -32,6 +32,15 @@ class Product extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::created(function (Product $product) {
+            if ($product->category_id && ! $product->categories()->exists()) {
+                $product->categories()->sync([$product->category_id]);
+            }
+        });
+    }
+
     protected function imageUrl(): Attribute
     {
         return Attribute::get(function (): ?string {
@@ -43,6 +52,11 @@ class Product extends Model
 
             return Storage::disk('public')->url($path);
         });
+    }
+
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(Category::class);
     }
 
     public function category(): BelongsTo
