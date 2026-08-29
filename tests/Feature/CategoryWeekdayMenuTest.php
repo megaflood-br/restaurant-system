@@ -40,6 +40,38 @@ class CategoryWeekdayMenuTest extends TestCase
         $this->assertSame(1, $tuesdayCatalog->count());
     }
 
+    public function test_weekday_categories_appear_before_always_available_ones(): void
+    {
+        $this->categoryWithProduct('Bebidas', null, 'Suco');
+        $monday = $this->categoryWithProduct('Cardápio Segunda', ['monday'], 'Prato segunda');
+        $this->categoryWithProduct('Acompanhamentos', null, 'Arroz');
+
+        $catalog = MenuCatalog::categories('monday');
+
+        $this->assertSame(
+            ['Cardápio Segunda', 'Acompanhamentos', 'Bebidas'],
+            $catalog->pluck('name')->all()
+        );
+        $this->assertSame($monday->id, $catalog->first()->id);
+    }
+
+    public function test_public_menu_lists_weekday_categories_before_drinks(): void
+    {
+        $today = WeeklyMenuImages::todayKey();
+
+        $this->categoryWithProduct('Bebidas', null, 'Refrigerante');
+        $this->categoryWithProduct('Cardápio de hoje', [$today], 'Prato do dia');
+
+        $response = $this->get(route('public.menu'));
+
+        $weekdayPos = strpos($response->getContent(), 'Cardápio de hoje');
+        $drinksPos = strpos($response->getContent(), 'Bebidas');
+
+        $this->assertNotFalse($weekdayPos);
+        $this->assertNotFalse($drinksPos);
+        $this->assertLessThan($drinksPos, $weekdayPos);
+    }
+
     public function test_public_menu_only_shows_today_categories(): void
     {
         $today = WeeklyMenuImages::todayKey();

@@ -61,6 +61,12 @@ class Category extends Model
         ));
     }
 
+    /** Categorias fixas (ex.: bebidas) sem dias restritos — aparecem por último no cardápio. */
+    public function isAlwaysAvailableCategory(): bool
+    {
+        return $this->normalizedAvailableDays() === [];
+    }
+
     public function availableDaysLabel(): string
     {
         $days = $this->normalizedAvailableDays();
