@@ -23,7 +23,7 @@ class ProductPhotoUploadTest extends TestCase
         $category = Category::create(['name' => 'Bebidas', 'is_active' => true]);
 
         $response = $this->actingAs($admin)->post(route('products.store'), [
-            'category_id' => $category->id,
+            'category_ids' => [$category->id],
             'name' => 'Coca-Cola Lata',
             'price' => 6.5,
             'is_available' => '1',
@@ -68,7 +68,7 @@ class ProductPhotoUploadTest extends TestCase
         $this->assertStringContainsString('recipes/recipe-photo.jpg', (string) $product->image_url);
 
         $this->actingAs($admin)->put(route('products.update', $product), [
-            'category_id' => $category->id,
+            'category_ids' => [$category->id],
             'recipe_id' => $recipe->id,
             'name' => 'Prato',
             'price' => 30,

@@ -56,15 +56,25 @@ class ProductSellable
 
     public static function assertAvailableToday(Product $product): void
     {
-        $product->loadMissing('category');
+        $product->loadMissing('categories');
 
-        if (! $product->is_available || ! $product->category?->is_active) {
+        if (! $product->is_available) {
             throw ValidationException::withMessages([
                 'product_id' => 'Este produto não está disponível no momento.',
             ]);
         }
 
-        if ($product->category && ! $product->category->isAvailableOnDay()) {
+        $categories = $product->categories->filter(fn ($category) => $category->is_active);
+
+        if ($categories->isEmpty()) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Este produto não está disponível no momento.',
+            ]);
+        }
+
+        $availableToday = $categories->contains(fn ($category) => $category->isAvailableOnDay());
+
+        if (! $availableToday) {
             throw ValidationException::withMessages([
                 'product_id' => 'Este produto não faz parte do cardápio de hoje.',
             ]);

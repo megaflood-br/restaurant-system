@@ -47,7 +47,7 @@
                                                 <p class="text-sm text-gray-500">{{ Str::limit($product->description, 60) }}</p>
                                             @endif
                                         </td>
-                                        <td class="px-4 py-3 text-sm text-gray-700">{{ $product->category->name }}</td>
+                                        <td class="px-4 py-3 text-sm text-gray-700">{{ $product->categories->pluck('name')->join(', ') ?: '—' }}</td>
                                         <td class="px-4 py-3 text-sm font-medium text-gray-900">
                                             @if ($product->hasVariants())
                                                 <span>R$ {{ $product->priceLabel() }}</span>

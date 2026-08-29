@@ -26,6 +26,7 @@ class SqliteToMysqlImporter
         'delivery_areas',
         'customers',
         'products',
+        'category_product',
         'ingredients',
         'product_ingredient',
         'product_variants',
@@ -149,6 +150,8 @@ class SqliteToMysqlImporter
 
         if (in_array('id', $columns, true)) {
             $query->orderBy('id');
+        } elseif (in_array('category_id', $columns, true) && in_array('product_id', $columns, true)) {
+            $query->orderBy('category_id')->orderBy('product_id');
         }
 
         $query->chunk(500, function (Collection $rows) use ($target, $table, $columns, &$imported): void {

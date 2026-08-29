@@ -23,7 +23,7 @@ class ProductController extends Controller
 
     public function index(): View
     {
-        $with = ['category', 'recipe'];
+        $with = ['categories', 'recipe'];
         if (ProductVariants::enabled()) {
             $with[] = 'variants.recipe';
         }
@@ -42,6 +42,10 @@ class ProductController extends Controller
     {
         $validated = $this->validateProduct($request);
 
+        $categoryIds = $validated['category_ids'];
+        unset($validated['category_ids']);
+        $validated['category_id'] = $categoryIds[0];
+
         $validated['is_available'] = $request->boolean('is_available', true);
         $validated['requires_side'] = $request->boolean('requires_side', true);
 
@@ -56,8 +60,9 @@ class ProductController extends Controller
             $validated['image'] = $this->storeImage($request->file('image'));
         }
 
-        $product = DB::transaction(function () use ($request, $validated) {
+        $product = DB::transaction(function () use ($request, $validated, $categoryIds) {
             $product = Product::create($validated);
+            $product->categories()->sync($categoryIds);
 
             if ($request->boolean('has_variants')) {
                 $this->syncVariants($product, $request);
@@ -74,7 +79,7 @@ class ProductController extends Controller
 
     public function edit(Product $product): View
     {
-        $with = ['recipe'];
+        $with = ['recipe', 'categories'];
         if (ProductVariants::enabled()) {
             $with[] = 'variants.recipe';
         }
@@ -88,6 +93,10 @@ class ProductController extends Controller
     public function update(Request $request, Product $product): RedirectResponse
     {
         $validated = $this->validateProduct($request, updating: true);
+
+        $categoryIds = $validated['category_ids'];
+        unset($validated['category_ids']);
+        $validated['category_id'] = $categoryIds[0];
 
         $validated['is_available'] = $request->boolean('is_available');
         $validated['requires_side'] = $request->boolean('requires_side');
@@ -107,8 +116,9 @@ class ProductController extends Controller
             $validated['image'] = $this->storeImage($request->file('image'));
         }
 
-        DB::transaction(function () use ($request, $product, $validated) {
+        DB::transaction(function () use ($request, $product, $validated, $categoryIds) {
             $product->update($validated);
+            $product->categories()->sync($categoryIds);
 
             if ($request->boolean('has_variants')) {
                 $this->syncVariants($product, $request);
@@ -166,8 +176,21 @@ class ProductController extends Controller
             ? $product->variants()->pluck('recipe_id')->filter()->all()
             : [];
 
+        $linkedCategoryIds = $product
+            ? $product->categories()->pluck('categories.id')
+            : collect();
+
         return [
-            'categories' => Category::where('is_active', true)->orderBy('name')->get(),
+            'categories' => Category::query()
+                ->where(function ($query) use ($linkedCategoryIds) {
+                    $query->where('is_active', true);
+
+                    if ($linkedCategoryIds->isNotEmpty()) {
+                        $query->orWhereIn('id', $linkedCategoryIds);
+                    }
+                })
+                ->orderBy('name')
+                ->get(),
             'recipes' => Recipe::query()
                 ->where('is_active', true)
                 ->where(function ($query) use ($product, $variantRecipeIds) {
@@ -241,7 +264,8 @@ class ProductController extends Controller
         $hasVariants = $request->boolean('has_variants');
 
         return $request->validate([
-            'category_id' => ['required', 'exists:categories,id'],
+            'category_ids' => ['required', 'array', 'min:1'],
+            'category_ids.*' => ['integer', 'exists:categories,id'],
             'recipe_id' => [Rule::excludeIf($hasVariants), 'nullable', 'exists:recipes,id'],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
