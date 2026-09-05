@@ -15,18 +15,17 @@ class FinanceiroController extends Controller
 {
     public function index(Request $request, CashFlowService $cashFlow): View
     {
-        $date = $request->filled('date')
-            ? Carbon::parse($request->string('date'))->timezone(config('app.timezone'))
-            : today();
+        [$from, $to] = $this->resolvePeriod($request);
 
-        $summary = $cashFlow->dailySummary($date);
-        $weekFrom = $date->copy()->subDays(6)->startOfDay();
-        $weekTotals = $cashFlow->rangeTotals($weekFrom, $date->copy()->endOfDay());
+        $summary = $cashFlow->periodSummary($from, $to);
+        $dayTotals = $cashFlow->rangeTotals($from, $to);
 
         return view('financeiro.index', [
             'summary' => $summary,
-            'date' => $date->toDateString(),
-            'weekTotals' => $weekTotals,
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'isSingleDay' => $from->toDateString() === $to->toDateString(),
+            'dayTotals' => $dayTotals,
             'paymentLabels' => PaymentMethod::labels() + ['nao_informado' => 'Não informado'],
         ]);
     }
@@ -72,11 +71,11 @@ class FinanceiroController extends Controller
             : today()->toDateString();
 
         return redirect()
-            ->route('financeiro.index', ['date' => $date])
+            ->route('financeiro.index', ['from' => $date, 'to' => $date])
             ->with('success', 'Lançamento registrado no fluxo de caixa.');
     }
 
-    public function destroy(CashMovement $financeiro, CashFlowService $cashFlow): RedirectResponse
+    public function destroy(Request $request, CashMovement $financeiro, CashFlowService $cashFlow): RedirectResponse
     {
         $date = $financeiro->reference_date?->toDateString() ?? today()->toDateString();
 
@@ -86,19 +85,19 @@ class FinanceiroController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
+        $query = $this->periodQueryFromRequest($request, $date);
+
         return redirect()
-            ->route('financeiro.index', ['date' => $date])
+            ->route('financeiro.index', $query)
             ->with('success', 'Lançamento manual excluído.');
     }
 
     public function syncSales(Request $request, CashFlowService $cashFlow): RedirectResponse
     {
-        $date = $request->filled('date')
-            ? Carbon::parse($request->string('date'))->timezone(config('app.timezone'))
-            : today();
+        [$from, $to] = $this->resolvePeriod($request);
 
-        $result = $cashFlow->syncDeliveredSalesForDate($date, $request->user()->id);
-        $gap = $cashFlow->deliveredSalesGapForDate($date);
+        $result = $cashFlow->syncDeliveredSalesForPeriod($from, $to, $request->user()->id);
+        $gap = $cashFlow->deliveredSalesGapForPeriod($from, $to);
 
         if ($result['created'] > 0) {
             $message = sprintf(
@@ -112,11 +111,52 @@ class FinanceiroController extends Controller
                 number_format($gap, 2, ',', '.')
             );
         } else {
-            $message = 'Nenhuma venda faltando no caixa para este dia.';
+            $message = $from->toDateString() === $to->toDateString()
+                ? 'Nenhuma venda faltando no caixa para este dia.'
+                : 'Nenhuma venda faltando no caixa para este período.';
         }
 
         return redirect()
-            ->route('financeiro.index', ['date' => $date->toDateString()])
+            ->route('financeiro.index', [
+                'from' => $from->toDateString(),
+                'to' => $to->toDateString(),
+            ])
             ->with('success', $message);
+    }
+
+    /** @return array{0: Carbon, 1: Carbon} */
+    private function resolvePeriod(Request $request): array
+    {
+        $tz = config('app.timezone');
+
+        if ($request->filled('from') || $request->filled('to')) {
+            $from = Carbon::parse($request->input('from', $request->input('to')), $tz)->startOfDay();
+            $to = Carbon::parse($request->input('to', $request->input('from')), $tz)->startOfDay();
+        } elseif ($request->filled('date')) {
+            $from = Carbon::parse($request->string('date'), $tz)->startOfDay();
+            $to = $from->copy();
+        } else {
+            $from = today($tz)->startOfDay();
+            $to = $from->copy();
+        }
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to->copy(), $from->copy()];
+        }
+
+        return [$from, $to];
+    }
+
+    /** @return array{from: string, to: string} */
+    private function periodQueryFromRequest(Request $request, string $fallbackDate): array
+    {
+        if ($request->filled('from') || $request->filled('to')) {
+            $from = $request->input('from', $request->input('to', $fallbackDate));
+            $to = $request->input('to', $request->input('from', $fallbackDate));
+
+            return ['from' => $from, 'to' => $to];
+        }
+
+        return ['from' => $fallbackDate, 'to' => $fallbackDate];
     }
 }
