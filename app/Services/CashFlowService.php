@@ -330,11 +330,38 @@ class CashFlowService
     public function dailySummary(?CarbonInterface $date = null): array
     {
         $date = ($date ?? today())->timezone(config('app.timezone'))->startOfDay();
-        $dateString = $date->toDateString();
+
+        return $this->periodSummary($date, $date);
+    }
+
+    /**
+     * @return array{
+     *     from: string,
+     *     to: string,
+     *     date: string,
+     *     entradas: float,
+     *     saidas: float,
+     *     saldo: float,
+     *     by_method: array<string, float>,
+     *     movements: Collection<int, CashMovement>
+     * }
+     */
+    public function periodSummary(CarbonInterface $from, CarbonInterface $to): array
+    {
+        $from = $from->timezone(config('app.timezone'))->startOfDay();
+        $to = $to->timezone(config('app.timezone'))->startOfDay();
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to->copy(), $from->copy()];
+        }
+
+        $fromString = $from->toDateString();
+        $toString = $to->toDateString();
 
         $movements = CashMovement::query()
             ->with(['user', 'order'])
-            ->whereDate('reference_date', $dateString)
+            ->whereDate('reference_date', '>=', $fromString)
+            ->whereDate('reference_date', '<=', $toString)
             ->orderByDesc('occurred_at')
             ->orderByDesc('id')
             ->get();
@@ -349,13 +376,64 @@ class CashFlowService
         }
 
         return [
-            'date' => $dateString,
+            'from' => $fromString,
+            'to' => $toString,
+            'date' => $fromString === $toString ? $fromString : $fromString.'|'.$toString,
             'entradas' => $entradas,
             'saidas' => $saidas,
             'saldo' => $entradas - $saidas,
             'by_method' => $byMethod,
             'movements' => $movements,
         ];
+    }
+
+    /**
+     * @return array{created: int, amount: float}
+     */
+    public function syncDeliveredSalesForPeriod(CarbonInterface $from, CarbonInterface $to, ?int $userId = null): array
+    {
+        $from = $from->timezone(config('app.timezone'))->startOfDay();
+        $to = $to->timezone(config('app.timezone'))->startOfDay();
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to->copy(), $from->copy()];
+        }
+
+        $created = 0;
+        $amount = 0.0;
+        $cursor = $from->copy();
+
+        while ($cursor->lte($to)) {
+            $result = $this->syncDeliveredSalesForDate($cursor, $userId);
+            $created += $result['created'];
+            $amount += $result['amount'];
+            $cursor->addDay();
+        }
+
+        return [
+            'created' => $created,
+            'amount' => round($amount, 2),
+        ];
+    }
+
+    public function deliveredSalesGapForPeriod(CarbonInterface $from, CarbonInterface $to): float
+    {
+        $from = $from->timezone(config('app.timezone'))->startOfDay();
+        $to = $to->timezone(config('app.timezone'))->startOfDay();
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to->copy(), $from->copy()];
+        }
+
+        $gap = 0.0;
+        $cursor = $from->copy();
+
+        while ($cursor->lte($to)) {
+            $gap += $this->deliveredSalesGapForDate($cursor);
+            $cursor->addDay();
+        }
+
+        return round($gap, 2);
     }
 
     /** @return Collection<int, array{date: string, entradas: float, saidas: float, saldo: float}> */

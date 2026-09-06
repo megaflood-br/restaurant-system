@@ -212,8 +212,10 @@ class FinanceiroModuleTest extends TestCase
 
         $this->assertSame(1, CashMovement::query()->count());
 
-        $this->post(route('financeiro.sync-sales'), ['date' => today()->toDateString()])
-            ->assertRedirect(route('financeiro.index', ['date' => today()->toDateString()]));
+        $day = today()->toDateString();
+
+        $this->post(route('financeiro.sync-sales'), ['date' => $day])
+            ->assertRedirect(route('financeiro.index', ['from' => $day, 'to' => $day]));
 
         $this->assertDatabaseHas('cash_movements', [
             'order_id' => $missing->id,
@@ -257,6 +259,58 @@ class FinanceiroModuleTest extends TestCase
             'amount' => 80,
         ]);
         $this->assertEquals(134.0, (float) CashMovement::query()->sum('amount'));
+    }
+
+    public function test_financeiro_index_filters_by_date_range_and_shows_period_saldo(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin);
+
+        $service = app(CashFlowService::class);
+
+        $service->record([
+            'type' => 'entrada',
+            'category' => 'suprimento',
+            'amount' => 100,
+            'payment_method' => 'cash',
+            'description' => 'Entrada dia 1',
+            'occurred_at' => now()->subDays(2),
+            'user_id' => $admin->id,
+            'source' => 'manual',
+        ]);
+
+        $service->record([
+            'type' => 'saida',
+            'category' => 'sangria',
+            'amount' => 30,
+            'payment_method' => 'cash',
+            'description' => 'Saida dia 2',
+            'occurred_at' => now()->subDay(),
+            'user_id' => $admin->id,
+            'source' => 'manual',
+        ]);
+
+        $service->record([
+            'type' => 'entrada',
+            'category' => 'suprimento',
+            'amount' => 50,
+            'payment_method' => 'pix',
+            'description' => 'Fora do periodo',
+            'occurred_at' => now()->subDays(10),
+            'user_id' => $admin->id,
+            'source' => 'manual',
+        ]);
+
+        $from = now()->subDays(2)->toDateString();
+        $to = now()->subDay()->toDateString();
+
+        $this->get(route('financeiro.index', ['from' => $from, 'to' => $to]))
+            ->assertOk()
+            ->assertSee('Entrada dia 1')
+            ->assertSee('Saida dia 2')
+            ->assertDontSee('Fora do periodo')
+            ->assertSee('Saldo do período')
+            ->assertSee('R$ 70,00');
     }
 
     private function admin(): User
