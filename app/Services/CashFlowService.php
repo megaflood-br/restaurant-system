@@ -210,6 +210,40 @@ class CashFlowService
     }
 
     /**
+     * Atualiza data do lançamento automático do pedido (quando a data do pedido é editada).
+     */
+    public function syncOrderSaleDate(Order $order): void
+    {
+        $occurredAt = ($order->created_at ?? now())->timezone(config('app.timezone'));
+
+        $movement = CashMovement::query()
+            ->where('source', 'order')
+            ->where('source_key', 'order:'.$order->id)
+            ->first();
+
+        if (! $movement) {
+            return;
+        }
+
+        $label = match ($order->type) {
+            'delivery' => 'Delivery',
+            'takeaway' => 'Retirada',
+            'dine_in' => 'Salão / comanda '.str_pad((string) ($order->comanda_number ?? 0), 3, '0', STR_PAD_LEFT),
+            default => 'Pedido',
+        };
+
+        $meta = is_array($movement->meta) ? $movement->meta : [];
+        $meta['order_number'] = $order->order_number;
+
+        $movement->update([
+            'occurred_at' => $occurredAt,
+            'reference_date' => $occurredAt->toDateString(),
+            'description' => $label.' '.$order->order_number,
+            'meta' => $meta,
+        ]);
+    }
+
+    /**
      * Cria lançamentos faltantes para pedidos já entregues/fechados no dia.
      *
      * @return array{created: int, amount: float}

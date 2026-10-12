@@ -104,6 +104,15 @@
                         @csrf
                         @method('PATCH')
                         <h3 class="text-sm font-semibold text-gray-900">Dados do pedido</h3>
+                        <div class="max-w-sm">
+                            <label for="ordered_at" class="block text-sm font-medium text-gray-700">Data/hora do pedido</label>
+                            <input type="datetime-local" name="ordered_at" id="ordered_at"
+                                value="{{ old('ordered_at', $order->created_at?->format('Y-m-d\TH:i')) }}"
+                                max="{{ now()->format('Y-m-d\TH:i') }}"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <p class="mt-1 text-xs text-gray-500">Altere para mover o pedido de dia em Pedidos e Financeiro.</p>
+                            @error('ordered_at') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </div>
                         <div>
                             <label for="notes" class="block text-sm font-medium text-gray-700">Observações</label>
                             <textarea name="notes" id="notes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('notes', $order->notes) }}</textarea>
