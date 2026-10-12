@@ -289,7 +289,7 @@ class OrderController extends Controller
         ]);
     }
 
-    public function updateDetails(Request $request, Order $order): RedirectResponse
+    public function updateDetails(Request $request, Order $order, CashFlowService $cashFlow): RedirectResponse
     {
         if ($redirect = $this->rejectIfNotEditable($order)) {
             return $redirect;
@@ -304,10 +304,15 @@ class OrderController extends Controller
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
             'discount' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'in:'.implode(',', PaymentMethod::keys())],
+            'ordered_at' => ['nullable', 'date', 'before_or_equal:now'],
         ]);
 
         $customer = isset($validated['customer_id'])
             ? Customer::query()->find($validated['customer_id'])
+            : null;
+
+        $orderedAt = filled($validated['ordered_at'] ?? null)
+            ? Carbon::parse($validated['ordered_at'])->timezone(config('app.timezone'))
             : null;
 
         $order->update([
@@ -330,6 +335,10 @@ class OrderController extends Controller
         ]);
 
         $order->recalculateTotal();
+
+        if ($orderedAt !== null) {
+            $this->applyOrderDate($order, $orderedAt, $cashFlow);
+        }
 
         return redirect()
             ->route('orders.show', ['order' => $order, 'edit' => 1])
@@ -515,5 +524,23 @@ class OrderController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    private function applyOrderDate(Order $order, Carbon $orderedAt, CashFlowService $cashFlow): void
+    {
+        $previousDay = $order->created_at?->timezone(config('app.timezone'))->toDateString();
+        $newDay = $orderedAt->toDateString();
+
+        $attributes = [
+            'created_at' => $orderedAt,
+            'updated_at' => $orderedAt,
+        ];
+
+        if ($previousDay !== $newDay) {
+            $attributes['order_number'] = Order::generateOrderNumber($orderedAt);
+        }
+
+        $order->forceFill($attributes)->save();
+        $cashFlow->syncOrderSaleDate($order->fresh());
     }
 }

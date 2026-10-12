@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\CashMovement;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\CashFlowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -115,6 +117,94 @@ class AdminEditOrderTest extends TestCase
         $this->assertSame('Rua B, 20', $order->delivery_address);
         $this->assertEquals(8, (float) $order->delivery_fee);
         $this->assertEquals(58, (float) $order->total); // 50 + 8
+    }
+
+    public function test_admin_can_change_order_date_on_edit(): void
+    {
+        $admin = User::factory()->admin()->create();
+        ['order' => $order] = $this->seedOrder($admin);
+
+        $past = now()->subDays(3)->setTime(14, 30);
+
+        $this->actingAs($admin)
+            ->patch(route('orders.details', $order), [
+                'ordered_at' => $past->format('Y-m-d\TH:i'),
+                'delivery_address' => $order->delivery_address,
+                'delivery_fee' => $order->delivery_fee,
+            ])
+            ->assertRedirect(route('orders.show', ['order' => $order, 'edit' => 1]));
+
+        $order->refresh();
+
+        $this->assertSame($past->toDateString(), $order->created_at->toDateString());
+        $this->assertSame($past->format('H:i'), $order->created_at->format('H:i'));
+        $this->assertStringStartsWith('PED-'.$past->format('Ymd').'-', $order->order_number);
+
+        $this->get(route('orders.index', ['date' => $past->toDateString()]))
+            ->assertOk()
+            ->assertSee($order->order_number);
+    }
+
+    public function test_admin_cannot_set_future_order_date_on_edit(): void
+    {
+        $admin = User::factory()->admin()->create();
+        ['order' => $order] = $this->seedOrder($admin);
+        $originalNumber = $order->order_number;
+
+        $this->actingAs($admin)
+            ->patch(route('orders.details', $order), [
+                'ordered_at' => now()->addDay()->format('Y-m-d\TH:i'),
+                'delivery_address' => $order->delivery_address,
+                'delivery_fee' => $order->delivery_fee,
+            ])
+            ->assertSessionHasErrors('ordered_at');
+
+        $this->assertSame($originalNumber, $order->fresh()->order_number);
+    }
+
+    public function test_edit_form_shows_order_date_field(): void
+    {
+        $admin = User::factory()->admin()->create();
+        ['order' => $order] = $this->seedOrder($admin);
+
+        $this->actingAs($admin)
+            ->get(route('orders.show', ['order' => $order, 'edit' => 1]))
+            ->assertOk()
+            ->assertSee('Data/hora do pedido', false)
+            ->assertSee('name="ordered_at"', false);
+    }
+
+    public function test_changing_order_date_updates_cash_movement_day(): void
+    {
+        $admin = User::factory()->admin()->create();
+        ['order' => $order] = $this->seedOrder($admin, status: 'delivered');
+
+        app(CashFlowService::class)->recordOrderSale($order, $admin->id);
+
+        $this->assertDatabaseHas('cash_movements', [
+            'source' => 'order',
+            'source_key' => 'order:'.$order->id,
+        ]);
+
+        $past = now()->subDays(5)->setTime(11, 15);
+
+        $this->actingAs($admin)
+            ->patch(route('orders.details', $order), [
+                'ordered_at' => $past->format('Y-m-d\TH:i'),
+                'delivery_address' => $order->delivery_address,
+                'delivery_fee' => $order->delivery_fee,
+            ])
+            ->assertRedirect();
+
+        $movement = CashMovement::query()
+            ->where('source', 'order')
+            ->where('source_key', 'order:'.$order->id)
+            ->first();
+
+        $this->assertNotNull($movement);
+        $this->assertSame($past->toDateString(), $movement->reference_date->toDateString());
+        $this->assertSame($past->toDateString(), $movement->occurred_at->toDateString());
+        $this->assertStringContainsString($order->fresh()->order_number, (string) $movement->description);
     }
 
     public function test_admin_can_remove_item(): void
