@@ -130,9 +130,13 @@ class CustomerController extends Controller
             ->paginate(25)
             ->withQueryString();
 
+        $chargeableOrders = $customer->chargeableOrders()->with('items')->get();
+
         return view('customers.show', [
             'customer' => $customer,
             'orders' => $orders,
+            'chargeableOrders' => $chargeableOrders,
+            'chargeableTotal' => round((float) $chargeableOrders->sum('total'), 2),
             'stats' => [
                 'orders_count' => $customer->ordersCount(),
                 'total_spent' => $customer->totalSpent(),
@@ -140,6 +144,26 @@ class CustomerController extends Controller
                 'last_order' => $customer->lastOrder(),
             ],
             'interactionTypes' => CustomerInteraction::typeLabels(),
+        ]);
+    }
+
+    public function printCobranca(Customer $customer): View|RedirectResponse
+    {
+        $orders = $customer->chargeableOrders()
+            ->with(['items'])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return redirect()
+                ->route('customers.show', $customer)
+                ->with('info', 'Este cliente não tem pedidos pendentes de pagamento.');
+        }
+
+        return view('customers.print-cobranca', [
+            'customer' => $customer,
+            'orders' => $orders,
+            'grandTotal' => round((float) $orders->sum('total'), 2),
+            'restaurantName' => config('printing.restaurant_name', config('app.name')),
         ]);
     }
 

@@ -5,10 +5,16 @@
                 <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ $customer->name }}</h2>
                 <p class="text-sm text-gray-500 mt-1">Perfil do cliente</p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 flex-wrap">
                 <a href="{{ route('customers.comanda', $customer) }}" class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700">
                     Novo pedido
                 </a>
+                @if ($chargeableOrders->isNotEmpty())
+                    <a href="{{ route('customers.print-cobranca', $customer) }}" target="_blank"
+                        class="inline-flex items-center px-4 py-2 bg-amber-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-amber-700">
+                        Imprimir cobrança
+                    </a>
+                @endif
                 <a href="{{ route('customers.edit', $customer) }}" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700">
                     Editar
                 </a>
@@ -28,7 +34,7 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             <x-flash-messages />
 
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                     <p class="text-sm text-gray-500">Total de pedidos</p>
                     <p class="text-3xl font-bold text-gray-900">{{ $stats['orders_count'] }}</p>
@@ -46,6 +52,15 @@
                     <p class="text-lg font-bold text-gray-900">
                         {{ $stats['last_order'] ? $stats['last_order']->created_at->format('d/m/Y') : '—' }}
                     </p>
+                </div>
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 border {{ $chargeableOrders->isNotEmpty() ? 'border-amber-200' : 'border-transparent' }}">
+                    <p class="text-sm text-gray-500">Pendente de pagamento</p>
+                    <p class="text-3xl font-bold {{ $chargeableOrders->isNotEmpty() ? 'text-amber-700' : 'text-gray-900' }}">
+                        R$ {{ number_format($chargeableTotal, 2, ',', '.') }}
+                    </p>
+                    @if ($chargeableOrders->isNotEmpty())
+                        <p class="text-xs text-amber-700 mt-1">{{ $chargeableOrders->count() }} pedido(s) aberto(s)</p>
+                    @endif
                 </div>
             </div>
 
