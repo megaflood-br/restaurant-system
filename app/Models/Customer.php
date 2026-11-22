@@ -34,6 +34,20 @@ class Customer extends Model
         return $this->hasMany(Order::class);
     }
 
+    /** Pedidos ainda abertos (não entregues/fechados nem cancelados) — base para cobrança. */
+    public function chargeableOrders(): HasMany
+    {
+        return $this->orders()
+            ->whereNotIn('status', ['delivered', 'cancelled'])
+            ->orderBy('created_at')
+            ->orderBy('id');
+    }
+
+    public function chargeableOrdersTotal(): float
+    {
+        return round((float) $this->chargeableOrders()->sum('total'), 2);
+    }
+
     public function interactions(): HasMany
     {
         return $this->hasMany(CustomerInteraction::class)->latest();

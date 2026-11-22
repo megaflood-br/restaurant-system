@@ -142,6 +142,7 @@ Route::middleware(['auth', 'verified', 'role.staff'])->group(function () {
         Route::resource('customers', CustomerController::class);
         Route::delete('customers-bulk', [CustomerController::class, 'bulkDestroy'])->name('customers.bulk-destroy');
         Route::get('customers/{customer}/comanda', [CustomerController::class, 'openComanda'])->name('customers.comanda');
+        Route::get('customers/{customer}/imprimir-cobranca', [CustomerController::class, 'printCobranca'])->name('customers.print-cobranca');
         Route::post('customers/{customer}/interactions', [CustomerController::class, 'storeInteraction'])->name('customers.interactions.store');
         Route::get('whatsapp', [WhatsAppController::class, 'index'])->name('whatsapp.index');
 
