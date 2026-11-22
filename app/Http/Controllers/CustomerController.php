@@ -121,13 +121,18 @@ class CustomerController extends Controller
     public function show(Customer $customer): View
     {
         $customer->load([
-            'orders' => fn ($query) => $query->latest()->limit(10),
             'interactions.user',
             'whatsappMessages' => fn ($query) => $query->latest()->limit(10),
         ]);
 
+        $orders = $customer->orders()
+            ->latest()
+            ->paginate(25)
+            ->withQueryString();
+
         return view('customers.show', [
             'customer' => $customer,
+            'orders' => $orders,
             'stats' => [
                 'orders_count' => $customer->ordersCount(),
                 'total_spent' => $customer->totalSpent(),

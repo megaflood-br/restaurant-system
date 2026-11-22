@@ -95,7 +95,12 @@
                 </div>
 
                 <div class="lg:col-span-2 bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Histórico de pedidos</h3>
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <h3 class="text-lg font-semibold text-gray-800">Histórico de pedidos</h3>
+                        @if ($orders->total() > 0)
+                            <p class="text-sm text-gray-500">{{ $orders->total() }} pedido(s)</p>
+                        @endif
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
@@ -107,7 +112,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200">
-                                @forelse ($customer->orders as $order)
+                                @forelse ($orders as $order)
                                     <tr>
                                         <td class="px-4 py-3">
                                             <a href="{{ route('orders.show', $order) }}" class="text-indigo-600 hover:text-indigo-800 font-medium">{{ $order->order_number }}</a>
@@ -124,6 +129,9 @@
                             </tbody>
                         </table>
                     </div>
+                    @if ($orders->hasPages())
+                        <div class="mt-4">{{ $orders->links() }}</div>
+                    @endif
                 </div>
             </div>
 
